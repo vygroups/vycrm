@@ -1,0 +1,1 @@
+<?php echo 'DEBUG_SUCCESS_123'; ?>

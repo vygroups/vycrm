@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    
+    # Redirect /login/company-name to index.php?company=company-name
+    RewriteRule ^login/([a-zA-Z0-9_-]+)/?$ index.php?company=$1 [L,QSA]
+    
+    # Optional: Redirect /company-name to index.php?company=company-name if not a real file/dir
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^([a-zA-Z0-9_-]+)/?$ index.php?company=$1 [L,QSA]
+</IfModule>

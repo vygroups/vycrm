@@ -5,7 +5,7 @@ session_start();
 
 $companySlug = $_GET['company'] ?? '';
 $companyName = "Vy CRM";
-$companyLogo = "/images/logo.png";
+$companyLogo = "images/logo.png";
 $v = time();
 
 if ($companySlug) {
@@ -18,7 +18,7 @@ if ($companySlug) {
         
         if ($company) {
             $companyName = htmlspecialchars($company['name']);
-            if ($company['logo']) $companyLogo = '/' . htmlspecialchars($company['logo']);
+            if ($company['logo']) $companyLogo = htmlspecialchars($company['logo']);
         }
     } catch (Exception $e) {}
 }
@@ -30,7 +30,6 @@ if ($companySlug) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $companyName ?> - Secure Login</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <base href="/">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         #vyToastContainer { position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; }
@@ -39,7 +38,6 @@ if ($companySlug) {
     </style>
 </head>
 <body>
-    <!-- DEBUG: PHP EDITS ARE LIVE -->
     <div id="vyToastContainer"></div>
     <div class="login-wrapper">
         <div class="login-left">
@@ -70,20 +68,9 @@ if ($companySlug) {
             </div>
         </div>
         <div class="login-right">
-            <div class="login-glass-card">
-                <h1 style="font-size: 56px; margin-bottom: 24px; color:white; font-weight: 800; letter-spacing: -1px;"><?= $companyName ?></h1>
-                <p style="font-size: 20px; opacity: 0.9; line-height: 1.6; font-weight: 400;">The next generation of customer relationship management. Join <strong>1,000+ companies</strong> building smarter workflows.</p>
-                <div style="margin-top: 40px; display: flex; justify-content: center; gap: 20px;">
-                    <div style="text-align: left;">
-                        <div style="font-size: 24px; font-weight: 700;">85%</div>
-                        <div style="font-size: 12px; opacity: 0.7; text-transform: uppercase;">Efficiency</div>
-                    </div>
-                    <div style="width: 1px; background: rgba(255,255,255,0.2);"></div>
-                    <div style="text-align: left;">
-                        <div style="font-size: 24px; font-weight: 700;">24/7</div>
-                        <div style="font-size: 12px; opacity: 0.7; text-transform: uppercase;">Real-time</div>
-                    </div>
-                </div>
+            <div style="text-align:center; color:white;">
+                <h1 style="font-size: 48px; margin-bottom: 20px; color:white;"><?= $companyName ?></h1>
+                <p style="font-size: 18px; opacity: 0.8; max-width: 400px; line-height: 1.6;">Building smarter workflows for modern companies. Login to access your CRM tools.</p>
             </div>
         </div>
     </div>

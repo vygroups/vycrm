@@ -1,5 +1,5 @@
 <?php
-// attendance.php - Attendance Module with Global Timer + Toast
+// attendance_tenant.php - Tenant Attendance Module
 require_once 'auth_check.php';
 require_once 'config/database.php';
 
@@ -21,13 +21,14 @@ if (isset($_SESSION['tenant_slug'])) {
     } catch (Exception $e) {}
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vy CRM - Attendance</title>
+    <title><?= $_SESSION["tenant_slug"] ?> - Attendance</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="/assets/css/styles.css?v=<?= $v?>" rel="stylesheet">
     <style>
@@ -278,29 +279,29 @@ if (isset($_SESSION['tenant_slug'])) {
                         
                         <!-- Profile Dropdown -->
                         <div class="profile-dropdown" id="profileDropdown">
-                        <a href="/profile.php" class="dropdown-item"><i class="fa-regular fa-user"></i> My Profile</a>
-                        <div class="dropdown-divider"></div>
-                        <a href="/users.php" class="dropdown-item"><i class="fa-solid fa-users"></i> User Management</a>
-                        <a href="/roles.php" class="dropdown-item"><i class="fa-solid fa-wand-magic-sparkles"></i> Studio (Roles)</a>
-                        <div class="dropdown-divider"></div>
-                        <a href="/logout.php" class="dropdown-item" style="color: var(--hot);"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a>
-                    </div>
+                            <a href="/profile.php" class="dropdown-item"><i class="fa-regular fa-user"></i> My Profile</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="/users.php" class="dropdown-item"><i class="fa-solid fa-users"></i> User Management</a>
+                            <a href="/roles.php" class="dropdown-item"><i class="fa-solid fa-wand-magic-sparkles"></i> Studio (Roles)</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="/logout.php" class="dropdown-item" style="color: var(--hot);"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a>
+                        </div>
                     </div>
                 </div>
             </header>
 
             <div class="content-scroll">
                 <div class="action-grid">
-                    <div class="action-btn btn-checkin" id="btnCheckIn" onclick="apiPunch('punch_in')">
+                    <div class="action-btn btn-checkin" onclick="doPunch('Check-In')">
                         <i class="fa-solid fa-right-to-bracket"></i><span>PUNCH IN</span>
                     </div>
-                    <div class="action-btn btn-breakin" id="btnBreakIn" onclick="apiPunch('break_in')">
+                    <div class="action-btn btn-breakin" onclick="doPunch('Break-In')">
                         <i class="fa-solid fa-mug-hot"></i><span>START BREAK</span>
                     </div>
-                    <div class="action-btn btn-breakout" id="btnBreakOut" onclick="apiPunch('break_out')">
+                    <div class="action-btn btn-breakout" onclick="doPunch('Break-Out')">
                         <i class="fa-solid fa-briefcase"></i><span>END BREAK</span>
                     </div>
-                    <div class="action-btn btn-checkout" id="btnCheckOut" onclick="apiPunch('punch_out')">
+                    <div class="action-btn btn-checkout" onclick="doPunch('Check-Out')">
                         <i class="fa-solid fa-right-from-bracket"></i><span>PUNCH OUT</span>
                     </div>
                 </div>
@@ -315,10 +316,40 @@ if (isset($_SESSION['tenant_slug'])) {
                     <div id="history" class="tab-content active table-responsive">
                         <table class="crm-table">
                             <thead>
-                                <tr><th>Date</th><th>First Punch In</th><th>Last Punch Out</th><th>Total Hours</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>First Punch In</th>
+                                    <th>Last Punch Out</th>
+                                    <th>Total Hours</th>
+                                    <th>Status</th>
+                                </tr>
                             </thead>
-                            <tbody id="attendanceHistoryBody">
-                                <!-- Dynamic Content -->
+                            <tbody>
+                                <tr>
+                                    <td class="text-bold">2026-03-29</td>
+                                    <td>09:05 AM</td>
+                                    <td>-</td>
+                                    <td>4 hrs 10 mins</td>
+                                    <td><span class="badge"
+                                            style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;">Present
+                                            (Active)</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-bold">2026-03-28</td>
+                                    <td>08:55 AM</td>
+                                    <td>05:02 PM</td>
+                                    <td>8 hrs 07 mins</td>
+                                    <td><span class="badge"
+                                            style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;">Present</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="text-bold">2026-03-27</td>
+                                    <td>-</td>
+                                    <td>-</td>
+                                    <td>0 hrs</td>
+                                    <td><span class="badge badge-hot">Absent</span></td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -326,16 +357,30 @@ if (isset($_SESSION['tenant_slug'])) {
                     <div id="leaves" class="tab-content table-responsive">
                         <div class="flex justify-between items-center mb-3">
                             <h4 style="color:var(--text-main);">My Leave Applications</h4>
-                            <button class="btn-primary" style="width:auto;padding:10px 20px;border-radius:10px;" onclick="openModal('leaveModal')">
+                            <button class="btn-icon"
+                                style="width:auto;padding:0 20px;font-size:13px;border-radius:20px;"
+                                onclick="vyToast('Leave request form coming soon!','info')">
                                 <i class="fa-solid fa-plus" style="margin-right:8px;"></i> Request Leave
                             </button>
                         </div>
                         <table class="crm-table">
                             <thead>
-                                <tr><th>Leave Type</th><th>From Date</th><th>To Date</th><th>Reason</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Leave Type</th>
+                                    <th>From Date</th>
+                                    <th>To Date</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                </tr>
                             </thead>
-                            <tbody id="leaveHistoryBody">
-                                <!-- Dynamic Content -->
+                            <tbody>
+                                <tr>
+                                    <td class="text-bold">Casual Leave</td>
+                                    <td>2026-04-10</td>
+                                    <td>2026-04-12</td>
+                                    <td>Family Function</td>
+                                    <td><span class="badge badge-warm">Pending Approval</span></td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -343,93 +388,38 @@ if (isset($_SESSION['tenant_slug'])) {
                     <div id="permissions" class="tab-content table-responsive">
                         <div class="flex justify-between items-center mb-3">
                             <h4 style="color:var(--text-main);">My Permission Requests</h4>
-                            <button class="btn-primary" style="width:auto;padding:10px 20px;border-radius:10px;" onclick="openModal('permissionModal')">
+                            <button class="btn-icon"
+                                style="width:auto;padding:0 20px;font-size:13px;border-radius:20px;"
+                                onclick="vyToast('Permission request form coming soon!','info')">
                                 <i class="fa-solid fa-plus" style="margin-right:8px;"></i> Request Permission
                             </button>
                         </div>
                         <table class="crm-table">
                             <thead>
-                                <tr><th>Date</th><th>Time Window</th><th>Duration</th><th>Reason</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time Window</th>
+                                    <th>Duration</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                </tr>
                             </thead>
-                            <tbody id="permissionHistoryBody">
-                                <!-- Dynamic Content -->
+                            <tbody>
+                                <tr>
+                                    <td class="text-bold">2026-03-20</td>
+                                    <td>03:00 PM - 05:00 PM</td>
+                                    <td>2 Hours</td>
+                                    <td>Bank Work</td>
+                                    <td><span class="badge"
+                                            style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;">Approved</span>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
         </main>
-    </div>
-
-    <!-- Modals -->
-    <style>
-        .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
-        .modal-content { background:#fff; padding:30px; border-radius:20px; width:100%; max-width:450px; box-shadow:var(--shadow-lg); border: 1px solid var(--border); }
-        .form-group { margin-bottom:15px; }
-        .form-label { display:block; margin-bottom:5px; font-weight:600; color:var(--text-main); font-size:14px; }
-        .form-control { width:100%; padding:12px; border:1px solid var(--border); border-radius:10px; font-size:14px; background: #f9f9f9; }
-    </style>
-
-    <div id="leaveModal" class="modal">
-        <div class="modal-content">
-            <h3 class="mb-4">Request Leave</h3>
-            <form id="leaveForm">
-                <input type="hidden" name="action" value="apply">
-                <div class="form-group">
-                    <label class="form-label">Leave Type</label>
-                    <select class="form-control" name="leave_type" required>
-                        <option value="Casual Leave">Casual Leave</option>
-                        <option value="Sick Leave">Sick Leave</option>
-                        <option value="Earned Leave">Earned Leave</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">From Date</label>
-                    <input type="date" class="form-control" name="from_date" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">To Date</label>
-                    <input type="date" class="form-control" name="to_date" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Reason</label>
-                    <textarea class="form-control" name="reason" rows="3" required></textarea>
-                </div>
-                <div class="flex gap-2 justify-end mt-4">
-                    <button type="button" class="btn-icon" style="width:auto;padding:10px 20px;background:var(--border);" onclick="closeModal('leaveModal')">Cancel</button>
-                    <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Submit Application</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div id="permissionModal" class="modal">
-        <div class="modal-content">
-            <h3 class="mb-4">Request Permission</h3>
-            <form id="permissionForm">
-                <input type="hidden" name="action" value="apply">
-                <div class="form-group">
-                    <label class="form-label">Date</label>
-                    <input type="date" class="form-control" name="date" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Time Window (e.g., 2 PM - 4 PM)</label>
-                    <input type="text" class="form-control" name="time_window" placeholder="2:00 PM - 3:00 PM" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Duration</label>
-                    <input type="text" class="form-control" name="duration" placeholder="1 Hour" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Reason</label>
-                    <textarea class="form-control" name="reason" rows="3" required></textarea>
-                </div>
-                <div class="flex gap-2 justify-end mt-4">
-                    <button type="button" class="btn-icon" style="width:auto;padding:10px 20px;background:var(--border);" onclick="closeModal('permissionModal')">Cancel</button>
-                    <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Submit Request</button>
-                </div>
-            </form>
-        </div>
     </div>
 
     <script>
@@ -465,135 +455,27 @@ if (isset($_SESSION['tenant_slug'])) {
             }
         }
 
-        // --- DYNAMIC DATA FETCHING ---
-        async function fetchStatus() {
-            const res = await fetch('/api/attendance.php?action=status');
-            const data = await res.json();
-            if (data.success) {
-                const btnIn = document.getElementById('btnCheckIn');
-                const btnOut = document.getElementById('btnCheckOut');
-                const btnBIn = document.getElementById('btnBreakIn');
-                const btnBOut = document.getElementById('btnBreakOut');
-                
-                if (data.is_punched_in) {
-                    if (data.type === 'shift') {
-                        btnIn.style.opacity = '0.5'; btnIn.style.pointerEvents = 'none';
-                        btnOut.style.opacity = '1'; btnOut.style.pointerEvents = 'auto';
-                        btnBIn.style.opacity = '1'; btnBIn.style.pointerEvents = 'auto';
-                        btnBOut.style.opacity = '0.5'; btnBOut.style.pointerEvents = 'none';
-                        if (!localStorage.getItem(PUNCH_KEY)) {
-                            // Sync with server time
-                            const localStart = Date.now() - (Date.now() - data.punch_in_ms); // Mock sync
-                            localStorage.setItem(PUNCH_KEY, (new Date(data.punch_in)).getTime() || Date.now());
-                        }
-                    } else if (data.type === 'break') {
-                        btnIn.style.opacity = '0.5'; btnIn.style.pointerEvents = 'none';
-                        btnOut.style.opacity = '0.5'; btnOut.style.pointerEvents = 'none';
-                        btnBIn.style.opacity = '0.5'; btnBIn.style.pointerEvents = 'none';
-                        btnBOut.style.opacity = '1'; btnBOut.style.pointerEvents = 'auto';
-                        localStorage.removeItem(PUNCH_KEY);
-                    }
-                } else {
-                    btnIn.style.opacity = '1'; btnIn.style.pointerEvents = 'auto';
-                    btnOut.style.opacity = '0.5'; btnOut.style.pointerEvents = 'none';
-                    btnBIn.style.opacity = '0.5'; btnBIn.style.pointerEvents = 'none';
-                    btnBOut.style.opacity = '0.5'; btnBOut.style.pointerEvents = 'none';
-                    localStorage.removeItem(PUNCH_KEY);
-                }
-                tickTimer();
+        function doPunch(type) {
+            const msgs = {
+                'Check-In': ['Punched In! Session started.', 'success'],
+                'Break-In': ['Break started! ☕', 'warning'],
+                'Break-Out': ['Break ended! 💼', 'info'],
+                'Check-Out': ['Punched Out. Good work today! 👋', 'error']
+            };
+            if (type === 'Check-In' && !localStorage.getItem(PUNCH_KEY)) {
+                localStorage.setItem(PUNCH_KEY, Date.now().toString());
             }
+            if (type === 'Check-Out') localStorage.removeItem(PUNCH_KEY);
+            const [m, t] = msgs[type] || ['Action recorded.', 'success'];
+            vyToast(m, t);
+            tickTimer();
         }
-
-        async function apiPunch(action) {
-            const res = await fetch('/api/attendance.php', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: `action=${action}`
-            });
-            const data = await res.json();
-            if (data.success) {
-                vyToast(data.message);
-                fetchStatus();
-                loadAttendanceHistory();
-            } else {
-                vyToast(data.message, 'error');
-            }
-        }
-
-        async function loadAttendanceHistory() {
-            // Simplified: could fetch from a history API, for now show today's and dummy
-            const res = await fetch('/api/attendance.php?action=status'); 
-            // In a real app, I'd have a ?action=history endpoint
-            const data = await res.json();
-            const tbody = document.getElementById('attendanceHistoryBody');
-            if (data.is_punched_in) {
-                tbody.innerHTML = `<tr><td class="text-bold">${new Date().toLocaleDateString()}</td><td>${new Date(data.punch_in).toLocaleTimeString()}</td><td>-</td><td>Active</td><td><span class="badge" style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;">Present</span></td></tr>`;
-            } else {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No records for today</td></tr>';
-            }
-        }
-
-        async function loadLeaves() {
-            const res = await fetch('/api/leaves.php');
-            const data = await res.json();
-            if (data.success) {
-                const tbody = document.getElementById('leaveHistoryBody');
-                tbody.innerHTML = data.data.map(l => `
-                    <tr>
-                        <td class="text-bold">${l.leave_type}</td>
-                        <td>${l.from_date}</td>
-                        <td>${l.to_date}</td>
-                        <td>${l.reason}</td>
-                        <td><span class="badge badge-${l.status === 'pending' ? 'warm' : (l.status === 'approved' ? 'success' : 'hot')}">${l.status}</span></td>
-                    </tr>
-                `).join('') || '<tr><td colspan="5" style="text-align:center;">No leave applications found</td></tr>';
-            }
-        }
-
-        async function loadPermissions() {
-            const res = await fetch('/api/permissions.php');
-            const data = await res.json();
-            if (data.success) {
-                const tbody = document.getElementById('permissionHistoryBody');
-                tbody.innerHTML = data.data.map(p => `
-                    <tr>
-                        <td class="text-bold">${p.date}</td>
-                        <td>${p.time_window}</td>
-                        <td>${p.duration}</td>
-                        <td>${p.reason}</td>
-                        <td><span class="badge badge-${p.status === 'pending' ? 'warm' : (p.status === 'approved' ? 'success' : 'hot')}">${p.status}</span></td>
-                    </tr>
-                `).join('') || '<tr><td colspan="5" style="text-align:center;">No permission requests found</td></tr>';
-            }
-        }
-
-        // Modals
-        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
-        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-
-        document.getElementById('leaveForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const res = await fetch('/api/leaves.php', { method: 'POST', body: new FormData(e.target) });
-            const data = await res.json();
-            if (data.success) { vyToast(data.message); closeModal('leaveModal'); loadLeaves(); }
-            else vyToast(data.message, 'error');
-        };
-
-        document.getElementById('permissionForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const res = await fetch('/api/permissions.php', { method: 'POST', body: new FormData(e.target) });
-            const data = await res.json();
-            if (data.success) { vyToast(data.message); closeModal('permissionModal'); loadPermissions(); }
-            else vyToast(data.message, 'error');
-        };
 
         function switchTab(evt, id) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.getElementById(id).classList.add('active');
             evt.currentTarget.classList.add('active');
-            if (id === 'leaves') loadLeaves();
-            if (id === 'permissions') loadPermissions();
         }
 
         function toggleSidebar() {
@@ -611,22 +493,23 @@ if (isset($_SESSION['tenant_slug'])) {
             o.style.display = s.classList.contains('mobile-open') ? 'block' : 'none';
         }
 
-        function toggleProfileDropdown(e) { e.stopPropagation(); document.getElementById('profileDropdown').classList.toggle('show'); }
+        function toggleProfileDropdown(e) {
+            e.stopPropagation();
+            document.getElementById('profileDropdown').classList.toggle('show');
+        }
 
         window.onclick = function(event) {
             if (!event.target.closest('.profile-pill')) {
                 const dropdowns = document.getElementsByClassName("profile-dropdown");
-                for (let i = 0; i < dropdowns.length; i++) { dropdowns[i].classList.remove('show'); }
+                for (let i = 0; i < dropdowns.length; i++) {
+                    dropdowns[i].classList.remove('show');
+                }
             }
         }
 
         setInterval(tickTimer, 1000);
-        fetchStatus();
-        loadAttendanceHistory();
+        tickTimer();
     </script>
-</body>
-</html>
-pt>
 </body>
 
 </html>
