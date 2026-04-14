@@ -1,5 +1,6 @@
 <?php
 session_start();
+ob_start();
 require_once '../includes/commerce.php';
 require_once '../includes/api_auth.php';
 
@@ -188,6 +189,7 @@ try {
             throw $e;
         }
 
+        ob_clean();
         commerce_json_response([
             'success' => true,
             'message' => 'Invoice created successfully',

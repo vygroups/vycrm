@@ -95,6 +95,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             $message = "❌ FATAL: " . $e->getMessage();
         }
     }
+
+    if ($_POST['action'] == 'delete_company') {
+        $id = (int) $_POST['id'];
+        try {
+            $stmt = $db->prepare("DELETE FROM {$prefix}companies WHERE id = ?");
+            $stmt->execute([$id]);
+            $message = "🗑️ Company removed from master list.";
+        } catch (Exception $e) {
+            $message = "❌ Error: " . $e->getMessage();
+        }
+    }
 }
 
 // Fetch Companies
@@ -218,6 +229,7 @@ endif; ?>
                             <th>Slug</th>
                             <th>Database</th>
                             <th>Provisioned Date</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
 
@@ -242,6 +254,15 @@ endif; ?>
                             <td><code><?= $c['db_name']?></code></td>
                             <td>
                                 <?= date('Y-m-d', strtotime($c['created_at']))?>
+                            </td>
+                            <td>
+                                <form action="" method="POST" onsubmit="return confirm('Are you sure you want to remove this tenant from the list? (Database will not be deleted)')" style="display:inline;">
+                                    <input type="hidden" name="action" value="delete_company">
+                                    <input type="hidden" name="id" value="<?= $c['id'] ?>">
+                                    <button type="submit" class="btn-icon" style="color:var(--hot);" title="Delete Record">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         <?php

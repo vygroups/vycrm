@@ -42,18 +42,7 @@ $v = time();
 </head>
 <body>
 <div class="app-wrapper">
-    <aside class="sidebar">
-        <div class="sidebar-head">
-            <a href="dashboard.php"><img src="/images/logo.png?v=<?= $v ?>" alt="Vy CRM" style="max-height:50px;"></a>
-        </div>
-        <div class="sidebar-nav">
-            <a href="dashboard.php" class="nav-item"><i class="fa-solid fa-chart-pie"></i><span class="nav-text">Dashboard</span></a>
-            <a href="attendance.php" class="nav-item"><i class="fa-regular fa-clock"></i><span class="nav-text">Attendance</span></a>
-            <a href="#" class="nav-item"><i class="fa-solid fa-ticket"></i><span class="nav-text">Tickets</span></a>
-            <a href="#" class="nav-item"><i class="fa-solid fa-file-invoice"></i><span class="nav-text">Invoices</span></a>
-            <a href="#" class="nav-item"><i class="fa-solid fa-boxes-stacked"></i><span class="nav-text">Products</span></a>
-        </div>
-    </aside>
+    <?php include 'includes/sidebar.php'; ?>
 
     <main class="main-content">
         <header class="topbar">

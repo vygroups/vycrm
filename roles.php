@@ -64,16 +64,7 @@ if (isset($_SESSION['tenant_slug'])) {
 </head>
 <body>
 <div class="app-wrapper">
-    <aside class="sidebar">
-        <div class="sidebar-head">
-            <a href="dashboard.php"><img src="<?= $companyLogo ?>?v=<?= $v ?>" alt="<?= $companyName ?>" style="max-height:50px;"></a>
-        </div>
-        <div class="sidebar-nav">
-            <a href="dashboard.php" class="nav-item"><i class="fa-solid fa-chart-pie"></i><span class="nav-text">Dashboard</span></a>
-            <a href="attendance.php" class="nav-item"><i class="fa-regular fa-clock"></i><span class="nav-text">Attendance</span></a>
-            <a href="#" class="nav-item" style="opacity: 0.5; pointer-events: none;"><i class="fa-solid fa-wand-magic-sparkles"></i><span class="nav-text">STUDIO MODE</span></a>
-        </div>
-    </aside>
+    <?php include 'includes/sidebar.php'; ?>
 
     <main class="main-content">
         <header class="topbar">

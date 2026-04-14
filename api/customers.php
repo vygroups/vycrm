@@ -2,6 +2,7 @@
 require_once '../includes/commerce.php';
 require_once '../includes/api_auth.php';
 session_start();
+ob_start();
 
 try {
     $context = api_require_context();
@@ -62,6 +63,7 @@ try {
         $detailStmt = $conn->prepare("SELECT * FROM {$prefix}customers WHERE id = ?");
         $detailStmt->execute([$customerId]);
 
+        ob_clean();
         commerce_json_response([
             'success' => true,
             'message' => 'Customer created successfully',

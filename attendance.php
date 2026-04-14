@@ -233,22 +233,7 @@ if (isset($_SESSION['tenant_slug'])) {
             style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:90;">
         </div>
 
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-head">
-                <a href="dashboard.php"><img src="<?= $companyLogo ?>?v=<?= $v ?>" alt="<?= $companyName ?>"
-                        style="max-height:50px;"></a>
-                <div class="sidebar-toggle hidden-mobile" onclick="toggleSidebar()">
-                    <i class="fa-solid fa-chevron-left" id="toggleIcon"></i>
-                </div>
-            </div>
-            <div class="sidebar-nav">
-                <a href="dashboard.php" class="nav-item"><i class="fa-solid fa-chart-pie"></i><span class="nav-text">Dashboard</span></a>
-                <a href="attendance.php" class="nav-item active"><i class="fa-regular fa-clock"></i><span class="nav-text">Attendance</span></a>
-                <a href="#" class="nav-item"><i class="fa-solid fa-ticket"></i><span class="nav-text">Tickets</span></a>
-                <a href="invoices.php" class="nav-item"><i class="fa-solid fa-file-invoice"></i><span class="nav-text">Invoices</span></a>
-                <a href="products.php" class="nav-item"><i class="fa-solid fa-boxes-stacked"></i><span class="nav-text">Products</span></a>
-            </div>
-        </aside>
+        <?php include 'includes/sidebar.php'; ?>
 
         <main class="main-content">
             <header class="topbar" style="position:relative;">

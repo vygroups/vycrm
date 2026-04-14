@@ -26,7 +26,9 @@ commerce_ensure_tables($conn, $prefix);
 
 $products = commerce_fetch_products($conn, $prefix);
 $activeProducts = array_values(array_filter($products, static fn($product) => $product['status'] === 'active'));
+$customers = commerce_fetch_customers($conn, $prefix);
 $productCreated = isset($_GET['product_created']) ? 1 : 0;
+$customerCreated = isset($_GET['customer_created']) ? 1 : 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -134,22 +136,7 @@ $productCreated = isset($_GET['product_created']) ? 1 : 0;
 <body>
 <div class="app-wrapper">
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar()" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:90;"></div>
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-head">
-            <a href="dashboard.php"><img src="<?= $companyLogo ?>?v=<?= $v ?>" alt="<?= $companyName ?>" style="max-height:50px;"></a>
-            <div class="sidebar-toggle hidden-mobile" onclick="toggleSidebar()">
-                <i class="fa-solid fa-chevron-left" id="toggleIcon"></i>
-            </div>
-        </div>
-        <div class="sidebar-nav">
-            <a href="dashboard.php" class="nav-item"><i class="fa-solid fa-chart-pie"></i><span class="nav-text">Dashboard</span></a>
-            <a href="attendance.php" class="nav-item"><i class="fa-regular fa-clock"></i><span class="nav-text">Attendance</span></a>
-            <a href="#" class="nav-item"><i class="fa-solid fa-ticket"></i><span class="nav-text">Tickets</span></a>
-            <a href="invoices.php" class="nav-item active"><i class="fa-solid fa-file-invoice"></i><span class="nav-text">Invoices</span></a>
-            <a href="products.php" class="nav-item"><i class="fa-solid fa-boxes-stacked"></i><span class="nav-text">Products</span></a>
-            <a href="manage_requests.php" class="nav-item"><i class="fa-solid fa-clipboard-check"></i><span class="nav-text">Approvals</span></a>
-        </div>
-    </aside>
+    <?php include 'includes/sidebar.php'; ?>
     <main class="main-content">
         <header class="topbar">
             <div class="flex items-center">
@@ -172,17 +159,27 @@ $productCreated = isset($_GET['product_created']) ? 1 : 0;
                     <div class="inline-grid">
                         <div class="form-group">
                             <label class="form-label">Customer Name</label>
-                            <input class="form-control" type="text" name="customer_name" required>
+                            <div class="flex items-center" style="gap:10px;">
+                                <select class="form-control" name="customer_id" id="customerSelect">
+                                    <option value="">-- Select Existing Customer --</option>
+                                    <?php foreach ($customers as $cust): ?>
+                                        <option value="<?= $cust['id'] ?>"><?= htmlspecialchars($cust['name']) ?></option>
+                                    <?php endforeach; ?>
+                                    <option value="new">Add New Customer (Custom Name)</option>
+                                </select>
+                                <a href="customer_create.php?return_to=invoice_create.php" class="btn-secondary" style="white-space:nowrap;"><i class="fa-solid fa-user-plus"></i> New Customer</a>
+                            </div>
+                            <input class="form-control" type="text" name="customer_name" id="customerNameInput" placeholder="Enter customer name" style="margin-top:10px;">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Customer Phone</label>
-                            <input class="form-control" type="text" name="customer_phone">
+                            <input class="form-control" type="text" name="customer_phone" id="customerPhoneInput">
                         </div>
                     </div>
                     <div class="inline-grid">
                         <div class="form-group">
                             <label class="form-label">Customer Email</label>
-                            <input class="form-control" type="email" name="customer_email">
+                            <input class="form-control" type="email" name="customer_email" id="customerEmailInput">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Status</label>
@@ -206,7 +203,7 @@ $productCreated = isset($_GET['product_created']) ? 1 : 0;
                     </div>
                     <div class="form-group">
                         <label class="form-label">Billing Address</label>
-                        <textarea class="form-control" name="billing_address" rows="3"></textarea>
+                        <textarea class="form-control" name="billing_address" id="billingAddressInput" rows="3"></textarea>
                     </div>
 
                     <table class="item-table">
@@ -266,7 +263,9 @@ const products = <?= json_encode(array_values(array_map(static function ($produc
         'status' => $product['status'],
     ];
 }, $activeProducts)), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+const customers = <?= json_encode($customers) ?>;
 const productCreated = <?= $productCreated ?> === 1;
+const customerCreated = <?= $customerCreated ?> === 1;
 
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -391,6 +390,7 @@ function buildPayload() {
 
     return {
         action: 'create',
+        customer_id: formData.get('customer_id'),
         customer_name: formData.get('customer_name'),
         customer_phone: formData.get('customer_phone'),
         customer_email: formData.get('customer_email'),
@@ -404,7 +404,7 @@ function buildPayload() {
 }
 
 function escapeHtml(value) {
-    return String(value)
+    return String(value || '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -412,12 +412,40 @@ function escapeHtml(value) {
         .replace(/'/g, '&#039;');
 }
 
+document.getElementById('customerSelect').addEventListener('change', function() {
+    const cid = this.value;
+    const nameInput = document.getElementById('customerNameInput');
+    const phoneInput = document.getElementById('customerPhoneInput');
+    const emailInput = document.getElementById('customerEmailInput');
+    const addressInput = document.getElementById('billingAddressInput');
+    
+    if (cid === 'new' || cid === '') {
+        nameInput.value = '';
+        phoneInput.value = '';
+        emailInput.value = '';
+        addressInput.value = '';
+        nameInput.style.display = 'block';
+        nameInput.required = true;
+    } else {
+        const cust = customers.find(c => String(c.id) === String(cid));
+        if (cust) {
+            nameInput.value = cust.name;
+            phoneInput.value = cust.phone || '';
+            emailInput.value = cust.email || '';
+            addressInput.value = cust.billing_address || '';
+            nameInput.style.display = 'none';
+            nameInput.required = false;
+        }
+    }
+});
+
 document.getElementById('addRowBtn').addEventListener('click', () => createRow());
 
 document.getElementById('invoiceForm').addEventListener('submit', async (event) => {
     event.preventDefault();
+    const formElement = event.currentTarget;
     const statusText = document.getElementById('invoiceStatusText');
-    const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+    const submitButton = formElement.querySelector('button[type="submit"]');
     const successActions = document.getElementById('successActions');
     const printInvoiceBtn = document.getElementById('printInvoiceBtn');
     statusText.textContent = 'Saving invoice...';
@@ -430,15 +458,35 @@ document.getElementById('invoiceForm').addEventListener('submit', async (event) 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildPayload())
         });
-        const responseText = await response.text();
-        let payload = {};
+        
+        const responseText = (await response.text()).trim();
+        let payload = { success: false, message: 'Parse error' };
+        
         try {
-            payload = responseText ? JSON.parse(responseText) : {};
+            // Try direct parse first
+            payload = JSON.parse(responseText);
         } catch (parseError) {
-            if (response.ok) {
+            // Fallback: extract JSON if there's garbage output around it
+            const startIdx = responseText.indexOf('{');
+            const endIdx = responseText.lastIndexOf('}');
+            
+            if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+                const potentialJson = responseText.substring(startIdx, endIdx + 1);
+                try {
+                    payload = JSON.parse(potentialJson);
+                } catch (e) {
+                    console.error('Inner Parse Error:', e, 'Text:', potentialJson);
+                }
+            }
+
+            // If we still don't have success but the response was OK, treat as success if no payload
+            if (!payload.success && response.ok && responseText.toLowerCase().includes('"success":true')) {
                 payload = { success: true, data: {} };
-            } else {
-                throw parseError;
+            }
+            
+            if (!payload.success && !response.ok) {
+                console.error('Response Text:', responseText);
+                throw new Error('Server returned invalid data format: ' + responseText.slice(0, 50));
             }
         }
 
@@ -448,19 +496,20 @@ document.getElementById('invoiceForm').addEventListener('submit', async (event) 
             return;
         }
 
-        const invoiceId = payload && payload.data && payload.data.invoice_id ? payload.data.invoice_id : 0;
-        const invoiceNumber = payload && payload.data && payload.data.invoice_number ? payload.data.invoice_number : 'Invoice';
+        const invoiceId = payload.data ? payload.data.invoice_id : 0;
+        const invoiceNumber = payload.data ? payload.data.invoice_number : 'Invoice';
         printInvoiceBtn.href = `invoice_print.php?id=${invoiceId}`;
         printInvoiceBtn.setAttribute('aria-label', `Print ${invoiceNumber}`);
         statusText.textContent = `${invoiceNumber} created successfully. You can print it or go to the invoice list.`;
         successActions.classList.add('is-visible');
-        event.currentTarget.reset();
+        formElement.reset();
         document.getElementById('itemRows').innerHTML = '';
         createRow();
         recalculateSummary();
     } catch (error) {
-        statusText.textContent = 'Unable to create invoice';
-        alert('Unable to create invoice');
+        console.error('Invoice Creation Error:', error);
+        statusText.textContent = error.message || 'Unable to create invoice';
+        alert(error.message || 'Unable to create invoice');
     } finally {
         submitButton.disabled = false;
     }

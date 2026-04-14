@@ -54,18 +54,18 @@ if ($companySlug) {
                     <input type="hidden" name="company" value="<?= htmlspecialchars($companySlug) ?>">
                     <div class="form-group">
                         <label class="form-label">Username or Email</label>
-                        <input type="text" class="form-control" name="username" placeholder="admin" required>
+                        <input type="text" class="form-control" name="username" placeholder="admin" value="admin" required>
                     </div>
                     <div class="form-group mb-4">
                         <div class="flex justify-between items-center mb-1">
                             <label class="form-label mb-0">Password</label>
                             <a href="#" class="text-sm text-muted">Forgot password?</a>
                         </div>
-                        <input type="password" class="form-control" name="password" placeholder="••••••••" required>
+                        <input type="password" class="form-control" name="password" placeholder="••••••••" value="admin@123" required>
                     </div>
 
                     <button type="submit" class="btn-primary" id="loginBtn">Sign In</button>
-                    <p class="text-xs text-muted mt-3 text-center">Default Login: admin / admin@123</p>
+                    <p class="text-xs text-muted mt-3 text-center" style="padding-top: 15px;">Default Login: admin / admin@123</p>
                 </form>
             </div>
         </div>
