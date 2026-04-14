@@ -16,6 +16,9 @@ $currentFile = basename($_SERVER['PHP_SELF']);
         <a href="attendance.php" class="nav-item <?= ($currentFile === 'attendance.php' || $currentFile === 'attendance_tenant.php') ? 'active' : '' ?>">
             <i class="fa-regular fa-clock"></i><span class="nav-text">Attendance</span>
         </a>
+        <a href="attendance_report.php" class="nav-item <?= $currentFile === 'attendance_report.php' ? 'active' : '' ?>">
+            <i class="fa-solid fa-chart-line"></i><span class="nav-text">Attendance Report</span>
+        </a>
         <a href="customers.php" class="nav-item <?= ($currentFile === 'customers.php' || $currentFile === 'customer_create.php') ? 'active' : '' ?>">
             <i class="fa-solid fa-users-gear"></i><span class="nav-text">Customers</span>
         </a>

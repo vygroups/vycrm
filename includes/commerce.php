@@ -107,6 +107,25 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             INDEX idx_invoice_items_product (product_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}attendance (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            date DATE NOT NULL,
+            punch_in DATETIME DEFAULT NULL,
+            punch_out DATETIME DEFAULT NULL,
+            total_hours VARCHAR(20) DEFAULT NULL,
+            status VARCHAR(50) DEFAULT 'Present',
+            type VARCHAR(50) DEFAULT 'shift',
+            INDEX idx_attendance_user (user_id),
+            INDEX idx_attendance_date (date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    try {
+        $conn->exec("ALTER TABLE {$prefix}attendance ADD COLUMN type VARCHAR(50) DEFAULT 'shift' AFTER status");
+    } catch (Throwable $e) {}
 }
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array

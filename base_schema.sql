@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     punch_out DATETIME DEFAULT NULL,
     total_hours VARCHAR(20) DEFAULT NULL,
     status VARCHAR(50) DEFAULT 'Present',
+    type VARCHAR(50) DEFAULT 'shift',
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

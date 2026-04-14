@@ -467,9 +467,14 @@ if (isset($_SESSION['tenant_slug'])) {
                         btnBIn.style.opacity = '1'; btnBIn.style.pointerEvents = 'auto';
                         btnBOut.style.opacity = '0.5'; btnBOut.style.pointerEvents = 'none';
                         if (!localStorage.getItem(PUNCH_KEY)) {
-                            // Sync with server time
-                            const localStart = Date.now() - (Date.now() - data.punch_in_ms); // Mock sync
-                            localStorage.setItem(PUNCH_KEY, (new Date(data.punch_in)).getTime() || Date.now());
+                            // Sync with server time by calculating elapsed duration
+                            // This solves the 5.5h offset issue once and for all
+                            if (data.punch_in_ms && data.server_time) {
+                                const elapsed = data.server_time - data.punch_in_ms;
+                                localStorage.setItem(PUNCH_KEY, (Date.now() - elapsed).toString());
+                            } else if (data.punch_in) {
+                                localStorage.setItem(PUNCH_KEY, (new Date(data.punch_in)).getTime().toString());
+                            }
                         }
                     } else if (data.type === 'break') {
                         btnIn.style.opacity = '0.5'; btnIn.style.pointerEvents = 'none';
@@ -506,15 +511,25 @@ if (isset($_SESSION['tenant_slug'])) {
         }
 
         async function loadAttendanceHistory() {
-            // Simplified: could fetch from a history API, for now show today's and dummy
-            const res = await fetch('/api/attendance.php?action=status'); 
-            // In a real app, I'd have a ?action=history endpoint
+            const res = await fetch('/api/attendance.php?action=history'); 
             const data = await res.json();
             const tbody = document.getElementById('attendanceHistoryBody');
-            if (data.is_punched_in) {
-                tbody.innerHTML = `<tr><td class="text-bold">${new Date().toLocaleDateString()}</td><td>${new Date(data.punch_in).toLocaleTimeString()}</td><td>-</td><td>Active</td><td><span class="badge" style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;">Present</span></td></tr>`;
+            if (data.success && data.data && data.data.length > 0) {
+                tbody.innerHTML = data.data.map(at => {
+                    const statusTag = at.type === 'break' 
+                        ? '<span class="badge" style="background:rgba(245,158,11,.1);border:1px solid #f59e0b;color:#f59e0b;">Break</span>'
+                        : '<span class="badge" style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;">Present</span>';
+                    return `
+                    <tr>
+                        <td class="text-bold">${at.date}</td>
+                        <td>${at.punch_in ? new Date(at.punch_in).toLocaleTimeString() : '-'}</td>
+                        <td>${at.punch_out ? new Date(at.punch_out).toLocaleTimeString() : '-'}</td>
+                        <td>${at.total_hours || '-'}</td>
+                        <td>${at.type === 'shift' ? statusTag : statusTag}</td>
+                    </tr>`;
+                }).join('');
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No records for today</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No records found for today.</td></tr>';
             }
         }
 
