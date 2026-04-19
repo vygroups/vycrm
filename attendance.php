@@ -2,24 +2,7 @@
 // attendance.php - Attendance Module with Global Timer + Toast
 require_once 'auth_check.php';
 require_once 'config/database.php';
-
-$v = time();
-$companyLogo = "/images/logo.png";
-$companyName = "Vy CRM";
-
-if (isset($_SESSION['tenant_slug'])) {
-    try {
-        $db = Database::getMasterConn();
-        $prefix = Database::getMasterPrefix();
-        $stmt = $db->prepare("SELECT * FROM {$prefix}companies WHERE slug = ?");
-        $stmt->execute([$_SESSION['tenant_slug']]);
-        $company = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($company && $company['logo']) {
-            $companyLogo = '/' . $company['logo'];
-            $companyName = htmlspecialchars($company['name']);
-        }
-    } catch (Exception $e) {}
-}
+require_once 'includes/brand.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">

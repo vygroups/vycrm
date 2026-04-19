@@ -169,6 +169,7 @@ try {
             ");
 
             foreach ($normalizedItems as $item) {
+                // Insert Item
                 $itemStmt->execute([
                     $invoiceId,
                     $item['product_id'],
@@ -181,6 +182,12 @@ try {
                     $item['line_tax'],
                     $item['line_total'],
                 ]);
+
+                // Update Stock if product_id exists
+                if ($item['product_id']) {
+                    $stockStmt = $conn->prepare("UPDATE {$prefix}products SET stock_quantity = stock_quantity - ? WHERE id = ?");
+                    $stockStmt->execute([$item['quantity'], $item['product_id']]);
+                }
             }
 
             $conn->commit();

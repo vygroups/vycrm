@@ -49,14 +49,28 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             description TEXT DEFAULT NULL,
             unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+            unit VARCHAR(20) DEFAULT 'PCS',
+            opening_stock DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            stock_quantity DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            hsn_code VARCHAR(50) DEFAULT NULL,
+            category VARCHAR(100) DEFAULT NULL,
             status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
             created_by INT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_products_name (name),
-            INDEX idx_products_status (status)
+            INDEX idx_products_status (status),
+            INDEX idx_products_cat (category)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    try {
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN unit VARCHAR(20) DEFAULT 'PCS' AFTER tax_percent");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN opening_stock DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER unit");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN stock_quantity DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER opening_stock");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN hsn_code VARCHAR(50) DEFAULT NULL AFTER stock_quantity");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN category VARCHAR(100) DEFAULT NULL AFTER hsn_code");
+    } catch (Throwable $e) {}
 
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}invoices (
@@ -85,8 +99,12 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
 
     try {
         $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN customer_id INT DEFAULT NULL AFTER invoice_number");
-    } catch (Throwable $e) {
-    }
+    } catch (Throwable $e) {}
+
+    try {
+        $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER grand_total");
+        $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN payment_status ENUM('unpaid', 'partially_paid', 'paid') NOT NULL DEFAULT 'unpaid' AFTER status");
+    } catch (Throwable $e) {}
 
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}invoice_items (
@@ -96,6 +114,11 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             item_name VARCHAR(150) NOT NULL,
             description TEXT DEFAULT NULL,
             quantity DECIMAL(12,2) NOT NULL DEFAULT 1.00,
+            unit VARCHAR(20) DEFAULT NULL,
+            hsn_code VARCHAR(50) DEFAULT NULL,
+            batch_no VARCHAR(100) DEFAULT NULL,
+            mfg_date DATE DEFAULT NULL,
+            exp_date DATE DEFAULT NULL,
             unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
             line_subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -107,6 +130,14 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             INDEX idx_invoice_items_product (product_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    try {
+        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN unit VARCHAR(20) DEFAULT NULL AFTER quantity");
+        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN hsn_code VARCHAR(50) DEFAULT NULL AFTER unit");
+        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN batch_no VARCHAR(100) DEFAULT NULL AFTER hsn_code");
+        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN mfg_date DATE DEFAULT NULL AFTER batch_no");
+        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN exp_date DATE DEFAULT NULL AFTER mfg_date");
+    } catch (Throwable $e) {}
 
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}attendance (
@@ -125,6 +156,92 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
 
     try {
         $conn->exec("ALTER TABLE {$prefix}attendance ADD COLUMN type VARCHAR(50) DEFAULT 'shift' AFTER status");
+    } catch (Throwable $e) {}
+
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}vendors (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            vendor_code VARCHAR(50) DEFAULT NULL UNIQUE,
+            name VARCHAR(150) NOT NULL,
+            phone VARCHAR(30) DEFAULT NULL,
+            email VARCHAR(150) DEFAULT NULL,
+            address TEXT DEFAULT NULL,
+            gst_number VARCHAR(50) DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_vendors_name (name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}purchases (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            purchase_number VARCHAR(50) NOT NULL UNIQUE,
+            vendor_id INT DEFAULT NULL,
+            vendor_name VARCHAR(150) NOT NULL,
+            purchase_date DATE NOT NULL,
+            subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            tax_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            grand_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            status ENUM('draft', 'received', 'returned', 'cancelled') NOT NULL DEFAULT 'draft',
+            payment_status ENUM('unpaid', 'partially_paid', 'paid') NOT NULL DEFAULT 'unpaid',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_purchases_number (purchase_number)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}purchase_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            purchase_id INT NOT NULL,
+            product_id INT DEFAULT NULL,
+            item_name VARCHAR(150) NOT NULL,
+            quantity DECIMAL(12,2) NOT NULL DEFAULT 1.00,
+            unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+            line_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            FOREIGN KEY (purchase_id) REFERENCES {$prefix}purchases(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}expenses (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            expense_date DATE NOT NULL,
+            category VARCHAR(100) NOT NULL,
+            description TEXT,
+            amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            payment_mode VARCHAR(50) DEFAULT 'Cash',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}business_profile (
+            id INT PRIMARY KEY DEFAULT 1,
+            business_name VARCHAR(150) DEFAULT NULL,
+            gstin VARCHAR(50) DEFAULT NULL,
+            phone VARCHAR(30) DEFAULT NULL,
+            email VARCHAR(150) DEFAULT NULL,
+            address TEXT DEFAULT NULL,
+            business_type VARCHAR(100) DEFAULT NULL,
+            business_category VARCHAR(100) DEFAULT NULL,
+            logo_path VARCHAR(255) DEFAULT NULL,
+            signature_path VARCHAR(255) DEFAULT NULL,
+            bank_name VARCHAR(150) DEFAULT NULL,
+            account_no VARCHAR(100) DEFAULT NULL,
+            ifsc_code VARCHAR(50) DEFAULT NULL,
+            terms TEXT DEFAULT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    try {
+        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN logo_path VARCHAR(255) DEFAULT NULL AFTER business_category");
+        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN bank_name VARCHAR(150) DEFAULT NULL AFTER signature_path");
+        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN account_no VARCHAR(100) DEFAULT NULL AFTER bank_name");
+        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN ifsc_code VARCHAR(50) DEFAULT NULL AFTER account_no");
+        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN terms TEXT DEFAULT NULL AFTER ifsc_code");
     } catch (Throwable $e) {}
 }
 
@@ -179,6 +296,40 @@ function commerce_fetch_invoice_detail(PDO $conn, string $prefix, int $invoiceId
     ];
 }
 
+function commerce_fetch_invoice_stats(PDO $conn, string $prefix): array
+{
+    $stmt = $conn->query("
+        SELECT 
+            SUM(grand_total) as total_sale,
+            SUM(paid_amount) as total_paid,
+            SUM(grand_total - paid_amount) as total_unpaid
+        FROM {$prefix}invoices
+    ");
+    $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+    return [
+        'total' => (float)($stats['total_sale'] ?? 0),
+        'paid' => (float)($stats['total_paid'] ?? 0),
+        'unpaid' => (float)($stats['total_unpaid'] ?? 0)
+    ];
+}
+
+function commerce_fetch_purchase_stats(PDO $conn, string $prefix): array
+{
+    $stmt = $conn->query("
+        SELECT 
+            SUM(grand_total) as total_purchase,
+            SUM(paid_amount) as total_paid,
+            SUM(grand_total - paid_amount) as total_unpaid
+        FROM {$prefix}purchases
+    ");
+    $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+    return [
+        'total' => (float)($stats['total_purchase'] ?? 0),
+        'paid' => (float)($stats['total_paid'] ?? 0),
+        'unpaid' => (float)($stats['total_unpaid'] ?? 0)
+    ];
+}
+
 function commerce_read_input(): array
 {
     $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
@@ -213,6 +364,28 @@ function commerce_generate_invoice_number(PDO $conn, string $prefix): string
     }
 
     return sprintf('INV-%s-%03d', $dateKey, $next);
+}
+
+function commerce_generate_purchase_number(PDO $conn, string $prefix): string
+{
+    $dateKey = date('Ymd');
+    $like = 'PUR-' . $dateKey . '-%';
+    $stmt = $conn->prepare("SELECT purchase_number FROM {$prefix}purchases WHERE purchase_number LIKE ? ORDER BY id DESC LIMIT 1");
+    $stmt->execute([$like]);
+    $latest = $stmt->fetchColumn();
+
+    $next = 1;
+    if ($latest && preg_match('/(\d+)$/', $latest, $matches)) {
+        $next = ((int) $matches[1]) + 1;
+    }
+
+    return sprintf('PUR-%s-%03d', $dateKey, $next);
+}
+
+function commerce_fetch_vendors(PDO $conn, string $prefix): array
+{
+    $stmt = $conn->query("SELECT * FROM {$prefix}vendors ORDER BY name ASC");
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 function commerce_fetch_products(PDO $conn, string $prefix, ?string $search = null): array

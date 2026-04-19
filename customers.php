@@ -2,22 +2,7 @@
 // customers.php - Customer List Page
 require_once 'auth_check.php';
 require_once 'includes/commerce.php';
-
-$v = time();
-$companyLogo = "/images/logo.png";
-$companyName = "Vy CRM";
-
-try {
-    $brandDb = Database::getMasterConn();
-    $brandPrefix = Database::getMasterPrefix();
-    $brandStmt = $brandDb->prepare("SELECT * FROM {$brandPrefix}companies WHERE slug = ?");
-    $brandStmt->execute([$_SESSION['tenant_slug']]);
-    $company = $brandStmt->fetch(PDO::FETCH_ASSOC);
-    if ($company && $company['logo']) {
-        $companyLogo = '/' . $company['logo'];
-        $companyName = htmlspecialchars($company['name']);
-    }
-} catch (Throwable $e) {}
+require_once 'includes/brand.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];

@@ -25,18 +25,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             }
             else {
 
-                // 🔥 LOGO UPLOAD
+                // 🔥 LOGO UPLOAD — stored in slug-based folder
                 $logo_path = null;
 
                 if (isset($_FILES['logo']) && $_FILES['logo']['error'] == 0) {
 
                     $ext = pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION);
-                    $filename = $slug . "_logo." . $ext;
+                    $filename = "logo." . strtolower($ext);
 
-                    $upload_dir = "assets/uploads/logos/";
+                    $upload_dir = "assets/uploads/" . $slug . "/";
 
                     if (!is_dir($upload_dir)) {
-                        mkdir($upload_dir, 0777, true);
+                        mkdir($upload_dir, 0755, true);
                     }
 
                     if (move_uploaded_file($_FILES['logo']['tmp_name'], $upload_dir . $filename)) {

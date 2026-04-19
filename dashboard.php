@@ -2,29 +2,12 @@
 // dashboard.php - Premium CRM Dashboard
 require_once 'auth_check.php';
 require_once 'config/database.php';
-
-$v = time();
-$companyLogo = "/images/logo.png";
-$companyName = "Vy CRM";
+require_once 'includes/brand.php';
 
 $user_id = $_SESSION['user_id'];
 $dbName = $_SESSION['tenant_db'];
 $prefix = $_SESSION['tenant_prefix'];
 $conn = Database::getTenantConn($dbName);
-
-if (isset($_SESSION['tenant_slug'])) {
-    try {
-        $dbMaster = Database::getMasterConn();
-        $masterPrefix = Database::getMasterPrefix();
-        $stmt = $dbMaster->prepare("SELECT * FROM {$masterPrefix}companies WHERE slug = ?");
-        $stmt->execute([$_SESSION['tenant_slug']]);
-        $company = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($company && $company['logo']) {
-            $companyLogo = '/' . $company['logo'];
-            $companyName = htmlspecialchars($company['name']);
-        }
-    } catch (Exception $e) {}
-}
 
 // Fetch Live Data
 try {

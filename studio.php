@@ -1,4 +1,8 @@
-<?php require_once 'auth_check.php'; ?>
+<?php
+require_once 'auth_check.php';
+require_once 'config/database.php';
+require_once 'includes/brand.php';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,7 +14,7 @@
 <body>
 <div class="app-wrapper">
     <aside class="sidebar">
-        <div class="sidebar-head"><a href="dashboard.php"><img src="/images/logo.png" style="max-height:50px;"></a></div>
+        <div class="sidebar-head"><a href="dashboard.php"><img src="<?= $companyLogo ?>?v=<?= $v ?>" alt="<?= $companyName ?>" style="max-height:50px;"></a></div>
         <div class="sidebar-nav">
              <a href="dashboard.php" class="nav-item"><i class="fa-solid fa-chart-pie"></i><span class="nav-text">Dashboard</span></a>
              <a href="users.php" class="nav-item"><i class="fa-solid fa-users-gear"></i><span class="nav-text">Users</span></a>

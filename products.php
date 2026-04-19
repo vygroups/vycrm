@@ -1,23 +1,7 @@
 <?php
 require_once 'auth_check.php';
 require_once 'includes/commerce.php';
-
-$v = time();
-$companyLogo = "/images/logo.png";
-$companyName = "Vy CRM";
-
-try {
-    $brandDb = Database::getMasterConn();
-    $brandPrefix = Database::getMasterPrefix();
-    $brandStmt = $brandDb->prepare("SELECT * FROM {$brandPrefix}companies WHERE slug = ?");
-    $brandStmt->execute([$_SESSION['tenant_slug']]);
-    $company = $brandStmt->fetch(PDO::FETCH_ASSOC);
-    if ($company && $company['logo']) {
-        $companyLogo = '/' . $company['logo'];
-        $companyName = htmlspecialchars($company['name']);
-    }
-} catch (Throwable $e) {
-}
+require_once 'includes/brand.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
@@ -39,7 +23,7 @@ $inactiveProducts = count($products) - count($activeProducts);
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         .module-hero {
-            background: linear-gradient(135deg, #12315f 0%, #2854a3 52%, #4f7ff0 100%);
+            background: linear-gradient(135deg, #2d1b69 0%, #5b3cc4 52%, #7b5ef0 100%);
             color: #fff;
             border-radius: 24px;
             padding: 28px;
@@ -147,8 +131,8 @@ $inactiveProducts = count($products) - count($activeProducts);
         }
 
         .status-active {
-            background: rgba(16, 185, 129, .12);
-            color: #059669;
+            background: rgba(123, 94, 240, .12);
+            color: #7b5ef0;
         }
 
         .status-inactive {
@@ -225,9 +209,11 @@ $inactiveProducts = count($products) - count($activeProducts);
                             <thead>
                                 <tr>
                                     <th>Product</th>
-                                    <th>Code</th>
+                                    <th>Code / HSN</th>
                                     <th>Price</th>
                                     <th>Tax</th>
+                                    <th>Unit</th>
+                                    <th>Stock</th>
                                     <th>Status</th>
                                     <th>Created</th>
                                 </tr>
@@ -235,24 +221,30 @@ $inactiveProducts = count($products) - count($activeProducts);
                             <tbody id="productTableBody">
                                 <?php if (empty($products)): ?>
                                     <tr>
-                                        <td colspan="6" class="table-empty">No products yet. Add your first product to
-                                            enable invoice selection.</td>
+                                        <td colspan="8" class="table-empty">No products yet. Add your first product to enable invoice selection.</td>
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($products as $product): ?>
                                         <tr>
                                             <td>
                                                 <div class="text-bold"><?= htmlspecialchars($product['name']) ?></div>
-                                                <div class="text-muted text-sm">
-                                                    <?= htmlspecialchars((string) ($product['description'] ?? '')) ?>
-                                                </div>
+                                                <div class="text-muted text-sm"><?= htmlspecialchars((string) ($product['description'] ?? '')) ?></div>
                                             </td>
-                                            <td><?= htmlspecialchars((string) ($product['product_code'] ?? '-')) ?></td>
-                                            <td><?= number_format((float) $product['unit_price'], 2) ?></td>
+                                            <td>
+                                                <div><?= htmlspecialchars((string) ($product['product_code'] ?? '-')) ?></div>
+                                                <?php if (!empty($product['hsn_code'])): ?>
+                                                    <div class="text-muted text-sm">HSN: <?= htmlspecialchars($product['hsn_code']) ?></div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>₹<?= number_format((float) $product['unit_price'], 2) ?></td>
                                             <td><?= number_format((float) $product['tax_percent'], 2) ?>%</td>
-                                            <td><span
-                                                    class="status-pill <?= $product['status'] === 'active' ? 'status-active' : 'status-inactive' ?>"><?= htmlspecialchars(ucfirst($product['status'])) ?></span>
+                                            <td><?= htmlspecialchars($product['unit'] ?? 'PCS') ?></td>
+                                            <td>
+                                                <span style="font-weight:700;color:<?= ((float)($product['stock_quantity'] ?? 0)) <= 0 ? '#ef4444' : 'var(--text-main)' ?>">
+                                                    <?= number_format((float)($product['stock_quantity'] ?? 0), 0) ?>
+                                                </span>
                                             </td>
+                                            <td><span class="status-pill <?= $product['status'] === 'active' ? 'status-active' : 'status-inactive' ?>"><?= htmlspecialchars(ucfirst($product['status'])) ?></span></td>
                                             <td><?= date('Y-m-d', strtotime($product['created_at'])) ?></td>
                                         </tr>
                                     <?php endforeach; ?>

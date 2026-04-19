@@ -1,23 +1,7 @@
 <?php
 require_once 'auth_check.php';
 require_once 'includes/commerce.php';
-
-$v = time();
-$companyLogo = "/images/logo.png";
-$companyName = "Vy CRM";
-
-try {
-    $brandDb = Database::getMasterConn();
-    $brandPrefix = Database::getMasterPrefix();
-    $brandStmt = $brandDb->prepare("SELECT * FROM {$brandPrefix}companies WHERE slug = ?");
-    $brandStmt->execute([$_SESSION['tenant_slug']]);
-    $company = $brandStmt->fetch(PDO::FETCH_ASSOC);
-    if ($company && $company['logo']) {
-        $companyLogo = '/' . $company['logo'];
-        $companyName = htmlspecialchars($company['name']);
-    }
-} catch (Throwable $e) {
-}
+require_once 'includes/brand.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
@@ -27,6 +11,7 @@ commerce_ensure_tables($conn, $prefix);
 $products = commerce_fetch_products($conn, $prefix);
 $activeProducts = array_values(array_filter($products, static fn($product) => $product['status'] === 'active'));
 $invoices = commerce_fetch_invoices($conn, $prefix);
+$stats = commerce_fetch_invoice_stats($conn, $prefix);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -39,7 +24,7 @@ $invoices = commerce_fetch_invoices($conn, $prefix);
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         .module-hero {
-            background: linear-gradient(135deg, #10201f 0%, #0c6a67 52%, #14b8a6 100%);
+            background: linear-gradient(135deg, #2d1b69 0%, #5b3cc4 52%, #7b5ef0 100%);
             color: #fff;
             border-radius: 24px;
             padding: 28px;
@@ -88,6 +73,9 @@ $invoices = commerce_fetch_invoices($conn, $prefix);
             font-size: 26px;
             margin-top: 8px;
         }
+
+        .stat-paid { color: #a78bfa; }
+        .stat-unpaid { color: #f59e0b; }
 
         .module-panel {
             background: var(--surface);
@@ -150,8 +138,8 @@ $invoices = commerce_fetch_invoices($conn, $prefix);
         }
 
         .status-paid {
-            background: rgba(16, 185, 129, .12);
-            color: #059669;
+            background: rgba(123, 94, 240, .12);
+            color: #7b5ef0;
         }
 
         .status-sent {
@@ -266,18 +254,37 @@ $invoices = commerce_fetch_invoices($conn, $prefix);
                 </div>
             </header>
             <div class="content-scroll">
+                <section class="module-hero">
+                    <div>
+                        <h1 class="hero-title">Sales Overview</h1>
+                        <p class="hero-copy">Manage your sales, track payments, and view your business performance at a glance.</p>
+                    </div>
+                    <div class="hero-meta">
+                        <div class="hero-stat">
+                            <span>Total Sales</span>
+                            <strong>₹<?= number_format($stats['total'], 2) ?></strong>
+                        </div>
+                        <div class="hero-stat">
+                            <span>Paid</span>
+                            <strong class="stat-paid">₹<?= number_format($stats['paid'], 2) ?></strong>
+                        </div>
+                        <div class="hero-stat">
+                            <span>Total Unpaid</span>
+                            <strong class="stat-unpaid">₹<?= number_format($stats['unpaid'], 2) ?></strong>
+                        </div>
+                    </div>
+                </section>
 
                 <section class="module-panel">
                     <div class="panel-head">
                         <div>
                             <div class="panel-title">Invoices</div>
-                            <div class="panel-copy">Stored through the reusable invoice API and shown as a dedicated
-                                list page.</div>
+                            <div class="panel-copy">All sale invoices</div>
                         </div>
                         <div class="panel-actions">
                             <input class="form-control" id="invoiceSearch" type="text" placeholder="Search by invoice or customer">
-                            <a href="invoice_create.php" class="btn-secondary"><i class="fa-solid fa-plus"></i> New
-                                Invoice</a>
+                            <a href="api/export.php?type=invoices" class="btn-secondary" style="padding:13px 22px;white-space:nowrap;"><i class="fa-solid fa-file-export"></i> Export CSV</a>
+                            <a href="invoice_create.php" class="btn-primary" style="width:auto;padding:13px 24px;white-space:nowrap;"><i class="fa-solid fa-plus"></i> New Invoice</a>
                         </div>
                     </div>
                     <div class="table-responsive">
@@ -288,6 +295,8 @@ $invoices = commerce_fetch_invoices($conn, $prefix);
                                     <th>Customer</th>
                                     <th>Items</th>
                                     <th>Total</th>
+                                    <th>Paid</th>
+                                    <th>Balance</th>
                                     <th>Status</th>
                                     <th>Date</th>
                                     <th class="actions-cell">Actions</th>
@@ -308,6 +317,8 @@ $invoices = commerce_fetch_invoices($conn, $prefix);
                                             <td><?= htmlspecialchars($invoice['customer_name']) ?></td>
                                             <td><?= (int) $invoice['item_count'] ?></td>
                                             <td><?= number_format((float) $invoice['grand_total'], 2) ?></td>
+                                            <td class="stat-paid"><?= number_format((float) ($invoice['paid_amount'] ?? 0), 2) ?></td>
+                                            <td class="stat-unpaid"><?= number_format((float) ($invoice['grand_total'] - ($invoice['paid_amount'] ?? 0)), 2) ?></td>
                                             <td><span
                                                     class="status-badge status-<?= htmlspecialchars($invoice['status']) ?>"><?= htmlspecialchars(ucfirst($invoice['status'])) ?></span>
                                             </td>

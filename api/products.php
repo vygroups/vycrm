@@ -41,6 +41,10 @@ try {
         $description = trim((string) ($input['description'] ?? ''));
         $unitPrice = (float) ($input['unit_price'] ?? 0);
         $taxPercent = (float) ($input['tax_percent'] ?? 0);
+        $unit = trim((string) ($input['unit'] ?? 'PCS'));
+        $openingStock = (float) ($input['opening_stock'] ?? 0);
+        $hsnCode = trim((string) ($input['hsn_code'] ?? ''));
+        $category = trim((string) ($input['category'] ?? ''));
         $status = trim((string) ($input['status'] ?? 'active'));
 
         if ($name === '') {
@@ -51,9 +55,14 @@ try {
             commerce_json_response(['success' => false, 'message' => 'Price and tax must be positive'], 422);
         }
 
+        $validUnits = ['PCS', 'BOX', 'STRIP', 'PKT', 'KG', 'GM', 'LTR', 'ML', 'MTR', 'SET', 'PAIR', 'DOZEN', 'VIAL', 'TAB', 'CAP'];
+        if (!in_array($unit, $validUnits)) {
+            $unit = 'PCS';
+        }
+
         $stmt = $conn->prepare("
-            INSERT INTO {$prefix}products (product_code, name, description, unit_price, tax_percent, status, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO {$prefix}products (product_code, name, description, unit_price, tax_percent, unit, opening_stock, stock_quantity, hsn_code, category, status, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $productCode !== '' ? $productCode : null,
@@ -61,6 +70,11 @@ try {
             $description !== '' ? $description : null,
             $unitPrice,
             $taxPercent,
+            $unit,
+            $openingStock,
+            $openingStock, // stock_quantity starts as opening_stock
+            $hsnCode !== '' ? $hsnCode : null,
+            $category !== '' ? $category : null,
             in_array($status, ['active', 'inactive'], true) ? $status : 'active',
             $context['user_id']
         ]);

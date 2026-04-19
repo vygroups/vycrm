@@ -12,23 +12,10 @@ try {
     $totalWarm = $conn->query("SELECT COUNT(*) FROM {$prefix}enquiries WHERE status = 'Warm'")->fetchColumn();
     $totalCold = $conn->query("SELECT COUNT(*) FROM {$prefix}enquiries WHERE status = 'Cold'")->fetchColumn();
 
-    // Company Logo
-    $companyLogo = "/images/logo.png";
-    $companyName = "Vy CRM";
-    if (isset($_SESSION['tenant_slug'])) {
-        $dbMaster = Database::getMasterConn();
-        $prefixMaster = Database::getMasterPrefix();
-        $stmt = $dbMaster->prepare("SELECT * FROM {$prefixMaster}companies WHERE slug = ?");
-        $stmt->execute([$_SESSION['tenant_slug']]);
-        $company = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($company && $company['logo']) {
-            $companyLogo = '/' . $company['logo'];
-            $companyName = htmlspecialchars($company['name']);
-        }
-    }
 } catch (Exception $e) {}
 
-$v = time();
+// Company branding (centralized)
+require_once 'includes/brand.php';
 ?>
 <html lang="en">
 <head>
