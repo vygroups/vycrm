@@ -1,6 +1,7 @@
 <?php
 require_once 'auth_check.php';
 require_once 'config/database.php';
+require_once 'includes/brand.php';
 
 // Fetch all users for this tenant
 try {
@@ -31,8 +32,10 @@ $v = time();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Management - <?= htmlspecialchars($_SESSION['tenant_slug']) ?></title>
+    <title><?= htmlspecialchars(brand_page_title('User Management')) ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
+    <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center; }

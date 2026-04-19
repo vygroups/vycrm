@@ -19,8 +19,10 @@ $customerCreated = isset($_GET['customer_created']) ? 1 : 0;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vy CRM - Create Invoice</title>
+    <title><?= htmlspecialchars(brand_page_title('Create Invoice')) ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
+    <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         .breadcrumb .current { color: #2563eb; }

@@ -8,7 +8,9 @@ require_once 'includes/brand.php';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Studio - Vy CRM</title>
+    <title><?= htmlspecialchars(brand_page_title('Studio')) ?></title>
+    <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
+    <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css" rel="stylesheet">
 </head>
 <body>

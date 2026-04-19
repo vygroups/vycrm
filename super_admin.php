@@ -1,5 +1,6 @@
 <?php
 require_once 'config/database.php';
+require_once 'includes/upload_paths.php';
 
 $db = Database::getMasterConn();
 $prefix = Database::getMasterPrefix();
@@ -11,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] == 'add_company') {
 
         $name = $_POST['name'];
-        $slug = preg_replace('/[^a-z0-9-]/', '', strtolower($_POST['slug']));
+        $slug = upload_normalize_company_slug($_POST['slug'] ?? '');
         $new_db = trim($_POST['db_name']);
 
         try {
@@ -25,22 +26,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
             }
             else {
 
-                // 🔥 LOGO UPLOAD — stored in slug-based folder
+                // Store branding assets inside a dedicated company folder.
                 $logo_path = null;
 
                 if (isset($_FILES['logo']) && $_FILES['logo']['error'] == 0) {
-
                     $ext = pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION);
-                    $filename = "logo." . strtolower($ext);
-
-                    $upload_dir = "assets/uploads/" . $slug . "/";
-
-                    if (!is_dir($upload_dir)) {
-                        mkdir($upload_dir, 0755, true);
-                    }
-
-                    if (move_uploaded_file($_FILES['logo']['tmp_name'], $upload_dir . $filename)) {
-                        $logo_path = $upload_dir . $filename;
+                    if ($ext !== '') {
+                        $destination = upload_company_file_path($slug, 'logo', $ext, 'branding');
+                        if (move_uploaded_file($_FILES['logo']['tmp_name'], $destination)) {
+                            $logo_path = $destination;
+                        }
                     }
                 }
 

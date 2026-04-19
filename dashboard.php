@@ -3,30 +3,43 @@
 require_once 'auth_check.php';
 require_once 'config/database.php';
 require_once 'includes/brand.php';
+require_once 'includes/navigation_config.php';
+require_once 'includes/commerce.php';
 
 $user_id = $_SESSION['user_id'];
 $dbName = $_SESSION['tenant_db'];
 $prefix = $_SESSION['tenant_prefix'];
 $conn = Database::getTenantConn($dbName);
+$dashboardModules = vycrm_module_config();
+commerce_ensure_tables($conn, $prefix);
 
-// Fetch Live Data
+// Fetch dashboard data
+$dashboardStats = [
+    'billing' => [
+        ['label' => 'Customers', 'value' => 0, 'icon' => 'fa-solid fa-users', 'desc' => 'Registered customers'],
+        ['label' => 'Sale Invoices', 'value' => 0, 'icon' => 'fa-solid fa-file-invoice-dollar', 'desc' => 'Invoices created'],
+        ['label' => 'Products / Service', 'value' => 0, 'icon' => 'fa-solid fa-boxes-stacked', 'desc' => 'Active catalog items'],
+    ],
+    'hr_operations' => [
+        ['label' => "Today's Attendance", 'value' => 0, 'icon' => 'fa-regular fa-calendar-check', 'desc' => 'Punch records for today'],
+        ['label' => 'Pending Leaves', 'value' => 0, 'icon' => 'fa-solid fa-plane-departure', 'desc' => 'Leave requests awaiting action'],
+        ['label' => 'Pending Permissions', 'value' => 0, 'icon' => 'fa-solid fa-clipboard-check', 'desc' => 'Permission requests awaiting action'],
+    ],
+];
+
 try {
-    // 1. All Assigned Enquiries
-    $stmt = $conn->prepare("SELECT * FROM {$prefix}enquiries WHERE assigned_to = ? OR assigned_to IS NULL ORDER BY created_at DESC");
-    $stmt->execute([$user_id]);
-    $enquiries = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $dashboardStats['billing'][0]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}customers")->fetchColumn();
+    $dashboardStats['billing'][1]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}invoices")->fetchColumn();
+    $dashboardStats['billing'][2]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}products WHERE status = 'active'")->fetchColumn();
 
-    // 2. Counts
-    $hotCount = 0;
-    $warmCount = 0;
-    $coldCount = 0;
-    foreach ($enquiries as $enq) {
-        if ($enq['status'] == 'Hot' || $enq['score'] >= 75) $hotCount++;
-        elseif ($enq['status'] == 'Warm' || ($enq['score'] >= 50 && $enq['score'] < 75)) $warmCount++;
-        elseif ($enq['status'] == 'Cold' || ($enq['score'] >= 25 && $enq['score'] < 50)) $coldCount++;
-    }
+    $today = date('Y-m-d');
+    $attendanceStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}attendance WHERE date = ?");
+    $attendanceStmt->execute([$today]);
+    $dashboardStats['hr_operations'][0]['value'] = (int) $attendanceStmt->fetchColumn();
+    $dashboardStats['hr_operations'][1]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}leaves WHERE status = 'pending'")->fetchColumn();
+    $dashboardStats['hr_operations'][2]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}permissions WHERE status = 'pending'")->fetchColumn();
 } catch (Exception $e) {
-    $enquiries = [];
+    // Keep default zero-state cards on dashboard.
 }
 ?>
 <!DOCTYPE html>
@@ -34,8 +47,10 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vy CRM - Dashboard</title>
+    <title><?= htmlspecialchars(brand_page_title('Dashboard')) ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
+    <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         @keyframes vyPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:.5} }
@@ -62,6 +77,28 @@ try {
             grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
             gap:20px;
             margin:0 0 40px;
+        }
+        .module-selector {
+            display:flex;
+            flex-wrap:wrap;
+            gap:12px;
+            margin:0 0 24px;
+        }
+        .module-selector button {
+            border:1px solid rgba(123,94,240,.14);
+            background:#fff;
+            color:var(--text-main);
+            border-radius:999px;
+            padding:12px 18px;
+            font-weight:700;
+            cursor:pointer;
+            transition:all .2s ease;
+        }
+        .module-selector button.active {
+            background:var(--primary);
+            color:#fff;
+            border-color:var(--primary);
+            box-shadow:var(--shadow-md);
         }
         .module-shortcut {
             background:var(--surface);
@@ -90,6 +127,23 @@ try {
             gap:8px;
             color:var(--primary);
             font-weight:700;
+        }
+        .module-links {
+            display:flex;
+            flex-wrap:wrap;
+            gap:10px;
+            margin-bottom:18px;
+        }
+        .module-links a {
+            padding:8px 12px;
+            border-radius:999px;
+            background:#f6f3ff;
+            border:1px solid rgba(123,94,240,.12);
+            font-size:13px;
+            font-weight:600;
+        }
+        .stats-panel {
+            margin-bottom:28px;
         }
     </style>
 </head>
@@ -130,72 +184,82 @@ try {
             </div>
         </header>
         <div class="content-scroll">
-            <h3 class="pipeline-header">PIPELINE STAGE BREAKDOWN</h3>
-            <div class="card-grid">
-                <div class="crm-card card-hot">
-                    <div class="card-title">HOT TICKETS</div>
-                    <div class="card-value val-hot"><?= $hotCount ?> <i class="fa-solid fa-fire"></i></div>
-                    <div class="card-desc">High Priority / Hot Leads</div>
-                </div>
-                <div class="crm-card card-warm">
-                    <div class="card-title">WARM LEADS</div>
-                    <div class="card-value val-warm"><?= $warmCount ?> <i class="fa-solid fa-leaf"></i></div>
-                    <div class="card-desc">Active Opportunities</div>
-                </div>
-                <div class="crm-card card-cold">
-                    <div class="card-title">TOTAL ASSIGNED</div>
-                    <div class="card-value val-cold"><?= count($enquiries) ?> <i class="fa-solid fa-ticket"></i></div>
-                    <div class="card-desc">Total Open Enquiries</div>
-                </div>
+            <h3 class="pipeline-header">DASHBOARD MODULES</h3>
+            <div class="module-selector" id="moduleSelector">
+                <?php foreach ($dashboardModules as $moduleKey => $module): ?>
+                <button type="button" data-module="<?= htmlspecialchars($moduleKey) ?>">
+                    <i class="<?= htmlspecialchars($module['icon']) ?>" style="margin-right:8px;"></i><?= htmlspecialchars($module['title']) ?>
+                </button>
+                <?php endforeach; ?>
             </div>
+            <div class="card-grid stats-panel" id="statsPanel">
+                <?php foreach ($dashboardStats as $moduleKey => $stats): ?>
+                    <?php foreach ($stats as $index => $stat): ?>
+                    <div class="crm-card module-stat-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== 'billing' ? 'style="display:none;"' : '' ?>>
+                        <div class="card-title"><?= htmlspecialchars($stat['label']) ?></div>
+                        <div class="card-value"><?= (int) $stat['value'] ?> <i class="<?= htmlspecialchars($stat['icon']) ?>"></i></div>
+                        <div class="card-desc"><?= htmlspecialchars($stat['desc']) ?></div>
+                    </div>
+                    <?php endforeach; ?>
+                <?php endforeach; ?>
+            </div>
+            <h3 class="pipeline-header">CONFIGURABLE MODULES</h3>
             <div class="module-shortcuts">
-                <div class="module-shortcut">
-                    <i class="fa-solid fa-file-invoice"></i>
-                    <h4>Invoice Module</h4>
-                    <p>Create customer invoices with dedicated tables, line items, and reusable APIs for web and mobile.</p>
-                    <a href="invoices.php">Open Invoices <i class="fa-solid fa-arrow-right"></i></a>
+                <?php foreach ($dashboardModules as $moduleKey => $module): ?>
+                <div class="module-shortcut module-shortcut-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== 'billing' ? 'style="display:none;"' : '' ?>>
+                    <i class="<?= htmlspecialchars($module['icon']) ?>"></i>
+                    <h4><?= htmlspecialchars($module['title']) ?></h4>
+                    <p><?= htmlspecialchars($module['description']) ?></p>
+                    <div class="module-links">
+                        <?php foreach ($module['links'] as $link): ?>
+                        <a href="<?= htmlspecialchars($link['href']) ?>"><?= htmlspecialchars($link['label']) ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                    <a href="<?= htmlspecialchars($module['links'][0]['href']) ?>">Open <?= htmlspecialchars($module['title']) ?> <i class="fa-solid fa-arrow-right"></i></a>
                 </div>
-                <div class="module-shortcut">
-                    <i class="fa-solid fa-boxes-stacked"></i>
-                    <h4>Product Module</h4>
-                    <p>Manage the product catalog separately so invoice rows always use consistent pricing and tax values.</p>
-                    <a href="products.php">Open Products <i class="fa-solid fa-arrow-right"></i></a>
-                </div>
+                <?php endforeach; ?>
             </div>
-            <div class="table-panel">
+            <div class="table-panel" id="dashboardInfoPanel">
                 <div class="table-header">
-                    <div class="table-title">MY ASSIGNED ENQUIRIES</div>
+                    <div class="table-title" id="dashboardInfoTitle">MODULE QUICK GUIDE</div>
                     <div class="table-actions">
-                        <button class="filter-btn active">All Enquiries</button>
-                        <button class="filter-btn">Today Schedule</button>
-                        <input type="date" class="form-control" style="width:150px;padding:8px 15px;border-radius:8px;">
+                        <span class="filter-btn active" id="dashboardInfoTag">Billing & Transactions</span>
                     </div>
                 </div>
                 <div class="table-responsive">
                     <table class="crm-table">
-                        <thead><tr><th>Enquiry No</th><th>Student Name</th><th>Status</th><th>Score</th><th>Bucket</th><th>Date</th><th>Actions</th></tr></thead>
-                        <tbody>
-                            <?php foreach ($enquiries as $enq): ?>
-                            <tr>
-                                <td class="text-bold"><?= htmlspecialchars($enq['enquiry_no']) ?></td>
-                                <td><?= htmlspecialchars($enq['student_name']) ?></td>
-                                <td>
-                                    <?php 
-                                        $cls = 'badge-cold';
-                                        if($enq['status'] == 'Hot') $cls = 'badge-hot';
-                                        if($enq['status'] == 'Warm') $cls = 'badge-warm';
-                                    ?>
-                                    <span class="badge <?= $cls ?>"><?= htmlspecialchars($enq['status']) ?></span>
-                                </td>
-                                <td><?= $enq['score'] ?></td>
-                                <td class="text-muted text-bold"><?= htmlspecialchars($enq['bucket']) ?></td>
-                                <td><?= date('Y-m-d', strtotime($enq['created_at'])) ?></td>
-                                <td><button class="btn-icon"><i class="fa-solid fa-eye"></i></button></td>
+                        <thead><tr><th>Area</th><th>Purpose</th><th>Primary Action</th></tr></thead>
+                        <tbody id="dashboardGuideBody">
+                            <tr data-module="billing">
+                                <td class="text-bold">Customers</td>
+                                <td>Manage customer master data used during billing.</td>
+                                <td><a href="customers.php">Open Customers</a></td>
                             </tr>
-                            <?php endforeach; ?>
-                            <?php if (empty($enquiries)): ?>
-                                <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No enquiries assigned to you yet.</td></tr>
-                            <?php endif; ?>
+                            <tr data-module="billing">
+                                <td class="text-bold">Invoices</td>
+                                <td>Create and manage sale invoices and totals.</td>
+                                <td><a href="invoices.php">Open Invoices</a></td>
+                            </tr>
+                            <tr data-module="billing">
+                                <td class="text-bold">Products / Service</td>
+                                <td>Keep sellable items and pricing ready for transactions.</td>
+                                <td><a href="products.php">Open Products</a></td>
+                            </tr>
+                            <tr data-module="hr_operations" style="display:none;">
+                                <td class="text-bold">Attendance</td>
+                                <td>Track punch-in, punch-out, and employee work sessions.</td>
+                                <td><a href="attendance.php">Open Attendance</a></td>
+                            </tr>
+                            <tr data-module="hr_operations" style="display:none;">
+                                <td class="text-bold">Attendance Report</td>
+                                <td>Review attendance summaries and date-based reporting.</td>
+                                <td><a href="attendance_report.php">Open Report</a></td>
+                            </tr>
+                            <tr data-module="hr_operations" style="display:none;">
+                                <td class="text-bold">Approvals</td>
+                                <td>Approve leave and permission requests from employees.</td>
+                                <td><a href="manage_requests.php">Open Approvals</a></td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -217,6 +281,30 @@ function vyToast(msg, type = 'success') {
     requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
     setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
 }
+
+const DASHBOARD_MODULE_KEY = 'vycrm_dashboard_module_' + <?= json_encode((string) $_SESSION['user_id']) ?>;
+const dashboardModules = <?= json_encode($dashboardModules, JSON_UNESCAPED_SLASHES) ?>;
+
+function setActiveDashboardModule(moduleKey) {
+    const safeKey = dashboardModules[moduleKey] ? moduleKey : 'billing';
+    document.querySelectorAll('#moduleSelector button').forEach((button) => {
+        button.classList.toggle('active', button.dataset.module === safeKey);
+    });
+    document.querySelectorAll('.module-stat-card, .module-shortcut-card, #dashboardGuideBody tr').forEach((node) => {
+        node.style.display = node.dataset.module === safeKey ? '' : 'none';
+    });
+    const title = document.getElementById('dashboardInfoTitle');
+    const tag = document.getElementById('dashboardInfoTag');
+    if (title) title.textContent = dashboardModules[safeKey].title + ' Quick Guide';
+    if (tag) tag.textContent = dashboardModules[safeKey].title;
+    localStorage.setItem(DASHBOARD_MODULE_KEY, safeKey);
+}
+
+document.querySelectorAll('#moduleSelector button').forEach((button) => {
+    button.addEventListener('click', () => setActiveDashboardModule(button.dataset.module));
+});
+
+setActiveDashboardModule(localStorage.getItem(DASHBOARD_MODULE_KEY) || 'billing');
 
 // Attendance Timer Logic
 const PUNCH_KEY = 'vycrm_punch_start';

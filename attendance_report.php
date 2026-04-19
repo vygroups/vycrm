@@ -2,8 +2,8 @@
 // attendance_report.php - Attendance Reporting Page
 require_once 'auth_check.php';
 require_once 'config/database.php';
+require_once 'includes/brand.php';
 
-$v = time();
 $db = Database::getMasterConn();
 $prefix = Database::getMasterPrefix();
 
@@ -27,8 +27,10 @@ $userId = $_GET['user_id'] ?? '';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vy CRM - Attendance Report</title>
+    <title><?= htmlspecialchars(brand_page_title('Attendance Report')) ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
+    <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         .report-filters { background: var(--surface); padding: 20px; border-radius: 20px; box-shadow: var(--shadow-sm); margin-bottom: 24px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; }

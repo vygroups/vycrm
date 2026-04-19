@@ -2,6 +2,7 @@
 require_once 'auth_check.php';
 require_once 'includes/commerce.php';
 require_once 'includes/brand.php';
+require_once 'includes/upload_paths.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
@@ -9,7 +10,7 @@ $prefix = $context['prefix'];
 commerce_ensure_tables($conn, $prefix);
 
 // Company slug for folder separation
-$slug = $companySlug ?: 'default';
+$slug = upload_normalize_company_slug($companySlug ?: 'default');
 
 // Fetch existing profile
 $stmt = $conn->query("SELECT * FROM {$prefix}business_profile WHERE id = 1");
@@ -47,22 +48,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Business name comes from master, use it directly
     $bName = $companyData['name'] ?? ($profile['business_name'] ?? '');
 
-    // Upload directory: assets/uploads/{slug}/
-    $companyUploadDir = "assets/uploads/{$slug}/";
-    if (!is_dir($companyUploadDir)) {
-        mkdir($companyUploadDir, 0755, true);
-    }
-
     // Handle logo upload
     $logoPath = $profile['logo_path'] ?? '';
     if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK && $_FILES['logo']['size'] > 0) {
         $ext = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
         $allowed = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
         if (in_array($ext, $allowed)) {
-            $filename = 'logo_' . time() . '.' . $ext;
-            $dest = $companyUploadDir . $filename;
+            $dest = upload_company_file_path($slug, 'logo', $ext, 'branding');
             if (move_uploaded_file($_FILES['logo']['tmp_name'], $dest)) {
                 $logoPath = $dest;
+                try {
+                    $brandDb = Database::getMasterConn();
+                    $brandPrefix = Database::getMasterPrefix();
+                    $brandStmt = $brandDb->prepare("UPDATE {$brandPrefix}companies SET logo = ? WHERE slug = ?");
+                    $brandStmt->execute([$logoPath, $slug]);
+                } catch (Throwable $e) {
+                    // Keep tenant profile save working even if master logo sync fails.
+                }
             }
         }
     }
@@ -73,8 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ext = strtolower(pathinfo($_FILES['signature']['name'], PATHINFO_EXTENSION));
         $allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
         if (in_array($ext, $allowed)) {
-            $filename = 'signature_' . time() . '.' . $ext;
-            $dest = $companyUploadDir . $filename;
+            $dest = upload_company_file_path($slug, 'signature', $ext, 'branding');
             if (move_uploaded_file($_FILES['signature']['tmp_name'], $dest)) {
                 $sigPath = $dest;
             }
@@ -106,8 +107,10 @@ if (!empty($profile['signature_path'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Business Settings - Vy CRM</title>
+    <title><?= htmlspecialchars(brand_page_title('Business Settings')) ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
+    <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         .profile-container { max-width: 1100px; margin: 0 auto; padding: 30px; }

@@ -1,6 +1,8 @@
 <?php
 // includes/sidebar.php - Shared Sidebar Component
+require_once __DIR__ . '/navigation_config.php';
 $currentFile = basename($_SERVER['PHP_SELF']);
+$moduleConfig = vycrm_module_config();
 ?>
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-head">
@@ -15,7 +17,7 @@ $currentFile = basename($_SERVER['PHP_SELF']);
             <i class="fa-solid fa-chart-pie"></i><span class="nav-text">Dashboard</span>
         </a>
 
-        <div class="sidebar-section">BILLING & TRANSACTIONS</div>
+        <div class="sidebar-section"><?= htmlspecialchars(strtoupper($moduleConfig['billing']['section_label'])) ?></div>
         <a href="customers.php" class="nav-item <?= ($currentFile === 'customers.php' || $currentFile === 'customer_create.php') ? 'active' : '' ?>">
             <i class="fa-solid fa-user-tag"></i><span class="nav-text">Customers</span>
         </a>
@@ -35,7 +37,7 @@ $currentFile = basename($_SERVER['PHP_SELF']);
             <i class="fa-solid fa-boxes-stacked"></i><span class="nav-text">Products/Service</span>
         </a>
 
-        <div class="sidebar-section">HR & OPERATIONS</div>
+        <div class="sidebar-section"><?= htmlspecialchars(strtoupper($moduleConfig['hr_operations']['section_label'])) ?></div>
         <a href="attendance.php" class="nav-item <?= ($currentFile === 'attendance.php' || $currentFile === 'attendance_tenant.php') ? 'active' : '' ?>">
             <i class="fa-regular fa-calendar-check"></i><span class="nav-text">Attendance</span>
         </a>

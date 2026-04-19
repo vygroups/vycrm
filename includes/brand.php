@@ -51,3 +51,17 @@ try {
 }
 
 $v = time();
+
+function brand_page_title(string $pageTitle): string
+{
+    global $companyName;
+
+    return $pageTitle . ' - ' . html_entity_decode($companyName, ENT_QUOTES, 'UTF-8');
+}
+
+function brand_favicon_url(): string
+{
+    global $companyLogo, $v;
+
+    return $companyLogo . '?v=' . $v;
+}

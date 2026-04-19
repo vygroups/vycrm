@@ -28,8 +28,10 @@ if ($companySlug) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $companyName ?> - Secure Login</title>
+    <title>Secure Login - <?= $companyName ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="<?= $companyLogo ?>?v=<?= $v ?>">
+    <link rel="shortcut icon" href="<?= $companyLogo ?>?v=<?= $v ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         #vyToastContainer { position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; }
