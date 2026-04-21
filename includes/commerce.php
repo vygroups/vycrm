@@ -48,12 +48,18 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             name VARCHAR(150) NOT NULL,
             description TEXT DEFAULT NULL,
             unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            purchase_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            pts DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            ptr DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            mrp DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             tax_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
             unit VARCHAR(20) DEFAULT 'PCS',
             opening_stock DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             stock_quantity DECIMAL(12,2) NOT NULL DEFAULT 0.00,
             hsn_code VARCHAR(50) DEFAULT NULL,
             category VARCHAR(100) DEFAULT NULL,
+            mfg_date DATE DEFAULT NULL,
+            exp_date DATE DEFAULT NULL,
             status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
             created_by INT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -70,6 +76,16 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
         $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN stock_quantity DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER opening_stock");
         $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN hsn_code VARCHAR(50) DEFAULT NULL AFTER stock_quantity");
         $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN category VARCHAR(100) DEFAULT NULL AFTER hsn_code");
+    } catch (Throwable $e) {}
+
+    // Migration: Add 4 price tiers + MFG/EXP to products
+    try {
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN purchase_price DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER unit_price");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN pts DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER purchase_price");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN ptr DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER pts");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN mrp DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER ptr");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN mfg_date DATE DEFAULT NULL AFTER category");
+        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN exp_date DATE DEFAULT NULL AFTER mfg_date");
     } catch (Throwable $e) {}
 
     $conn->exec("

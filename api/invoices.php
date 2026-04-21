@@ -81,9 +81,14 @@ try {
             $quantity = (float) ($item['quantity'] ?? 0);
             $unitPrice = (float) ($item['unit_price'] ?? 0);
             $taxPercent = (float) ($item['tax_percent'] ?? 0);
+            $itemUnit = trim((string) ($item['unit'] ?? ''));
+            $itemHsn = trim((string) ($item['hsn_code'] ?? ''));
+            $itemBatch = trim((string) ($item['batch_no'] ?? ''));
+            $itemMfg = trim((string) ($item['mfg_date'] ?? ''));
+            $itemExp = trim((string) ($item['exp_date'] ?? ''));
 
             if ($productId) {
-                $productStmt = $conn->prepare("SELECT id, name, description, unit_price, tax_percent FROM {$prefix}products WHERE id = ? LIMIT 1");
+                $productStmt = $conn->prepare("SELECT id, name, description, unit_price, tax_percent, unit, hsn_code, mfg_date, exp_date FROM {$prefix}products WHERE id = ? LIMIT 1");
                 $productStmt->execute([$productId]);
                 $product = $productStmt->fetch(PDO::FETCH_ASSOC);
 
@@ -102,6 +107,18 @@ try {
                 }
                 if ($taxPercent < 0.00001) {
                     $taxPercent = (float) $product['tax_percent'];
+                }
+                if ($itemUnit === '') {
+                    $itemUnit = (string) ($product['unit'] ?? 'PCS');
+                }
+                if ($itemHsn === '') {
+                    $itemHsn = (string) ($product['hsn_code'] ?? '');
+                }
+                if ($itemMfg === '') {
+                    $itemMfg = (string) ($product['mfg_date'] ?? '');
+                }
+                if ($itemExp === '') {
+                    $itemExp = (string) ($product['exp_date'] ?? '');
                 }
             }
 
@@ -122,6 +139,11 @@ try {
                 'item_name' => $itemName,
                 'description' => $description !== '' ? $description : null,
                 'quantity' => $quantity,
+                'unit' => $itemUnit !== '' ? $itemUnit : null,
+                'hsn_code' => $itemHsn !== '' ? $itemHsn : null,
+                'batch_no' => $itemBatch !== '' ? $itemBatch : null,
+                'mfg_date' => $itemMfg !== '' ? $itemMfg : null,
+                'exp_date' => $itemExp !== '' ? $itemExp : null,
                 'unit_price' => $unitPrice,
                 'tax_percent' => $taxPercent,
                 'line_subtotal' => $lineSubtotal,
@@ -163,9 +185,10 @@ try {
             $invoiceId = (int) $conn->lastInsertId();
             $itemStmt = $conn->prepare("
                 INSERT INTO {$prefix}invoice_items (
-                    invoice_id, product_id, item_name, description, quantity, unit_price,
-                    tax_percent, line_subtotal, line_tax, line_total
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    invoice_id, product_id, item_name, description, quantity, unit, hsn_code,
+                    batch_no, mfg_date, exp_date, unit_price, tax_percent,
+                    line_subtotal, line_tax, line_total
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             foreach ($normalizedItems as $item) {
@@ -176,6 +199,11 @@ try {
                     $item['item_name'],
                     $item['description'],
                     $item['quantity'],
+                    $item['unit'],
+                    $item['hsn_code'],
+                    $item['batch_no'],
+                    $item['mfg_date'],
+                    $item['exp_date'],
                     $item['unit_price'],
                     $item['tax_percent'],
                     $item['line_subtotal'],

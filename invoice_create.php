@@ -246,6 +246,10 @@ const products = <?= json_encode(array_values(array_map(static function ($produc
         'description' => $product['description'] ?? '',
         'unit_price' => (float) $product['unit_price'],
         'tax_percent' => (float) $product['tax_percent'],
+        'unit' => $product['unit'] ?? 'PCS',
+        'hsn_code' => $product['hsn_code'] ?? '',
+        'mfg_date' => $product['mfg_date'] ?? '',
+        'exp_date' => $product['exp_date'] ?? '',
         'status' => $product['status'],
     ];
 }, $activeProducts)), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
@@ -291,6 +295,12 @@ function createRow(selectedProductId = '') {
         <td><input class="form-control js-total" type="text" value="0.00" readonly></td>
         <td><button class="btn-icon small-action" type="button"><i class="fa-solid fa-trash"></i></button></td>
     `;
+    // Hidden fields for batch/mfg/exp
+    const batchInput = document.createElement('input'); batchInput.type = 'hidden'; batchInput.className = 'js-batch'; row.appendChild(batchInput);
+    const mfgInput = document.createElement('input'); mfgInput.type = 'hidden'; mfgInput.className = 'js-mfg'; row.appendChild(mfgInput);
+    const expInput = document.createElement('input'); expInput.type = 'hidden'; expInput.className = 'js-exp'; row.appendChild(expInput);
+    const unitInput = document.createElement('input'); unitInput.type = 'hidden'; unitInput.className = 'js-unit'; unitInput.value = 'PCS'; row.appendChild(unitInput);
+    const hsnInput = document.createElement('input'); hsnInput.type = 'hidden'; hsnInput.className = 'js-hsn'; row.appendChild(hsnInput);
 
     const productSelect = row.querySelector('.js-product');
     productSelect.value = selectedProductId;
@@ -321,12 +331,20 @@ function applyProduct(row) {
         row.querySelector('.js-description').value = '';
         row.querySelector('.js-price').value = '0';
         row.querySelector('.js-tax').value = '0';
+        row.querySelector('.js-unit').value = 'PCS';
+        row.querySelector('.js-hsn').value = '';
+        row.querySelector('.js-mfg').value = '';
+        row.querySelector('.js-exp').value = '';
         recalculateRow(row);
         return;
     }
     row.querySelector('.js-description').value = product.description || '';
     row.querySelector('.js-price').value = product.unit_price;
     row.querySelector('.js-tax').value = product.tax_percent;
+    row.querySelector('.js-unit').value = product.unit || 'PCS';
+    row.querySelector('.js-hsn').value = product.hsn_code || '';
+    row.querySelector('.js-mfg').value = product.mfg_date || '';
+    row.querySelector('.js-exp').value = product.exp_date || '';
     recalculateRow(row);
 }
 
@@ -370,7 +388,12 @@ function buildPayload() {
             description: row.querySelector('.js-description').value,
             quantity: row.querySelector('.js-qty').value,
             unit_price: row.querySelector('.js-price').value,
-            tax_percent: row.querySelector('.js-tax').value
+            tax_percent: row.querySelector('.js-tax').value,
+            unit: row.querySelector('.js-unit') ? row.querySelector('.js-unit').value : 'PCS',
+            hsn_code: row.querySelector('.js-hsn') ? row.querySelector('.js-hsn').value : '',
+            batch_no: row.querySelector('.js-batch') ? row.querySelector('.js-batch').value : '',
+            mfg_date: row.querySelector('.js-mfg') ? row.querySelector('.js-mfg').value : '',
+            exp_date: row.querySelector('.js-exp') ? row.querySelector('.js-exp').value : ''
         };
     });
 

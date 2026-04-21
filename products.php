@@ -163,6 +163,36 @@ $inactiveProducts = count($products) - count($activeProducts);
                 width: 100%;
             }
         }
+
+        .row-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .row-actions a, .row-actions button {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all .2s;
+            text-decoration: none;
+        }
+        .row-actions a:hover, .row-actions button:hover {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+        .row-actions button.btn-delete:hover {
+            background: #ef4444;
+            border-color: #ef4444;
+        }
     </style>
 </head>
 
@@ -212,18 +242,20 @@ $inactiveProducts = count($products) - count($activeProducts);
                                 <tr>
                                     <th>Product</th>
                                     <th>Code / HSN</th>
-                                    <th>Price</th>
+                                    <th>Selling Price</th>
+                                    <th>MRP</th>
                                     <th>Tax</th>
                                     <th>Unit</th>
                                     <th>Stock</th>
                                     <th>Status</th>
                                     <th>Created</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="productTableBody">
                                 <?php if (empty($products)): ?>
                                     <tr>
-                                        <td colspan="8" class="table-empty">No products yet. Add your first product to enable invoice selection.</td>
+                                        <td colspan="10" class="table-empty">No products yet. Add your first product to enable invoice selection.</td>
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($products as $product): ?>
@@ -231,6 +263,12 @@ $inactiveProducts = count($products) - count($activeProducts);
                                             <td>
                                                 <div class="text-bold"><?= htmlspecialchars($product['name']) ?></div>
                                                 <div class="text-muted text-sm"><?= htmlspecialchars((string) ($product['description'] ?? '')) ?></div>
+                                                <?php if (!empty($product['mfg_date']) || !empty($product['exp_date'])): ?>
+                                                    <div class="text-muted text-sm" style="margin-top:2px;">
+                                                        <?php if (!empty($product['mfg_date'])): ?>MFG: <?= date('m/Y', strtotime($product['mfg_date'])) ?> <?php endif; ?>
+                                                        <?php if (!empty($product['exp_date'])): ?>EXP: <?= date('m/Y', strtotime($product['exp_date'])) ?><?php endif; ?>
+                                                    </div>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
                                                 <div><?= htmlspecialchars((string) ($product['product_code'] ?? '-')) ?></div>
@@ -239,6 +277,7 @@ $inactiveProducts = count($products) - count($activeProducts);
                                                 <?php endif; ?>
                                             </td>
                                             <td>₹<?= number_format((float) $product['unit_price'], 2) ?></td>
+                                            <td>₹<?= number_format((float) ($product['mrp'] ?? 0), 2) ?></td>
                                             <td><?= number_format((float) $product['tax_percent'], 2) ?>%</td>
                                             <td><?= htmlspecialchars($product['unit'] ?? 'PCS') ?></td>
                                             <td>
@@ -248,6 +287,12 @@ $inactiveProducts = count($products) - count($activeProducts);
                                             </td>
                                             <td><span class="status-pill <?= $product['status'] === 'active' ? 'status-active' : 'status-inactive' ?>"><?= htmlspecialchars(ucfirst($product['status'])) ?></span></td>
                                             <td><?= date('Y-m-d', strtotime($product['created_at'])) ?></td>
+                                            <td>
+                                                <div class="row-actions">
+                                                    <a href="product_edit.php?id=<?= $product['id'] ?>" title="Edit"><i class="fa-solid fa-pen-to-square"></i></a>
+                                                    <button class="btn-delete" onclick="deleteProduct(<?= $product['id'] ?>, '<?= htmlspecialchars(addslashes($product['name']), ENT_QUOTES) ?>')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                                </div>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -343,6 +388,25 @@ $inactiveProducts = count($products) - count($activeProducts);
             });
             renderProducts(filteredProducts);
         });
+
+        async function deleteProduct(id, name) {
+            if (!confirm(`Are you sure you want to delete "${name}"?\nThis cannot be undone.`)) return;
+            try {
+                const response = await fetch('/api/products.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', id: id })
+                });
+                const payload = await response.json();
+                if (!payload.success) {
+                    alert(payload.message || 'Unable to delete product');
+                    return;
+                }
+                window.location.reload();
+            } catch (err) {
+                alert('Unable to delete product');
+            }
+        }
     </script>
 </body>
 

@@ -8,15 +8,26 @@ $conn = $context['conn'];
 $prefix = $context['prefix'];
 commerce_ensure_tables($conn, $prefix);
 
-$returnTo = trim((string) ($_GET['return_to'] ?? ''));
-$safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true) ? $returnTo : '';
+$productId = (int) ($_GET['id'] ?? 0);
+if ($productId <= 0) {
+    header('Location: products.php');
+    exit;
+}
+
+$stmt = $conn->prepare("SELECT * FROM {$prefix}products WHERE id = ? LIMIT 1");
+$stmt->execute([$productId]);
+$product = $stmt->fetch(PDO::FETCH_ASSOC);
+if (!$product) {
+    header('Location: products.php');
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars(brand_page_title('Add Product')) ?></title>
+    <title><?= htmlspecialchars(brand_page_title('Edit Product')) ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
@@ -52,11 +63,6 @@ $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true
         .inline-grid-4 {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-        }
-        .inline-grid-5 {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 14px;
         }
         .form-actions {
@@ -99,7 +105,7 @@ $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true
         <header class="topbar">
             <div class="flex items-center">
                 <button class="btn-icon" onclick="toggleMobileSidebar()" style="margin-right:20px;display:none;" id="mobileToggle"><i class="fa-solid fa-bars"></i></button>
-                <div class="breadcrumb">Home / Products<span class="current">Add Product</span></div>
+                <div class="breadcrumb">Home / Products<span class="current">Edit Product</span></div>
             </div>
             <div class="topbar-right">
                 <a href="products.php" class="btn-secondary"><i class="fa-solid fa-table-list"></i> Product List</a>
@@ -111,34 +117,36 @@ $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true
         </header>
         <div class="content-scroll">
             <section class="module-panel">
-                <div class="panel-title">Add Product</div>
-                <div class="panel-copy">Create products with inventory tracking. These will be available for selection in invoices.</div>
+                <div class="panel-title">Edit Product</div>
+                <div class="panel-copy">Update product details. Changes will apply to future invoices only.</div>
                 <form id="productForm">
+                    <input type="hidden" name="id" value="<?= $product['id'] ?>">
+
                     <div class="section-label"><i class="fa-solid fa-cube"></i> Basic Information</div>
                     <div class="inline-grid">
                         <div class="form-group">
                             <label class="form-label">Product Name *</label>
-                            <input class="form-control" type="text" name="name" placeholder="e.g. Paracetamol 500mg" required>
+                            <input class="form-control" type="text" name="name" value="<?= htmlspecialchars($product['name']) ?>" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Product Code</label>
-                            <input class="form-control" type="text" name="product_code" placeholder="PRD-001">
+                            <input class="form-control" type="text" name="product_code" value="<?= htmlspecialchars($product['product_code'] ?? '') ?>">
                         </div>
                     </div>
                     <div class="inline-grid-3">
                         <div class="form-group">
                             <label class="form-label">HSN / SAC Code</label>
-                            <input class="form-control" type="text" name="hsn_code" placeholder="e.g. 3004">
+                            <input class="form-control" type="text" name="hsn_code" value="<?= htmlspecialchars($product['hsn_code'] ?? '') ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Category</label>
-                            <input class="form-control" type="text" name="category" placeholder="e.g. Medicine, Electronics">
+                            <input class="form-control" type="text" name="category" value="<?= htmlspecialchars($product['category'] ?? '') ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Status</label>
                             <select class="form-control" name="status">
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
+                                <option value="active" <?= ($product['status'] ?? '') === 'active' ? 'selected' : '' ?>>Active</option>
+                                <option value="inactive" <?= ($product['status'] ?? '') === 'inactive' ? 'selected' : '' ?>>Inactive</option>
                             </select>
                         </div>
                     </div>
@@ -148,48 +156,40 @@ $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true
                     <div class="inline-grid-4">
                         <div class="form-group">
                             <label class="form-label">Purchase Price (₹)</label>
-                            <input class="form-control" type="number" name="purchase_price" min="0" step="0.01" value="0" placeholder="Cost price">
+                            <input class="form-control" type="number" name="purchase_price" min="0" step="0.01" value="<?= number_format((float)($product['purchase_price'] ?? 0), 2, '.', '') ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">PTS (₹)</label>
-                            <input class="form-control" type="number" name="pts" min="0" step="0.01" value="0" placeholder="Price to Stockist">
+                            <input class="form-control" type="number" name="pts" min="0" step="0.01" value="<?= number_format((float)($product['pts'] ?? 0), 2, '.', '') ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">PTR (₹)</label>
-                            <input class="form-control" type="number" name="ptr" min="0" step="0.01" value="0" placeholder="Price to Retailer">
+                            <input class="form-control" type="number" name="ptr" min="0" step="0.01" value="<?= number_format((float)($product['ptr'] ?? 0), 2, '.', '') ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">MRP (₹)</label>
-                            <input class="form-control" type="number" name="mrp" min="0" step="0.01" value="0" placeholder="Max Retail Price">
+                            <input class="form-control" type="number" name="mrp" min="0" step="0.01" value="<?= number_format((float)($product['mrp'] ?? 0), 2, '.', '') ?>">
                         </div>
                     </div>
                     <div class="inline-grid-3" style="margin-top:14px;">
                         <div class="form-group">
                             <label class="form-label">Selling Price (₹) *</label>
-                            <input class="form-control" type="number" name="unit_price" min="0" step="0.01" value="0" required placeholder="Invoice rate">
+                            <input class="form-control" type="number" name="unit_price" min="0" step="0.01" value="<?= number_format((float)$product['unit_price'], 2, '.', '') ?>" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Tax %</label>
-                            <input class="form-control" type="number" name="tax_percent" min="0" step="0.01" value="0">
+                            <input class="form-control" type="number" name="tax_percent" min="0" step="0.01" value="<?= number_format((float)$product['tax_percent'], 2, '.', '') ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Unit</label>
                             <select class="form-control" name="unit">
-                                <option value="PCS">PCS - Pieces</option>
-                                <option value="BOX">BOX - Box</option>
-                                <option value="STRIP">STRIP - Strip</option>
-                                <option value="PKT">PKT - Packet</option>
-                                <option value="KG">KG - Kilogram</option>
-                                <option value="GM">GM - Gram</option>
-                                <option value="LTR">LTR - Litre</option>
-                                <option value="ML">ML - Millilitre</option>
-                                <option value="MTR">MTR - Metre</option>
-                                <option value="SET">SET - Set</option>
-                                <option value="PAIR">PAIR - Pair</option>
-                                <option value="DOZEN">DOZEN - Dozen</option>
-                                <option value="VIAL">VIAL - Vial</option>
-                                <option value="TAB">TAB - Tablet</option>
-                                <option value="CAP">CAP - Capsule</option>
+                                <?php
+                                $units = ['PCS'=>'Pieces','BOX'=>'Box','STRIP'=>'Strip','PKT'=>'Packet','KG'=>'Kilogram','GM'=>'Gram','LTR'=>'Litre','ML'=>'Millilitre','MTR'=>'Metre','SET'=>'Set','PAIR'=>'Pair','DOZEN'=>'Dozen','VIAL'=>'Vial','TAB'=>'Tablet','CAP'=>'Capsule'];
+                                $currentUnit = $product['unit'] ?? 'PCS';
+                                foreach ($units as $code => $label):
+                                ?>
+                                    <option value="<?= $code ?>" <?= $currentUnit === $code ? 'selected' : '' ?>><?= $code ?> - <?= $label ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                     </div>
@@ -199,11 +199,11 @@ $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true
                     <div class="inline-grid">
                         <div class="form-group">
                             <label class="form-label">MFG Date</label>
-                            <input class="form-control" type="date" name="mfg_date" placeholder="Manufacturing date">
+                            <input class="form-control" type="date" name="mfg_date" value="<?= htmlspecialchars($product['mfg_date'] ?? '') ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label">EXP Date</label>
-                            <input class="form-control" type="date" name="exp_date" placeholder="Expiry date">
+                            <input class="form-control" type="date" name="exp_date" value="<?= htmlspecialchars($product['exp_date'] ?? '') ?>">
                         </div>
                     </div>
 
@@ -212,34 +212,29 @@ $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true
                     <div class="inline-grid">
                         <div class="form-group">
                             <label class="form-label">Opening Stock</label>
-                            <input class="form-control" type="number" name="opening_stock" min="0" step="0.01" value="0" placeholder="e.g. 100">
+                            <input class="form-control" type="number" name="opening_stock" min="0" step="0.01" value="<?= number_format((float)($product['opening_stock'] ?? 0), 2, '.', '') ?>">
                         </div>
                         <div class="form-group">
                             <label class="form-label" style="opacity:.5;">Current Stock</label>
-                            <input class="form-control" type="text" value="Will be set to opening stock" disabled style="background:#f8f9fa;">
+                            <input class="form-control" type="text" value="<?= number_format((float)($product['stock_quantity'] ?? 0), 2) ?>" disabled style="background:#f8f9fa;">
                         </div>
                     </div>
 
                     <div class="form-group" style="margin-top:14px;">
                         <label class="form-label">Description</label>
-                        <textarea class="form-control" name="description" rows="3" placeholder="Optional product description"></textarea>
+                        <textarea class="form-control" name="description" rows="3"><?= htmlspecialchars($product['description'] ?? '') ?></textarea>
                     </div>
                     <div class="form-actions">
-                        <button class="btn-primary" type="submit" style="width:auto;padding:14px 28px;"><i class="fa-solid fa-check"></i> Save Product</button>
+                        <button class="btn-primary" type="submit" style="width:auto;padding:14px 28px;"><i class="fa-solid fa-check"></i> Update Product</button>
                         <a href="products.php" class="btn-secondary"><i class="fa-solid fa-table-list"></i> Product List</a>
-                        <?php if ($safeReturnTo !== ''): ?>
-                            <a href="<?= htmlspecialchars($safeReturnTo) ?>?product_created=1" class="btn-secondary">Back To Invoice</a>
-                        <?php endif; ?>
                     </div>
-                    <div class="text-muted text-sm" id="productStatusText" style="margin-top:16px;">Product is ready to be saved.</div>
+                    <div class="text-muted text-sm" id="productStatusText" style="margin-top:16px;">Product is ready to be updated.</div>
                 </form>
             </section>
         </div>
     </main>
 </div>
 <script>
-const returnTo = <?= json_encode($safeReturnTo) ?>;
-
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const icon = document.getElementById('toggleIcon');
@@ -262,14 +257,15 @@ document.getElementById('productForm').addEventListener('submit', async (event) 
     const submitButton = form.querySelector('button[type="submit"]');
     const statusText = document.getElementById('productStatusText');
     submitButton.disabled = true;
-    statusText.textContent = 'Saving product...';
+    statusText.textContent = 'Updating product...';
 
     try {
         const response = await fetch('/api/products.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                action: 'create',
+                action: 'update',
+                id: formData.get('id'),
                 name: formData.get('name'),
                 product_code: formData.get('product_code'),
                 description: formData.get('description'),
@@ -290,20 +286,17 @@ document.getElementById('productForm').addEventListener('submit', async (event) 
         });
         const payload = await response.json();
         if (!payload.success) {
-            statusText.textContent = payload.message || 'Unable to create product';
-            alert(payload.message || 'Unable to create product');
+            statusText.textContent = payload.message || 'Unable to update product';
+            alert(payload.message || 'Unable to update product');
             return;
         }
 
-        if (returnTo) {
-            window.location.href = `${returnTo}?product_created=1`;
-            return;
-        }
-
-        window.location.href = 'products.php';
+        statusText.textContent = 'Product updated successfully!';
+        statusText.style.color = '#16a34a';
+        setTimeout(() => { window.location.href = 'products.php'; }, 1200);
     } catch (error) {
-        statusText.textContent = 'Unable to create product';
-        alert('Unable to create product');
+        statusText.textContent = 'Unable to update product';
+        alert('Unable to update product');
     } finally {
         submitButton.disabled = false;
     }
