@@ -243,6 +243,32 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
         $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN ifsc_code VARCHAR(50) DEFAULT NULL AFTER account_no");
         $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN terms TEXT DEFAULT NULL AFTER ifsc_code");
     } catch (Throwable $e) {}
+
+    // Invoice print/field settings
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}invoice_settings (
+            id INT PRIMARY KEY DEFAULT 1,
+            printer_type VARCHAR(20) NOT NULL DEFAULT 'regular',
+            layout_theme VARCHAR(30) NOT NULL DEFAULT 'classic',
+            color_scheme VARCHAR(7) NOT NULL DEFAULT '#1a1a2e',
+            paper_size VARCHAR(10) NOT NULL DEFAULT 'A4',
+            show_company_name TINYINT(1) NOT NULL DEFAULT 1,
+            show_logo TINYINT(1) NOT NULL DEFAULT 1,
+            show_address TINYINT(1) NOT NULL DEFAULT 1,
+            show_email TINYINT(1) NOT NULL DEFAULT 1,
+            show_phone TINYINT(1) NOT NULL DEFAULT 1,
+            show_gstin TINYINT(1) NOT NULL DEFAULT 1,
+            show_bank_details TINYINT(1) NOT NULL DEFAULT 1,
+            show_terms TINYINT(1) NOT NULL DEFAULT 1,
+            show_signature TINYINT(1) NOT NULL DEFAULT 1,
+            show_acknowledgement TINYINT(1) NOT NULL DEFAULT 1,
+            show_hsn TINYINT(1) NOT NULL DEFAULT 1,
+            show_batch_info TINYINT(1) NOT NULL DEFAULT 0,
+            repeat_header TINYINT(1) NOT NULL DEFAULT 0,
+            default_printer TINYINT(1) NOT NULL DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
 }
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array

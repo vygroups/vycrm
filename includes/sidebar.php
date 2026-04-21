@@ -52,6 +52,9 @@ $moduleConfig = vycrm_module_config();
         <a href="profile.php" class="nav-item <?= $currentFile === 'profile.php' ? 'active' : '' ?>">
             <i class="fa-solid fa-briefcase"></i><span class="nav-text">Business Profile</span>
         </a>
+        <a href="invoice_settings.php" class="nav-item <?= $currentFile === 'invoice_settings.php' ? 'active' : '' ?>">
+            <i class="fa-solid fa-print"></i><span class="nav-text">Invoice Settings</span>
+        </a>
     </div>
 </aside>
 
