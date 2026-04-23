@@ -76,8 +76,13 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
             margin-top: 8px;
         }
 
-        .stat-paid { color: #a78bfa; }
-        .stat-unpaid { color: #f59e0b; }
+        .stat-paid {
+            color: #a78bfa;
+        }
+
+        .stat-unpaid {
+            color: #f59e0b;
+        }
 
         .module-panel {
             background: var(--surface);
@@ -93,6 +98,7 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
             gap: 16px;
             margin-bottom: 20px;
         }
+
         .panel-actions {
             display: flex;
             align-items: center;
@@ -120,6 +126,7 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
             font-weight: 600;
             cursor: pointer;
         }
+
         .panel-actions .form-control {
             width: 260px;
         }
@@ -132,6 +139,15 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
             padding: 7px 12px;
             font-size: 12px;
             font-weight: 700;
+            cursor: pointer;
+            transition: all .2s;
+            position: relative;
+            user-select: none;
+        }
+
+        .status-badge:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
         }
 
         .status-draft {
@@ -152,6 +168,98 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
         .status-cancelled {
             background: rgba(239, 68, 68, .12);
             color: #dc2626;
+        }
+
+        .status-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-md);
+            padding: 6px;
+            z-index: 30;
+            min-width: 140px;
+        }
+
+        .status-dropdown.is-open {
+            display: block;
+        }
+
+        .status-dropdown button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 8px 12px;
+            border: none;
+            background: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .15s;
+        }
+
+        .status-dropdown button:hover {
+            background: #f0f0ff;
+        }
+
+        /* Edit Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .45);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.is-open {
+            display: flex;
+        }
+
+        .modal-box {
+            background: #fff;
+            border-radius: 20px;
+            padding: 28px;
+            width: 560px;
+            max-width: 92vw;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, .2);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title button {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+            justify-content: flex-end;
         }
 
         .table-empty {
@@ -256,23 +364,22 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
                 </div>
             </header>
             <div class="content-scroll">
-                <section class="module-hero">
-                    <div>
-                        <h1 class="hero-title">Sales Overview</h1>
-                        <p class="hero-copy">Manage your sales, track payments, and view your business performance at a glance.</p>
+                <section class="module-hero" style="padding:16px 24px; margin-bottom:16px; grid-template-columns:auto 1fr; gap:16px;">
+                    <div style="display:flex; align-items:center; gap:16px;">
+                        <h1 class="hero-title" style="font-size:20px; margin:0;">Sales Overview</h1>
                     </div>
-                    <div class="hero-meta">
-                        <div class="hero-stat">
-                            <span>Total Sales</span>
-                            <strong>₹<?= number_format($stats['total'], 2) ?></strong>
+                    <div class="hero-meta" style="grid-template-columns:repeat(3, auto); gap:10px;">
+                        <div class="hero-stat" style="padding:10px 16px; border-radius:12px;">
+                            <span style="font-size:10px;">Total Sales</span>
+                            <strong style="font-size:18px; margin-top:2px;">₹<?= number_format($stats['total'], 2) ?></strong>
                         </div>
-                        <div class="hero-stat">
-                            <span>Paid</span>
-                            <strong class="stat-paid">₹<?= number_format($stats['paid'], 2) ?></strong>
+                        <div class="hero-stat" style="padding:10px 16px; border-radius:12px;">
+                            <span style="font-size:10px;">Paid</span>
+                            <strong class="stat-paid" style="font-size:18px; margin-top:2px;">₹<?= number_format($stats['paid'], 2) ?></strong>
                         </div>
-                        <div class="hero-stat">
-                            <span>Total Unpaid</span>
-                            <strong class="stat-unpaid">₹<?= number_format($stats['unpaid'], 2) ?></strong>
+                        <div class="hero-stat" style="padding:10px 16px; border-radius:12px;">
+                            <span style="font-size:10px;">Unpaid</span>
+                            <strong class="stat-unpaid" style="font-size:18px; margin-top:2px;">₹<?= number_format($stats['unpaid'], 2) ?></strong>
                         </div>
                     </div>
                 </section>
@@ -284,9 +391,14 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
                             <div class="panel-copy">All sale invoices</div>
                         </div>
                         <div class="panel-actions">
-                            <input class="form-control" id="invoiceSearch" type="text" placeholder="Search by invoice or customer">
-                            <a href="api/export.php?type=invoices" class="btn-secondary" style="padding:13px 22px;white-space:nowrap;"><i class="fa-solid fa-file-export"></i> Export CSV</a>
-                            <a href="invoice_create.php" class="btn-primary" style="width:auto;padding:13px 24px;white-space:nowrap;"><i class="fa-solid fa-plus"></i> New Invoice</a>
+                            <input class="form-control" id="invoiceSearch" type="text"
+                                placeholder="Search by invoice or customer">
+                            <a href="api/export.php?type=invoices" class="btn-secondary"
+                                style="padding:13px 22px;white-space:nowrap;"><i class="fa-solid fa-file-export"></i>
+                                Export CSV</a>
+                            <a href="invoice_create.php" class="btn-primary"
+                                style="width:auto;padding:13px 24px;white-space:nowrap;"><i
+                                    class="fa-solid fa-plus"></i> New Invoice</a>
                         </div>
                     </div>
                     <div class="table-responsive">
@@ -319,10 +431,31 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
                                             <td><?= htmlspecialchars($invoice['customer_name']) ?></td>
                                             <td><?= (int) $invoice['item_count'] ?></td>
                                             <td><?= number_format((float) $invoice['grand_total'], 2) ?></td>
-                                            <td class="stat-paid"><?= number_format((float) ($invoice['paid_amount'] ?? 0), 2) ?></td>
-                                            <td class="stat-unpaid"><?= number_format((float) ($invoice['grand_total'] - ($invoice['paid_amount'] ?? 0)), 2) ?></td>
-                                            <td><span
-                                                    class="status-badge status-<?= htmlspecialchars($invoice['status']) ?>"><?= htmlspecialchars(ucfirst($invoice['status'])) ?></span>
+                                            <td class="stat-paid">
+                                                <?= number_format((float) ($invoice['paid_amount'] ?? 0), 2) ?>
+                                            </td>
+                                            <td class="stat-unpaid">
+                                                <?= number_format((float) ($invoice['grand_total'] - ($invoice['paid_amount'] ?? 0)), 2) ?>
+                                            </td>
+                                            <td style="position:relative;">
+                                                <span class="status-badge status-<?= htmlspecialchars($invoice['status']) ?>"
+                                                    onclick="toggleStatusDropdown(event, this)"
+                                                    data-id="<?= (int) $invoice['id'] ?>"
+                                                    data-status="<?= htmlspecialchars($invoice['status']) ?>"><?= htmlspecialchars(ucfirst($invoice['status'])) ?></span>
+                                                <div class="status-dropdown">
+                                                    <button type="button"
+                                                        onclick="updateInvoiceStatus(<?= (int) $invoice['id'] ?>, 'draft', this)">📝
+                                                        Draft</button>
+                                                    <button type="button"
+                                                        onclick="updateInvoiceStatus(<?= (int) $invoice['id'] ?>, 'sent', this)">📤
+                                                        Sent</button>
+                                                    <button type="button"
+                                                        onclick="updateInvoiceStatus(<?= (int) $invoice['id'] ?>, 'paid', this)">✅
+                                                        Paid</button>
+                                                    <button type="button"
+                                                        onclick="updateInvoiceStatus(<?= (int) $invoice['id'] ?>, 'cancelled', this)">❌
+                                                        Cancelled</button>
+                                                </div>
                                             </td>
                                             <td><?= htmlspecialchars($invoice['invoice_date']) ?></td>
                                             <td class="actions-cell">
@@ -332,6 +465,10 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
                                                         <i class="fa-solid fa-ellipsis-vertical"></i>
                                                     </button>
                                                     <div class="row-menu">
+                                                        <a href="#"
+                                                            onclick="openEditInvoiceModal(<?= (int) $invoice['id'] ?>); return false;">
+                                                            <i class="fa-solid fa-pen-to-square"></i> Edit Invoice
+                                                        </a>
                                                         <a href="invoice_print.php?id=<?= (int) $invoice['id'] ?>"
                                                             target="_blank" rel="noopener">
                                                             <i class="fa-solid fa-print"></i> Print Invoice
@@ -349,15 +486,53 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
             </div>
         </main>
     </div>
+    <!-- Edit Invoice Modal -->
+    <div class="modal-overlay" id="editInvoiceModal">
+        <div class="modal-box">
+            <div class="modal-title">Edit Invoice <button onclick="closeEditModal()">&times;</button></div>
+            <form id="editInvoiceForm">
+                <input type="hidden" name="id" id="editInvId">
+                <div class="modal-grid">
+                    <div class="form-group"><label class="form-label">Customer Name *</label><input class="form-control"
+                            name="customer_name" id="editInvCustName" required></div>
+                    <div class="form-group"><label class="form-label">Phone</label><input class="form-control"
+                            name="customer_phone" id="editInvPhone"></div>
+                    <div class="form-group"><label class="form-label">Email</label><input class="form-control"
+                            name="customer_email" id="editInvEmail"></div>
+                    <div class="form-group"><label class="form-label">Status</label>
+                        <select class="form-control" name="status" id="editInvStatus">
+                            <option value="draft">Draft</option>
+                            <option value="sent">Sent</option>
+                            <option value="paid">Paid</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label class="form-label">Invoice Date</label><input class="form-control"
+                            type="date" name="invoice_date" id="editInvDate"></div>
+                    <div class="form-group"><label class="form-label">Due Date</label><input class="form-control"
+                            type="date" name="due_date" id="editInvDueDate"></div>
+                    <div class="form-group"><label class="form-label">Paid Amount (₹)</label><input class="form-control"
+                            type="number" step="0.01" min="0" name="paid_amount" id="editInvPaid"></div>
+                </div>
+                <div class="form-group" style="margin-top:12px;"><label class="form-label">Billing
+                        Address</label><textarea class="form-control" name="billing_address" id="editInvAddr"
+                        rows="2"></textarea></div>
+                <div class="form-group"><label class="form-label">Notes</label><textarea class="form-control"
+                        name="notes" id="editInvNotes" rows="2"></textarea></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn-primary" style="width:auto;padding:12px 24px;">Save
+                        Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
-            const icon = document.getElementById('toggleIcon');
             sidebar.classList.toggle('sidebar-collapsed');
-            icon.classList.toggle('fa-chevron-left', !sidebar.classList.contains('sidebar-collapsed'));
-            icon.classList.toggle('fa-chevron-right', sidebar.classList.contains('sidebar-collapsed'));
         }
-
         function toggleMobileSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
@@ -365,39 +540,97 @@ $stats = commerce_fetch_invoice_stats($conn, $prefix);
             overlay.style.display = sidebar.classList.contains('mobile-open') ? 'block' : 'none';
         }
 
-        document.querySelectorAll('.row-menu-wrap').forEach((menuWrap) => {
-            const trigger = menuWrap.querySelector('.menu-trigger');
-            const menu = menuWrap.querySelector('.row-menu');
-
-            trigger.addEventListener('click', (event) => {
-                event.stopPropagation();
-                const isOpen = menu.classList.contains('is-open');
-                document.querySelectorAll('.row-menu.is-open').forEach((openMenu) => {
-                    openMenu.classList.remove('is-open');
-                    openMenu.parentElement.querySelector('.menu-trigger').setAttribute('aria-expanded', 'false');
-                });
-
-                if (!isOpen) {
-                    menu.classList.add('is-open');
-                    trigger.setAttribute('aria-expanded', 'true');
-                }
+        // Row menus
+        document.querySelectorAll('.row-menu-wrap').forEach(w => {
+            const tr = w.querySelector('.menu-trigger');
+            const m = w.querySelector('.row-menu');
+            tr.addEventListener('click', e => {
+                e.stopPropagation();
+                const open = m.classList.contains('is-open');
+                document.querySelectorAll('.row-menu.is-open').forEach(o => o.classList.remove('is-open'));
+                if (!open) m.classList.add('is-open');
             });
         });
-
         document.addEventListener('click', () => {
-            document.querySelectorAll('.row-menu.is-open').forEach((openMenu) => {
-                openMenu.classList.remove('is-open');
-                openMenu.parentElement.querySelector('.menu-trigger').setAttribute('aria-expanded', 'false');
-            });
+            document.querySelectorAll('.row-menu.is-open').forEach(o => o.classList.remove('is-open'));
+            document.querySelectorAll('.status-dropdown.is-open').forEach(o => o.classList.remove('is-open'));
         });
 
-        document.getElementById('invoiceSearch').addEventListener('input', (event) => {
-            const search = event.target.value.trim().toLowerCase();
-            document.querySelectorAll('#invoiceTableBody tr').forEach((row) => {
-                if (row.querySelector('.table-empty')) {
-                    return;
-                }
-                row.style.display = row.textContent.toLowerCase().includes(search) ? '' : 'none';
+        // Status dropdown
+        function toggleStatusDropdown(e, badge) {
+            e.stopPropagation();
+            const dd = badge.nextElementSibling;
+            document.querySelectorAll('.status-dropdown.is-open').forEach(o => { if (o !== dd) o.classList.remove('is-open'); });
+            dd.classList.toggle('is-open');
+        }
+
+        async function updateInvoiceStatus(id, status, btn) {
+            const dd = btn.closest('.status-dropdown');
+            dd.classList.remove('is-open');
+            const badge = dd.previousElementSibling;
+            badge.style.opacity = '0.5';
+            try {
+                const res = await fetch('/api/invoices.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update_status', id, status })
+                });
+                const p = await res.json();
+                if (!p.success) { alert(p.message); return; }
+                badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                badge.className = 'status-badge status-' + status;
+                badge.dataset.status = status;
+            } catch (e) { alert('Unable to update status'); }
+            finally { badge.style.opacity = '1'; }
+        }
+
+        // Edit modal
+        async function openEditInvoiceModal(id) {
+            document.querySelectorAll('.row-menu.is-open').forEach(o => o.classList.remove('is-open'));
+            try {
+                const res = await fetch('/api/invoices.php?action=detail&id=' + id);
+                const p = await res.json();
+                if (!p.success) { alert(p.message); return; }
+                const inv = p.data.invoice;
+                document.getElementById('editInvId').value = inv.id;
+                document.getElementById('editInvCustName').value = inv.customer_name || '';
+                document.getElementById('editInvPhone').value = inv.customer_phone || '';
+                document.getElementById('editInvEmail').value = inv.customer_email || '';
+                document.getElementById('editInvStatus').value = inv.status || 'draft';
+                document.getElementById('editInvDate').value = inv.invoice_date || '';
+                document.getElementById('editInvDueDate').value = inv.due_date || '';
+                document.getElementById('editInvPaid').value = inv.paid_amount || '0';
+                document.getElementById('editInvAddr').value = inv.billing_address || '';
+                document.getElementById('editInvNotes').value = inv.notes || '';
+                document.getElementById('editInvoiceModal').classList.add('is-open');
+            } catch (e) { alert('Unable to load invoice'); }
+        }
+        function closeEditModal() { document.getElementById('editInvoiceModal').classList.remove('is-open'); }
+
+        document.getElementById('editInvoiceForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const data = { action: 'update' };
+            fd.forEach((v, k) => data[k] = v);
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/invoices.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+                });
+                const p = await res.json();
+                if (!p.success) { alert(p.message); return; }
+                closeEditModal();
+                window.location.reload();
+            } catch (e) { alert('Unable to update invoice'); }
+            finally { btn.disabled = false; }
+        });
+
+        // Search
+        document.getElementById('invoiceSearch').addEventListener('input', e => {
+            const s = e.target.value.trim().toLowerCase();
+            document.querySelectorAll('#invoiceTableBody tr').forEach(row => {
+                if (row.querySelector('.table-empty')) return;
+                row.style.display = row.textContent.toLowerCase().includes(s) ? '' : 'none';
             });
         });
     </script>

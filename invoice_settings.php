@@ -759,6 +759,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         .prev-ack h4 { text-align: center; font-size: 7px; margin-bottom: 4px; }
 
+        /* ====== Theme-specific Preview Styles ====== */
+        /* CLASSIC (default) */
+        .preview-invoice.theme-classic { border: 1.5px solid var(--inv-color); }
+        .preview-invoice.theme-classic .prev-title { background: #f8f8fc; border-bottom: 1.5px solid var(--inv-color); color: #333; }
+        .preview-invoice.theme-classic .prev-header { border-bottom: 1.5px solid var(--inv-color); background: transparent; }
+        .preview-invoice.theme-classic .prev-header-right h3 { color: inherit; }
+        .preview-invoice.theme-classic .prev-table th { background: #f0eef8; color: #333; }
+        .preview-invoice.theme-classic .prev-footer { border-top: 1.5px solid var(--inv-color); background: transparent; }
+        .preview-invoice.theme-classic .prev-footer-label { color: #333; }
+
+        /* MODERN */
+        .preview-invoice.theme-modern { border: none; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.1); }
+        .preview-invoice.theme-modern .prev-title { background: linear-gradient(135deg, var(--inv-color), var(--inv-color)); color: #fff; border: none; font-weight: 800; letter-spacing: 2px; }
+        .preview-invoice.theme-modern .prev-header { border-bottom: none; background: linear-gradient(180deg, rgba(0,0,0,.03) 0%, transparent 100%); }
+        .preview-invoice.theme-modern .prev-header-right h3 { color: var(--inv-color); }
+        .preview-invoice.theme-modern .prev-parties { border-bottom: none; background: #fafafa; border-top: 1px solid #eee; }
+        .preview-invoice.theme-modern .prev-table th { background: var(--inv-color); color: #fff; border: none; }
+        .preview-invoice.theme-modern .prev-footer { border-top: 2px solid var(--inv-color); }
+        .preview-invoice.theme-modern .prev-footer-label { color: var(--inv-color); }
+
+        /* MINIMAL */
+        .preview-invoice.theme-minimal { border: none; border-top: 3px solid var(--inv-color); }
+        .preview-invoice.theme-minimal .prev-title { background: transparent; border-bottom: none; color: #999; font-weight: 600; font-size: 8px; letter-spacing: 3px; text-align: left; padding-left: 10px; }
+        .preview-invoice.theme-minimal .prev-header { border-bottom: 1px solid #eee; }
+        .preview-invoice.theme-minimal .prev-parties { border-bottom: 1px solid #eee; }
+        .preview-invoice.theme-minimal .prev-parties > div:first-child { border-right: 1px solid #eee; }
+        .preview-invoice.theme-minimal .prev-table th { background: transparent; color: #999; font-weight: 600; border-bottom: 1.5px solid #eee; }
+        .preview-invoice.theme-minimal .prev-footer { border-top: 1px solid #eee; }
+        .preview-invoice.theme-minimal .prev-footer > div:not(:last-child) { border-right: 1px solid #eee; }
+        .preview-invoice.theme-minimal .prev-footer-label { color: #999; }
+
+        /* BORDERED */
+        .preview-invoice.theme-bordered { border: 2px solid var(--inv-color); position: relative; }
+        .preview-invoice.theme-bordered::after { content: ''; position: absolute; inset: 3px; border: 1px solid rgba(0,0,0,.15); pointer-events: none; z-index: 0; }
+        .preview-invoice.theme-bordered > * { position: relative; z-index: 1; }
+        .preview-invoice.theme-bordered .prev-title { background: var(--inv-color); color: #fff; border-bottom: none; font-weight: 800; }
+        .preview-invoice.theme-bordered .prev-table th { background: rgba(0,0,0,.05); color: var(--inv-color); }
+        .preview-invoice.theme-bordered .prev-footer-label { color: var(--inv-color); }
+
+        /* COMPACT */
+        .preview-invoice.theme-compact { border: 1px solid #e0e0e0; border-left: 4px solid var(--inv-color); }
+        .preview-invoice.theme-compact .prev-title { background: #fff; border-bottom: 1px solid #eee; color: var(--inv-color); text-align: left; padding-left: 10px; }
+        .preview-invoice.theme-compact .prev-header { border-bottom: 1px solid #eee; }
+        .preview-invoice.theme-compact .prev-header-right h3 { color: var(--inv-color); }
+        .preview-invoice.theme-compact .prev-table th { background: rgba(0,0,0,.03); color: var(--inv-color); border-bottom: 1.5px solid rgba(0,0,0,.1); }
+        .preview-invoice.theme-compact .prev-footer { border-top: 1px solid #eee; }
+        .preview-invoice.theme-compact .prev-footer-label { color: var(--inv-color); }
+
+        /* ELEGANT */
+        .preview-invoice.theme-elegant { border: 1.5px solid #333; }
+        .preview-invoice.theme-elegant .prev-title { background: linear-gradient(135deg, #333, #555); color: #f0e6d3; font-family: Georgia, serif; letter-spacing: 3px; border: none; }
+        .preview-invoice.theme-elegant .prev-header { border-bottom: 1px solid #ccc; background: linear-gradient(180deg, #faf8f5, #fff); }
+        .preview-invoice.theme-elegant .prev-header-right h3 { font-family: Georgia, serif; color: #333; }
+        .preview-invoice.theme-elegant .prev-parties { background: #fdfcfa; border-bottom: 1px solid #ccc; }
+        .preview-invoice.theme-elegant .prev-table th { background: #f5f0ea; color: #555; font-family: Georgia, serif; }
+        .preview-invoice.theme-elegant .prev-footer { border-top: 1.5px solid #333; background: #fdfcfa; }
+        .preview-invoice.theme-elegant .prev-footer-label { color: #555; font-family: Georgia, serif; }
+
+        /* BOLD */
+        .preview-invoice.theme-bold { border: none; border-top: 5px solid var(--inv-color); }
+        .preview-invoice.theme-bold .prev-title { background: var(--inv-color); color: #fff; font-weight: 900; letter-spacing: 4px; border: none; }
+        .preview-invoice.theme-bold .prev-header { background: #1a1a2e; color: #fff; border: none; }
+        .preview-invoice.theme-bold .prev-header-right h3 { color: #fff; }
+        .preview-invoice.theme-bold .prev-header-right p { color: #ccc; }
+        .preview-invoice.theme-bold .prev-header-left img { filter: brightness(0) invert(1); }
+        .preview-invoice.theme-bold .prev-parties > div:first-child { border-right: 2px solid var(--inv-color); }
+        .preview-invoice.theme-bold .prev-party-label { color: var(--inv-color); font-weight: 800; }
+        .preview-invoice.theme-bold .prev-table th { background: #1a1a2e; color: #fff; border: none; }
+        .preview-invoice.theme-bold .prev-table tfoot td { background: #1a1a2e; color: #fff; }
+        .preview-invoice.theme-bold .prev-footer { border-top: 3px solid var(--inv-color); background: #1a1a2e; color: #ddd; }
+        .preview-invoice.theme-bold .prev-footer > div:not(:last-child) { border-right: 1px solid #333; }
+        .preview-invoice.theme-bold .prev-footer-label { color: var(--inv-color); }
+
+        /* PROFESSIONAL */
+        .preview-invoice.theme-professional { border: 1px solid #d0d5dd; border-top: 3px solid var(--inv-color); }
+        .preview-invoice.theme-professional .prev-title { background: rgba(0,0,0,.02); color: var(--inv-color); border-bottom: 1px solid #d0d5dd; font-weight: 800; }
+        .preview-invoice.theme-professional .prev-header { border-bottom: 1px solid #d0d5dd; background: #f9fafb; }
+        .preview-invoice.theme-professional .prev-parties > div:first-child { background: #f9fafb; border-right: 1px solid #d0d5dd; }
+        .preview-invoice.theme-professional .prev-party-label { color: var(--inv-color); font-weight: 800; }
+        .preview-invoice.theme-professional .prev-table th { background: rgba(0,0,0,.03); color: #333; }
+        .preview-invoice.theme-professional .prev-footer { border-top: 1.5px solid var(--inv-color); }
+        .preview-invoice.theme-professional .prev-footer-label { color: var(--inv-color); }
+
         /* Thermal Preview */
         .thermal-preview .preview-invoice {
             max-width: 240px;
@@ -1128,7 +1211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
                 <div class="preview-body">
-                    <div class="preview-invoice prev-border" id="previewInvoice" style="--inv-color: <?= htmlspecialchars($settings['color_scheme']) ?>;">
+                    <div class="preview-invoice theme-<?= htmlspecialchars($settings['layout_theme']) ?>" id="previewInvoice" style="--inv-color: <?= htmlspecialchars($settings['color_scheme']) ?>;">
                         <!-- Title -->
                         <div class="prev-title">Tax Invoice</div>
 
@@ -1311,6 +1394,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.getElementById('layoutThemeInput').value = theme;
         document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('selected'));
         el.classList.add('selected');
+        // Apply theme class to preview
+        const preview = document.getElementById('previewInvoice');
+        const themes = ['classic','modern','minimal','bordered','compact','elegant','bold','professional'];
+        themes.forEach(t => preview.classList.remove('theme-' + t));
+        preview.classList.add('theme-' + theme);
         updatePreview();
     }
 

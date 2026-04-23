@@ -238,6 +238,93 @@ try {
         ], 201);
     }
 
+    if ($method === 'POST' && $action === 'update_status') {
+        $id = (int) ($input['id'] ?? 0);
+        $status = trim((string) ($input['status'] ?? ''));
+        if ($id <= 0) {
+            commerce_json_response(['success' => false, 'message' => 'Invoice ID is required'], 422);
+        }
+        if (!in_array($status, ['draft', 'sent', 'paid', 'cancelled'], true)) {
+            commerce_json_response(['success' => false, 'message' => 'Invalid status'], 422);
+        }
+
+        $checkStmt = $conn->prepare("SELECT id FROM {$prefix}invoices WHERE id = ? LIMIT 1");
+        $checkStmt->execute([$id]);
+        if (!$checkStmt->fetch()) {
+            commerce_json_response(['success' => false, 'message' => 'Invoice not found'], 404);
+        }
+
+        $conn->prepare("UPDATE {$prefix}invoices SET status = ? WHERE id = ?")->execute([$status, $id]);
+
+        commerce_json_response([
+            'success' => true,
+            'message' => 'Status updated to ' . ucfirst($status),
+            'data' => ['id' => $id, 'status' => $status]
+        ]);
+    }
+
+    if ($method === 'POST' && $action === 'update') {
+        $id = (int) ($input['id'] ?? 0);
+        if ($id <= 0) {
+            commerce_json_response(['success' => false, 'message' => 'Invoice ID is required'], 422);
+        }
+
+        $checkStmt = $conn->prepare("SELECT id FROM {$prefix}invoices WHERE id = ? LIMIT 1");
+        $checkStmt->execute([$id]);
+        if (!$checkStmt->fetch()) {
+            commerce_json_response(['success' => false, 'message' => 'Invoice not found'], 404);
+        }
+
+        $customerName = trim((string) ($input['customer_name'] ?? ''));
+        $customerPhone = trim((string) ($input['customer_phone'] ?? ''));
+        $customerEmail = trim((string) ($input['customer_email'] ?? ''));
+        $billingAddress = trim((string) ($input['billing_address'] ?? ''));
+        $invoiceDate = trim((string) ($input['invoice_date'] ?? ''));
+        $dueDate = trim((string) ($input['due_date'] ?? ''));
+        $notes = trim((string) ($input['notes'] ?? ''));
+        $status = trim((string) ($input['status'] ?? 'draft'));
+        $paidAmount = isset($input['paid_amount']) ? (float) $input['paid_amount'] : null;
+
+        if ($customerName === '') {
+            commerce_json_response(['success' => false, 'message' => 'Customer name is required'], 422);
+        }
+
+        $sql = "UPDATE {$prefix}invoices SET
+            customer_name = ?, customer_phone = ?, customer_email = ?,
+            billing_address = ?, invoice_date = ?, due_date = ?,
+            notes = ?, status = ?";
+        $params = [
+            $customerName,
+            $customerPhone !== '' ? $customerPhone : null,
+            $customerEmail !== '' ? $customerEmail : null,
+            $billingAddress !== '' ? $billingAddress : null,
+            $invoiceDate !== '' ? $invoiceDate : date('Y-m-d'),
+            $dueDate !== '' ? $dueDate : null,
+            $notes !== '' ? $notes : null,
+            in_array($status, ['draft', 'sent', 'paid', 'cancelled'], true) ? $status : 'draft',
+        ];
+
+        if ($paidAmount !== null) {
+            $sql .= ", paid_amount = ?";
+            $params[] = $paidAmount;
+        }
+
+        $sql .= " WHERE id = ?";
+        $params[] = $id;
+
+        $conn->prepare($sql)->execute($params);
+
+        $detailStmt = $conn->prepare("SELECT * FROM {$prefix}invoices WHERE id = ?");
+        $detailStmt->execute([$id]);
+
+        ob_clean();
+        commerce_json_response([
+            'success' => true,
+            'message' => 'Invoice updated successfully',
+            'data' => $detailStmt->fetch(PDO::FETCH_ASSOC)
+        ]);
+    }
+
     commerce_json_response(['success' => false, 'message' => 'Invalid request'], 400);
 } catch (Throwable $e) {
     commerce_json_response(['success' => false, 'message' => $e->getMessage()], 500);

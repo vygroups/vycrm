@@ -43,6 +43,21 @@ $customers = commerce_fetch_customers($conn, $prefix);
         .btn-secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text-main); border-radius: 12px; padding: 13px 16px; font-weight: 600; cursor: pointer; }
         .panel-actions .form-control { width: 260px; }
         .table-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+        .row-actions { display: flex; gap: 6px; align-items: center; }
+        .row-actions button {
+            width: 34px; height: 34px; border-radius: 10px; display: inline-flex;
+            align-items: center; justify-content: center; border: 1px solid var(--border);
+            background: var(--surface); color: var(--text-muted); cursor: pointer;
+            font-size: 13px; transition: all .2s;
+        }
+        .row-actions button:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:100; align-items:center; justify-content:center; }
+        .modal-overlay.is-open { display:flex; }
+        .modal-box { background:#fff; border-radius:20px; padding:28px; width:560px; max-width:92vw; max-height:85vh; overflow-y:auto; box-shadow:0 12px 48px rgba(0,0,0,.2); }
+        .modal-title { font-size:20px; font-weight:700; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; }
+        .modal-title button { background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted); }
+        .modal-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .modal-actions { display:flex; gap:12px; margin-top:20px; justify-content:flex-end; }
         @media (max-width: 1180px) {
             .panel-head, .panel-actions { flex-direction: column; align-items: flex-start; }
             .panel-actions .form-control { width: 100%; }
@@ -88,6 +103,7 @@ $customers = commerce_fetch_customers($conn, $prefix);
                                     <th>Address</th>
                                     <th>GST</th>
                                     <th>Created</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="customerTableBody">
@@ -113,6 +129,11 @@ $customers = commerce_fetch_customers($conn, $prefix);
                                             </td>
                                             <td><?= htmlspecialchars((string)($customer['gst_number'] ?? '-')) ?></td>
                                             <td><?= date('Y-m-d', strtotime($customer['created_at'])) ?></td>
+                                            <td>
+                                                <div class="row-actions">
+                                                    <button onclick="openEditCustomerModal(<?= (int)$customer['id'] ?>)" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+                                                </div>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -123,64 +144,112 @@ $customers = commerce_fetch_customers($conn, $prefix);
             </div>
         </main>
     </div>
+
+    <!-- Edit Customer Modal -->
+    <div class="modal-overlay" id="editCustomerModal">
+        <div class="modal-box">
+            <div class="modal-title">Edit Customer <button onclick="closeEditCustModal()">&times;</button></div>
+            <form id="editCustomerForm">
+                <input type="hidden" name="id" id="editCustId">
+                <div class="form-group">
+                    <label class="form-label">Customer Name *</label>
+                    <input class="form-control" name="name" id="editCustName" required>
+                </div>
+                <div class="modal-grid">
+                    <div class="form-group">
+                        <label class="form-label">Customer Code</label>
+                        <input class="form-control" name="customer_code" id="editCustCode">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">GST Number</label>
+                        <input class="form-control" name="gst_number" id="editCustGst">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Phone</label>
+                        <input class="form-control" name="phone" id="editCustPhone">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input class="form-control" type="email" name="email" id="editCustEmail">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top:12px;">
+                    <label class="form-label">Billing Address</label>
+                    <textarea class="form-control" name="billing_address" id="editCustAddr" rows="3"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeEditCustModal()">Cancel</button>
+                    <button type="submit" class="btn-primary" style="width:auto;padding:12px 24px;">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const allCustomers = <?= json_encode($customers) ?>;
 
         function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const icon = document.getElementById('toggleIcon');
-            sidebar.classList.toggle('sidebar-collapsed');
-            icon.classList.toggle('fa-chevron-left', !sidebar.classList.contains('sidebar-collapsed'));
-            icon.classList.toggle('fa-chevron-right', sidebar.classList.contains('sidebar-collapsed'));
+            document.getElementById('sidebar').classList.toggle('sidebar-collapsed');
         }
-
         function toggleMobileSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
             sidebar.classList.toggle('mobile-open');
             overlay.style.display = sidebar.classList.contains('mobile-open') ? 'block' : 'none';
         }
-
         function escapeHtml(value) {
             return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
 
-        function renderCustomers(data) {
-            const tbody = document.getElementById('customerTableBody');
-            if (!data.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="table-empty">No matching customers found.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map(c => `
-                <tr>
-                    <td>
-                        <div class="text-bold">${escapeHtml(c.name)}</div>
-                        <div class="text-muted text-sm">${escapeHtml(c.customer_code || '-')}</div>
-                    </td>
-                    <td>
-                        <div>${escapeHtml(c.phone || '-')}</div>
-                        <div class="text-muted text-sm">${escapeHtml(c.email || '-')}</div>
-                    </td>
-                    <td>
-                        <div class="text-muted text-sm" style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            ${escapeHtml(c.billing_address || '-')}
-                        </div>
-                    </td>
-                    <td>${escapeHtml(c.gst_number || '-')}</td>
-                    <td>${(c.created_at || '').slice(0, 10)}</td>
-                </tr>
-            `).join('');
-        }
-
+        // Search
         document.getElementById('customerSearch').addEventListener('input', (e) => {
             const s = e.target.value.toLowerCase();
-            const filtered = allCustomers.filter(c => 
-                c.name.toLowerCase().includes(s) || 
-                (c.email && c.email.toLowerCase().includes(s)) || 
-                (c.phone && c.phone.toLowerCase().includes(s)) ||
-                (c.customer_code && c.customer_code.toLowerCase().includes(s))
-            );
-            renderCustomers(filtered);
+            document.querySelectorAll('#customerTableBody tr').forEach(row => {
+                if (row.querySelector('.table-empty')) return;
+                row.style.display = row.textContent.toLowerCase().includes(s) ? '' : 'none';
+            });
+        });
+
+        // Edit modal
+        async function openEditCustomerModal(id) {
+            try {
+                const res = await fetch('/api/customers.php?action=detail&id=' + id);
+                const p = await res.json();
+                if (!p.success) { alert(p.message); return; }
+                const c = p.data;
+                document.getElementById('editCustId').value = c.id;
+                document.getElementById('editCustName').value = c.name || '';
+                document.getElementById('editCustCode').value = c.customer_code || '';
+                document.getElementById('editCustGst').value = c.gst_number || '';
+                document.getElementById('editCustPhone').value = c.phone || '';
+                document.getElementById('editCustEmail').value = c.email || '';
+                document.getElementById('editCustAddr').value = c.billing_address || '';
+                document.getElementById('editCustomerModal').classList.add('is-open');
+            } catch (e) { alert('Unable to load customer'); }
+        }
+        function closeEditCustModal() {
+            document.getElementById('editCustomerModal').classList.remove('is-open');
+        }
+
+        document.getElementById('editCustomerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const data = { action: 'update' };
+            fd.forEach((v, k) => data[k] = v);
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/customers.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const p = await res.json();
+                if (!p.success) { alert(p.message); return; }
+                closeEditCustModal();
+                window.location.reload();
+            } catch (e) { alert('Unable to update customer'); }
+            finally { btn.disabled = false; }
         });
     </script>
 </body>

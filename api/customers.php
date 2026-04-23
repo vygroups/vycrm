@@ -71,6 +71,56 @@ try {
         ], 201);
     }
 
+    if ($method === 'POST' && $action === 'update') {
+        $id = (int) ($input['id'] ?? 0);
+        if ($id <= 0) {
+            commerce_json_response(['success' => false, 'message' => 'Customer ID is required'], 422);
+        }
+
+        $checkStmt = $conn->prepare("SELECT id FROM {$prefix}customers WHERE id = ? LIMIT 1");
+        $checkStmt->execute([$id]);
+        if (!$checkStmt->fetch()) {
+            commerce_json_response(['success' => false, 'message' => 'Customer not found'], 404);
+        }
+
+        $name = trim((string) ($input['name'] ?? ''));
+        $phone = trim((string) ($input['phone'] ?? ''));
+        $email = trim((string) ($input['email'] ?? ''));
+        $billingAddress = trim((string) ($input['billing_address'] ?? ''));
+        $gstNumber = trim((string) ($input['gst_number'] ?? ''));
+        $customerCode = trim((string) ($input['customer_code'] ?? ''));
+
+        if ($name === '') {
+            commerce_json_response(['success' => false, 'message' => 'Customer name is required'], 422);
+        }
+
+        $stmt = $conn->prepare("
+            UPDATE {$prefix}customers SET
+                customer_code = ?, name = ?, phone = ?, email = ?,
+                billing_address = ?, gst_number = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $customerCode !== '' ? $customerCode : null,
+            $name,
+            $phone !== '' ? $phone : null,
+            $email !== '' ? $email : null,
+            $billingAddress !== '' ? $billingAddress : null,
+            $gstNumber !== '' ? $gstNumber : null,
+            $id
+        ]);
+
+        $detailStmt = $conn->prepare("SELECT * FROM {$prefix}customers WHERE id = ?");
+        $detailStmt->execute([$id]);
+
+        ob_clean();
+        commerce_json_response([
+            'success' => true,
+            'message' => 'Customer updated successfully',
+            'data' => $detailStmt->fetch(PDO::FETCH_ASSOC)
+        ]);
+    }
+
     commerce_json_response(['success' => false, 'message' => 'Invalid request'], 400);
 } catch (Throwable $e) {
     commerce_json_response(['success' => false, 'message' => $e->getMessage()], 500);

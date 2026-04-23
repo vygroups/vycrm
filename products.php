@@ -130,6 +130,13 @@ $inactiveProducts = count($products) - count($activeProducts);
             padding: 7px 12px;
             font-size: 12px;
             font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s;
+            user-select: none;
+        }
+        .status-pill:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,.12);
         }
 
         .status-active {
@@ -285,7 +292,13 @@ $inactiveProducts = count($products) - count($activeProducts);
                                                     <?= number_format((float)($product['stock_quantity'] ?? 0), 0) ?>
                                                 </span>
                                             </td>
-                                            <td><span class="status-pill <?= $product['status'] === 'active' ? 'status-active' : 'status-inactive' ?>"><?= htmlspecialchars(ucfirst($product['status'])) ?></span></td>
+                                            <td>
+                                                <span class="status-pill <?= $product['status'] === 'active' ? 'status-active' : 'status-inactive' ?>"
+                                                      onclick="toggleProductStatus(<?= $product['id'] ?>, this)"
+                                                      title="Click to toggle status">
+                                                    <?= htmlspecialchars(ucfirst($product['status'])) ?>
+                                                </span>
+                                            </td>
                                             <td><?= date('Y-m-d', strtotime($product['created_at'])) ?></td>
                                             <td>
                                                 <div class="row-actions">
@@ -405,6 +418,30 @@ $inactiveProducts = count($products) - count($activeProducts);
                 window.location.reload();
             } catch (err) {
                 alert('Unable to delete product');
+            }
+        }
+        async function toggleProductStatus(id, el) {
+            el.style.opacity = '0.5';
+            el.style.pointerEvents = 'none';
+            try {
+                const response = await fetch('/api/products.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'toggle_status', id: id })
+                });
+                const payload = await response.json();
+                if (!payload.success) {
+                    alert(payload.message || 'Unable to update status');
+                    return;
+                }
+                const newStatus = payload.data.status;
+                el.textContent = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
+                el.className = 'status-pill ' + (newStatus === 'active' ? 'status-active' : 'status-inactive');
+            } catch (err) {
+                alert('Unable to update status');
+            } finally {
+                el.style.opacity = '1';
+                el.style.pointerEvents = '';
             }
         }
     </script>

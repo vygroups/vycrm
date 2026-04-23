@@ -215,8 +215,8 @@ if (!$product) {
                             <input class="form-control" type="number" name="opening_stock" min="0" step="0.01" value="<?= number_format((float)($product['opening_stock'] ?? 0), 2, '.', '') ?>">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" style="opacity:.5;">Current Stock</label>
-                            <input class="form-control" type="text" value="<?= number_format((float)($product['stock_quantity'] ?? 0), 2) ?>" disabled style="background:#f8f9fa;">
+                            <label class="form-label">Current Stock</label>
+                            <input class="form-control" type="number" name="stock_quantity" min="0" step="0.01" value="<?= number_format((float)($product['stock_quantity'] ?? 0), 2, '.', '') ?>">
                         </div>
                     </div>
 
@@ -277,6 +277,7 @@ document.getElementById('productForm').addEventListener('submit', async (event) 
                 tax_percent: formData.get('tax_percent'),
                 unit: formData.get('unit'),
                 opening_stock: formData.get('opening_stock'),
+                stock_quantity: formData.get('stock_quantity'),
                 hsn_code: formData.get('hsn_code'),
                 category: formData.get('category'),
                 status: formData.get('status'),

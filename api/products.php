@@ -126,6 +126,7 @@ try {
         $taxPercent = (float) ($input['tax_percent'] ?? 0);
         $unit = trim((string) ($input['unit'] ?? 'PCS'));
         $openingStock = (float) ($input['opening_stock'] ?? 0);
+        $stockQuantity = isset($input['stock_quantity']) ? (float) $input['stock_quantity'] : null;
         $hsnCode = trim((string) ($input['hsn_code'] ?? ''));
         $category = trim((string) ($input['category'] ?? ''));
         $status = trim((string) ($input['status'] ?? 'active'));
@@ -150,11 +151,12 @@ try {
                 product_code = ?, name = ?, description = ?,
                 unit_price = ?, purchase_price = ?, pts = ?, ptr = ?, mrp = ?,
                 tax_percent = ?, unit = ?, opening_stock = ?,
+                " . ($stockQuantity !== null ? 'stock_quantity = ?,' : '') . "
                 hsn_code = ?, category = ?, mfg_date = ?, exp_date = ?,
                 status = ?
             WHERE id = ?
         ");
-        $stmt->execute([
+        $params = [
             $productCode !== '' ? $productCode : null,
             $name,
             $description !== '' ? $description : null,
@@ -166,13 +168,17 @@ try {
             $taxPercent,
             $unit,
             $openingStock,
-            $hsnCode !== '' ? $hsnCode : null,
-            $category !== '' ? $category : null,
-            $mfgDate !== '' ? $mfgDate : null,
-            $expDate !== '' ? $expDate : null,
-            in_array($status, ['active', 'inactive'], true) ? $status : 'active',
-            $id
-        ]);
+        ];
+        if ($stockQuantity !== null) {
+            $params[] = $stockQuantity;
+        }
+        $params[] = $hsnCode !== '' ? $hsnCode : null;
+        $params[] = $category !== '' ? $category : null;
+        $params[] = $mfgDate !== '' ? $mfgDate : null;
+        $params[] = $expDate !== '' ? $expDate : null;
+        $params[] = in_array($status, ['active', 'inactive'], true) ? $status : 'active';
+        $params[] = $id;
+        $stmt->execute($params);
 
         $detailStmt = $conn->prepare("SELECT * FROM {$prefix}products WHERE id = ?");
         $detailStmt->execute([$id]);
@@ -181,6 +187,29 @@ try {
             'success' => true,
             'message' => 'Product updated successfully',
             'data' => $detailStmt->fetch(PDO::FETCH_ASSOC)
+        ]);
+    }
+
+    if ($method === 'POST' && $action === 'toggle_status') {
+        $id = (int) ($input['id'] ?? 0);
+        if ($id <= 0) {
+            commerce_json_response(['success' => false, 'message' => 'Product ID is required'], 422);
+        }
+
+        $checkStmt = $conn->prepare("SELECT id, status FROM {$prefix}products WHERE id = ? LIMIT 1");
+        $checkStmt->execute([$id]);
+        $product = $checkStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$product) {
+            commerce_json_response(['success' => false, 'message' => 'Product not found'], 404);
+        }
+
+        $newStatus = $product['status'] === 'active' ? 'inactive' : 'active';
+        $conn->prepare("UPDATE {$prefix}products SET status = ? WHERE id = ?")->execute([$newStatus, $id]);
+
+        commerce_json_response([
+            'success' => true,
+            'message' => 'Status updated to ' . $newStatus,
+            'data' => ['id' => $id, 'status' => $newStatus]
         ]);
     }
 
