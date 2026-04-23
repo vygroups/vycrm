@@ -177,6 +177,7 @@ try {
                         <div class="dropdown-divider"></div>
                         <a href="/users.php" class="dropdown-item"><i class="fa-solid fa-users"></i> User Management</a>
                         <a href="/roles.php" class="dropdown-item"><i class="fa-solid fa-wand-magic-sparkles"></i> Studio (Roles)</a>
+                        <a href="/module_manager.php" class="dropdown-item"><i class="fa-solid fa-cubes"></i> Module Management</a>
                         <div class="dropdown-divider"></div>
                         <a href="/logout.php" class="dropdown-item" style="color: var(--hot);"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a>
                     </div>

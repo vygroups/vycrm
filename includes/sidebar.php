@@ -1,8 +1,20 @@
 <?php
 // includes/sidebar.php - Shared Sidebar Component
 require_once __DIR__ . '/navigation_config.php';
+require_once __DIR__ . '/dynamic_modules.php';
 $currentFile = basename($_SERVER['PHP_SELF']);
 $moduleConfig = vycrm_module_config();
+
+// Load dynamic modules for sidebar
+$_sidebarDynModules = [];
+try {
+    $_sidebarConn = Database::getTenantConn($_SESSION['tenant_db']);
+    if ($_sidebarConn) {
+        dm_ensure_tables($_sidebarConn, $_SESSION['tenant_prefix']);
+        $_sidebarDynModules = dm_fetch_active_modules($_sidebarConn, $_SESSION['tenant_prefix']);
+    }
+} catch (Throwable $e) {}
+$_currentModuleId = (int)($_GET['module'] ?? 0);
 ?>
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-head">
@@ -48,12 +60,24 @@ $moduleConfig = vycrm_module_config();
             <i class="fa-solid fa-clipboard-check"></i><span class="nav-text">Approvals</span>
         </a>
 
+        <?php if (!empty($_sidebarDynModules)): ?>
+        <div class="sidebar-section">DYNAMIC MODULES</div>
+        <?php foreach ($_sidebarDynModules as $dm): ?>
+        <a href="module_view.php?module=<?= $dm['id'] ?>" class="nav-item <?= (in_array($currentFile, ['module_view.php','module_record.php']) && $_currentModuleId == $dm['id']) ? 'active' : '' ?>">
+            <i class="<?= htmlspecialchars($dm['icon']) ?>"></i><span class="nav-text"><?= htmlspecialchars($dm['name']) ?></span>
+        </a>
+        <?php endforeach; ?>
+        <?php endif; ?>
+
         <div class="sidebar-section">SETTINGS</div>
         <a href="profile.php" class="nav-item <?= $currentFile === 'profile.php' ? 'active' : '' ?>">
             <i class="fa-solid fa-briefcase"></i><span class="nav-text">Business Profile</span>
         </a>
         <a href="invoice_settings.php" class="nav-item <?= $currentFile === 'invoice_settings.php' ? 'active' : '' ?>">
             <i class="fa-solid fa-print"></i><span class="nav-text">Invoice Settings</span>
+        </a>
+        <a href="module_manager.php" class="nav-item <?= $currentFile === 'module_manager.php' ? 'active' : '' ?>">
+            <i class="fa-solid fa-cubes"></i><span class="nav-text">Module Manager</span>
         </a>
     </div>
 </aside>
