@@ -307,9 +307,10 @@ try {
             commerce_json_response(['success' => true, 'record' => $record]);
 
         case 'save_record':
-            $moduleId = (int)($input['module_id'] ?? 0);
-            $recordId = (int)($input['record_id'] ?? 0);
-            $values = $input['values'] ?? [];
+            $moduleId = (int)($input['module_id'] ?? $_POST['module_id'] ?? 0);
+            $recordId = (int)($input['record_id'] ?? $_POST['record_id'] ?? 0);
+            $valuesJson = $input['values'] ?? $_POST['values'] ?? '{}';
+            $values = is_string($valuesJson) ? json_decode($valuesJson, true) : $valuesJson;
 
             if (!$moduleId) throw new RuntimeException('Module ID required');
 
@@ -322,6 +323,31 @@ try {
                     // Create new
                     $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by) VALUES (?, ?)")->execute([$moduleId, $userId]);
                     $recordId = (int)$conn->lastInsertId();
+                }
+
+                // Handle file uploads
+                if (!empty($_FILES['attachments'])) {
+                    $mStmt = $conn->prepare("SELECT slug FROM {$prefix}modules WHERE id = ?");
+                    $mStmt->execute([$moduleId]);
+                    $moduleSlug = $mStmt->fetchColumn() ?: 'unknown_module';
+                    
+                    $tenantSlug = $_SESSION['tenant_slug'] ?? 'default_tenant';
+                    $uploadDir = __DIR__ . "/../uploads/{$tenantSlug}/{$moduleSlug}/";
+                    if (!is_dir($uploadDir)) {
+                        mkdir($uploadDir, 0777, true);
+                    }
+
+                    foreach ($_FILES['attachments']['tmp_name'] as $fieldId => $tmpName) {
+                        if ($_FILES['attachments']['error'][$fieldId] === UPLOAD_ERR_OK) {
+                            $name = basename($_FILES['attachments']['name'][$fieldId]);
+                            $name = preg_replace('/[^a-zA-Z0-9.\-_]/', '', $name);
+                            $name = time() . '_' . $name;
+                            $dest = $uploadDir . $name;
+                            if (move_uploaded_file($tmpName, $dest)) {
+                                $values[$fieldId] = "uploads/{$tenantSlug}/{$moduleSlug}/{$name}";
+                            }
+                        }
+                    }
                 }
 
                 // Upsert values

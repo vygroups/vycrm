@@ -30,6 +30,25 @@ if (!empty($_GET['edit'])) {
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
+    <style>
+        .mm-icon-picker-selected {
+            display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            cursor: pointer; user-select: none;
+        }
+        .mm-icon-picker-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; margin-top: 8px; max-height: 200px; overflow-y: auto;
+        }
+        .mm-icon-option {
+            width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+            border-radius: 8px; cursor: pointer; color: var(--text-muted); font-size: 16px;
+            transition: all 0.2s;
+        }
+        .mm-icon-option:hover { background: rgba(123,94,240,0.1); color: var(--primary); }
+        .mm-icon-option.active { background: var(--primary); color: #fff; }
+    </style>
 </head>
 <body>
 <div class="app-wrapper">
@@ -157,7 +176,13 @@ if (!empty($_GET['edit'])) {
         <div class="mm-modal-header"><h3>Create New Module</h3><button class="mm-icon-btn" onclick="closeModal('createModuleModal')"><i class="fa-solid fa-xmark"></i></button></div>
         <div class="mm-modal-body">
             <div class="form-group"><label class="form-label">Module Name *</label><input type="text" id="newModuleName" class="form-control" placeholder="e.g. Leads, Tickets, Deals"></div>
-            <div class="form-group"><label class="form-label">Icon Class</label><input type="text" id="newModuleIcon" class="form-control" placeholder="fa-solid fa-cube" value="fa-solid fa-cube"></div>
+            <div class="form-group"><label class="form-label">Choose Icon</label>
+                <input type="hidden" id="newModuleIcon" value="fa-solid fa-cube">
+                <div class="mm-icon-picker-selected" onclick="document.getElementById('iconPickerGrid').style.display=document.getElementById('iconPickerGrid').style.display==='none'?'grid':'none'">
+                    <i class="fa-solid fa-cube" id="selectedIconPreview"></i> <span id="selectedIconName">fa-solid fa-cube</span> <i class="fa-solid fa-chevron-down" style="margin-left:auto;font-size:11px;color:var(--text-muted);"></i>
+                </div>
+                <div class="mm-icon-picker-grid" id="iconPickerGrid" style="display:none;"></div>
+            </div>
             <div class="form-group"><label class="form-label">Description</label><textarea id="newModuleDesc" class="form-control" rows="2" placeholder="Brief description..."></textarea></div>
         </div>
         <div class="mm-modal-footer">
@@ -261,6 +286,49 @@ function editModuleName(){
     if(!name) return;
     api('update',{id:MODULE_ID, name}).then(r=>{ if(r.success) el.textContent=name; else alert(r.error); });
 }
+
+// Icon Picker Setup
+const ICONS = [
+    'fa-solid fa-cube', 'fa-solid fa-cubes', 'fa-solid fa-box', 'fa-solid fa-boxes-stacked',
+    'fa-solid fa-users', 'fa-solid fa-user', 'fa-solid fa-user-tie', 'fa-solid fa-address-book',
+    'fa-solid fa-building', 'fa-solid fa-store', 'fa-solid fa-shop', 'fa-solid fa-industry',
+    'fa-solid fa-chart-line', 'fa-solid fa-chart-pie', 'fa-solid fa-chart-bar', 'fa-solid fa-receipt',
+    'fa-solid fa-file-invoice', 'fa-solid fa-file-invoice-dollar', 'fa-solid fa-file-lines', 'fa-solid fa-file-contract',
+    'fa-solid fa-wallet', 'fa-solid fa-money-bill', 'fa-solid fa-money-bill-wave', 'fa-solid fa-coins',
+    'fa-solid fa-credit-card', 'fa-solid fa-tags', 'fa-solid fa-tag', 'fa-solid fa-cart-shopping',
+    'fa-solid fa-truck', 'fa-solid fa-truck-fast', 'fa-solid fa-calendar', 'fa-solid fa-calendar-days',
+    'fa-solid fa-clock', 'fa-solid fa-bell', 'fa-solid fa-envelope', 'fa-solid fa-phone',
+    'fa-solid fa-location-dot', 'fa-solid fa-map', 'fa-solid fa-earth-americas', 'fa-solid fa-globe',
+    'fa-solid fa-heart', 'fa-solid fa-star', 'fa-solid fa-thumbs-up', 'fa-solid fa-bookmark',
+    'fa-solid fa-gear', 'fa-solid fa-wrench', 'fa-solid fa-screwdriver-wrench', 'fa-solid fa-shield-halved'
+];
+
+function initIconPicker() {
+    const grid = document.getElementById('iconPickerGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    ICONS.forEach(icon => {
+        const div = document.createElement('div');
+        div.className = 'mm-icon-option';
+        div.innerHTML = `<i class="${icon}"></i>`;
+        div.title = icon;
+        div.onclick = () => selectIcon(icon);
+        grid.appendChild(div);
+    });
+}
+
+function selectIcon(icon) {
+    document.getElementById('newModuleIcon').value = icon;
+    document.getElementById('selectedIconPreview').className = icon;
+    document.getElementById('selectedIconName').textContent = icon;
+    document.getElementById('iconPickerGrid').style.display = 'none';
+    
+    document.querySelectorAll('.mm-icon-option').forEach(el => {
+        el.classList.toggle('active', el.querySelector('i').className === icon);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initIconPicker);
 function addBlock(){
     const name = prompt('Block Name:','New Block');
     if(!name) return;

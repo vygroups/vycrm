@@ -30,9 +30,12 @@ function dm_field_types(): array
         'name'            => ['label' => 'Name Field',           'icon' => 'fa-solid fa-id-card'],
         'country'         => ['label' => 'Country Picker',       'icon' => 'fa-solid fa-globe'],
         'state'           => ['label' => 'State Picker',         'icon' => 'fa-solid fa-map-location-dot'],
+        'district'        => ['label' => 'District Picker',      'icon' => 'fa-solid fa-location-crosshairs'],
         'assigned_to'     => ['label' => 'Assigned To',          'icon' => 'fa-solid fa-user-check'],
         'api_call_picker' => ['label' => 'API Call Picker',      'icon' => 'fa-solid fa-plug'],
         'attachment'      => ['label' => 'Attachment Picker',    'icon' => 'fa-solid fa-paperclip'],
+        'map_picker'      => ['label' => 'Map Picker',           'icon' => 'fa-solid fa-map-pin'],
+        'address'         => ['label' => 'Address Field',        'icon' => 'fa-solid fa-location-dot'],
     ];
 }
 
@@ -401,5 +404,47 @@ function dm_get_states(): array
             'AUH' => 'Abu Dhabi', 'DXB' => 'Dubai', 'SHJ' => 'Sharjah', 'AJM' => 'Ajman',
             'UMQ' => 'Umm Al-Quwain', 'RAK' => 'Ras Al Khaimah', 'FUJ' => 'Fujairah',
         ],
+    ];
+}
+
+function dm_get_districts(): array
+{
+    // A sample mapping of State Code -> Array of Districts.
+    // For production, this should ideally be populated from a database.
+    return [
+        'TN' => [
+            'CHE' => 'Chennai', 'CBE' => 'Coimbatore', 'MDU' => 'Madurai', 'TRI' => 'Trichy',
+            'SA' => 'Salem', 'ER' => 'Erode', 'TIR' => 'Tirunelveli', 'KAN' => 'Kanyakumari',
+            'VEL' => 'Vellore', 'THO' => 'Thoothukudi', 'DGL' => 'Dindigul', 'TAN' => 'Thanjavur'
+        ],
+        'KA' => [
+            'BLR' => 'Bangalore', 'MYS' => 'Mysore', 'MAN' => 'Mangalore', 'HUB' => 'Hubli',
+            'BEL' => 'Belgaum', 'GUL' => 'Gulbarga', 'DAV' => 'Davanagere', 'BEL' => 'Bellary'
+        ],
+        'MH' => [
+            'MUM' => 'Mumbai', 'PUN' => 'Pune', 'NAG' => 'Nagpur', 'THA' => 'Thane',
+            'NAS' => 'Nashik', 'AUR' => 'Aurangabad', 'SOL' => 'Solapur', 'KOL' => 'Kolhapur'
+        ],
+        'DL' => [
+            'NDL' => 'New Delhi', 'CDL' => 'Central Delhi', 'EDL' => 'East Delhi', 'WDL' => 'West Delhi',
+            'SDL' => 'South Delhi', 'NDL' => 'North Delhi'
+        ],
+        'NY' => [
+            'NYC' => 'New York City', 'ALB' => 'Albany', 'BUF' => 'Buffalo', 'ROC' => 'Rochester'
+        ],
+        'CA' => [
+            'LA' => 'Los Angeles', 'SF' => 'San Francisco', 'SD' => 'San Diego', 'SJ' => 'San Jose'
+        ]
+    ];
+}
+
+/* ──────────────────────── MAPBOX CONFIGURATION ────────────────────────── */
+
+function dm_get_mapbox_config(): array
+{
+    return [
+        'access_token'   => 'pk.eyJ1IjoiZnRwYWRtaW4iLCJhIjoiY21sZXQ1enJpMWtyODNmcXVzanNxZWlsOSJ9.LD6BV4V5Pz6Bc2O4FI2yJw',
+        'bearer_token'   => 'Bearer 97fa6WEt6nfzAlJfBuZwwmPPusYX1AEk',
+        'api_key'        => '97fa6WEt6nfzAlJfBuZwwmPPusYX1AEk',
     ];
 }
