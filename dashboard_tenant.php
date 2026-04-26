@@ -81,21 +81,7 @@ require_once 'includes/brand.php';
             </div>
             <div class="topbar-right">
                 <button class="btn-icon" style="background:var(--surface);color:var(--text-muted);"><i class="fa-regular fa-bell"></i></button>
-                <div class="profile-pill" onclick="toggleProfileDropdown(event)">
-                    <img src="/images/admin.jpg" onerror="this.src='https://ui-avatars.com/api/?name=Admin&background=7b5ef0&color=fff'" alt="Admin">
-                    <span class="name"><?= htmlspecialchars($_SESSION["username"]) ?></span>
-                    <i class="fa-solid fa-chevron-down text-muted" style="margin-right:8px;font-size:12px;"></i>
-                    
-                    <!-- Profile Dropdown -->
-                    <div class="profile-dropdown" id="profileDropdown">
-                        <a href="/profile.php" class="dropdown-item"><i class="fa-regular fa-user"></i> My Profile</a>
-                        <div class="dropdown-divider"></div>
-                        <a href="/users.php" class="dropdown-item"><i class="fa-solid fa-users"></i> User Management</a>
-                        <a href="/roles.php" class="dropdown-item"><i class="fa-solid fa-wand-magic-sparkles"></i> Studio (Roles)</a>
-                        <div class="dropdown-divider"></div>
-                        <a href="/logout.php" class="dropdown-item" style="color: var(--hot);"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a>
-                    </div>
-                </div>
+                <?php include 'includes/profile_pill.php'; ?>
             </div>
         </header>
         <div class="content-scroll">

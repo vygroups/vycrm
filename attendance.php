@@ -14,7 +14,7 @@ require_once 'includes/brand.php';
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
-    <link href="/assets/css/styles.css?v=<?= $v?>" rel="stylesheet">
+    <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         .action-grid {
             display: grid;
@@ -154,25 +154,6 @@ require_once 'includes/brand.php';
             }
         }
 
-        #globalPunchTimer {
-            display: none;
-            align-items: center;
-            gap: 10px;
-            background: linear-gradient(135deg, rgba(123, 94, 240, .08), rgba(123, 94, 240, .04));
-            border: 1.5px solid rgba(123, 94, 240, .25);
-            border-radius: 50px;
-            padding: 8px 24px;
-            font-size: 15px;
-            font-weight: 700;
-            color: #7b5ef0;
-            letter-spacing: .5px;
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            pointer-events: none;
-            z-index: 100;
-        }
-
         /* Toast Container */
         #vyToastContainer {
             position: fixed;
@@ -228,34 +209,29 @@ require_once 'includes/brand.php';
                     <div class="breadcrumb">Home / Attendance<span class="current">Attendance Portal</span></div>
                 </div>
 
-                <!-- Global Timer -->
-                <div id="globalPunchTimer">
-                    <span
-                        style="width:9px;height:9px;background:#10b981;border-radius:50%;display:inline-block;animation:vyPulse 1.5s infinite;"></span>
-                    <span>Work Session:</span>
-                    <span id="punchTimerValue" style="font-size:16px;">00:00:00</span>
+                <!-- Global Timers -->
+                <div
+                    style="position:absolute; left:50%; transform:translateX(-50%); display:flex; gap:10px; z-index:100; pointer-events:none;">
+                    <div id="globalPunchTimer"
+                        style="display:none; align-items: center; gap: 10px; background: linear-gradient(135deg, rgba(16, 185, 129, .08), rgba(16, 185, 129, .04)); border: 1.5px solid rgba(16, 185, 129, .25); border-radius: 50px; padding: 8px 24px; font-size: 15px; font-weight: 700; color: #10b981; letter-spacing: .5px;">
+                        <span
+                            style="width:9px;height:9px;background:#10b981;border-radius:50%;display:inline-block;animation:vyPulse 1.5s infinite;"></span>
+                        <span>Work Session:</span>
+                        <span id="punchTimerValue" style="font-size:16px;">00:00:00</span>
+                    </div>
+                    <div id="globalBreakTimer"
+                        style="display:none; align-items: center; gap: 10px; background: linear-gradient(135deg, rgba(245, 158, 11, .08), rgba(245, 158, 11, .04)); border: 1.5px solid rgba(245, 158, 11, .25); border-radius: 50px; padding: 8px 24px; font-size: 15px; font-weight: 700; color: #f59e0b; letter-spacing: .5px;">
+                        <span
+                            style="width:9px;height:9px;background:#f59e0b;border-radius:50%;display:inline-block;animation:vyPulse 1.5s infinite;"></span>
+                        <span>Break Session:</span>
+                        <span id="breakTimerValue" style="font-size:16px;">00:00:00</span>
+                    </div>
                 </div>
 
                 <div class="topbar-right">
                     <button class="btn-icon" style="background:var(--surface);color:var(--text-muted);"><i
                             class="fa-regular fa-bell"></i></button>
-                    <div class="profile-pill" onclick="toggleProfileDropdown(event)">
-                        <img src="/images/admin.jpg"
-                            onerror="this.src='https://ui-avatars.com/api/?name=Admin&background=7b5ef0&color=fff'"
-                            alt="Admin">
-                        <span class="name"><?= htmlspecialchars($_SESSION["username"]) ?></span>
-                        <i class="fa-solid fa-chevron-down text-muted" style="margin-right:8px;font-size:12px;"></i>
-                        
-                        <!-- Profile Dropdown -->
-                        <div class="profile-dropdown" id="profileDropdown">
-                        <a href="/profile.php" class="dropdown-item"><i class="fa-regular fa-user"></i> My Profile</a>
-                        <div class="dropdown-divider"></div>
-                        <a href="/users.php" class="dropdown-item"><i class="fa-solid fa-users"></i> User Management</a>
-                        <a href="/roles.php" class="dropdown-item"><i class="fa-solid fa-wand-magic-sparkles"></i> Studio (Roles)</a>
-                        <div class="dropdown-divider"></div>
-                        <a href="/logout.php" class="dropdown-item" style="color: var(--hot);"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a>
-                    </div>
-                    </div>
+                    <?php include 'includes/profile_pill.php'; ?>
                 </div>
             </header>
 
@@ -285,7 +261,15 @@ require_once 'includes/brand.php';
                     <div id="history" class="tab-content active table-responsive">
                         <table class="crm-table">
                             <thead>
-                                <tr><th>Date</th><th>First Punch In</th><th>Last Punch Out</th><th>Total Hours</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>First Punch In</th>
+                                    <th>Last Punch Out</th>
+                                    <th>Total Hours</th>
+                                    <th>Total Break Hours</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
                             </thead>
                             <tbody id="attendanceHistoryBody">
                                 <!-- Dynamic Content -->
@@ -296,13 +280,20 @@ require_once 'includes/brand.php';
                     <div id="leaves" class="tab-content table-responsive">
                         <div class="flex justify-between items-center mb-3">
                             <h4 style="color:var(--text-main);">My Leave Applications</h4>
-                            <button class="btn-primary" style="width:auto;padding:10px 20px;border-radius:10px;" onclick="openModal('leaveModal')">
+                            <button class="btn-primary" style="width:auto;padding:10px 20px;border-radius:10px;"
+                                onclick="openModal('leaveModal')">
                                 <i class="fa-solid fa-plus" style="margin-right:8px;"></i> Request Leave
                             </button>
                         </div>
                         <table class="crm-table">
                             <thead>
-                                <tr><th>Leave Type</th><th>From Date</th><th>To Date</th><th>Reason</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Leave Type</th>
+                                    <th>From Date</th>
+                                    <th>To Date</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                </tr>
                             </thead>
                             <tbody id="leaveHistoryBody">
                                 <!-- Dynamic Content -->
@@ -313,13 +304,20 @@ require_once 'includes/brand.php';
                     <div id="permissions" class="tab-content table-responsive">
                         <div class="flex justify-between items-center mb-3">
                             <h4 style="color:var(--text-main);">My Permission Requests</h4>
-                            <button class="btn-primary" style="width:auto;padding:10px 20px;border-radius:10px;" onclick="openModal('permissionModal')">
+                            <button class="btn-primary" style="width:auto;padding:10px 20px;border-radius:10px;"
+                                onclick="openModal('permissionModal')">
                                 <i class="fa-solid fa-plus" style="margin-right:8px;"></i> Request Permission
                             </button>
                         </div>
                         <table class="crm-table">
                             <thead>
-                                <tr><th>Date</th><th>Time Window</th><th>Duration</th><th>Reason</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time Window</th>
+                                    <th>Duration</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                </tr>
                             </thead>
                             <tbody id="permissionHistoryBody">
                                 <!-- Dynamic Content -->
@@ -333,11 +331,49 @@ require_once 'includes/brand.php';
 
     <!-- Modals -->
     <style>
-        .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
-        .modal-content { background:#fff; padding:30px; border-radius:20px; width:100%; max-width:450px; box-shadow:var(--shadow-lg); border: 1px solid var(--border); }
-        .form-group { margin-bottom:15px; }
-        .form-label { display:block; margin-bottom:5px; font-weight:600; color:var(--text-main); font-size:14px; }
-        .form-control { width:100%; padding:12px; border:1px solid var(--border); border-radius:10px; font-size:14px; background: #f9f9f9; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, .5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: #fff;
+            padding: 30px;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: var(--text-main);
+            font-size: 14px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 14px;
+            background: #f9f9f9;
+        }
     </style>
 
     <div id="leaveModal" class="modal">
@@ -365,9 +401,12 @@ require_once 'includes/brand.php';
                     <label class="form-label">Reason</label>
                     <textarea class="form-control" name="reason" rows="3" required></textarea>
                 </div>
-                <div class="flex gap-2 justify-end mt-4">
-                    <button type="button" class="btn-icon" style="width:auto;padding:10px 20px;background:var(--border);" onclick="closeModal('leaveModal')">Cancel</button>
-                    <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Submit Application</button>
+                <div class="flex justify-end mt-4" style="gap: 15px;">
+                    <button type="button" class="btn"
+                        style="width:auto;padding:10px 20px;background:#e5e7eb;color:#374151;border:none;border-radius:10px;font-weight:600;cursor:pointer;"
+                        onclick="closeModal('leaveModal')">Cancel</button>
+                    <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Submit
+                        Application</button>
                 </div>
             </form>
         </div>
@@ -394,11 +433,26 @@ require_once 'includes/brand.php';
                     <label class="form-label">Reason</label>
                     <textarea class="form-control" name="reason" rows="3" required></textarea>
                 </div>
-                <div class="flex gap-2 justify-end mt-4">
-                    <button type="button" class="btn-icon" style="width:auto;padding:10px 20px;background:var(--border);" onclick="closeModal('permissionModal')">Cancel</button>
-                    <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Submit Request</button>
+                <div class="flex justify-end mt-4" style="gap: 15px;">
+                    <button type="button" class="btn"
+                        style="width:auto;padding:10px 20px;background:#e5e7eb;color:#374151;border:none;border-radius:10px;font-weight:600;cursor:pointer;"
+                        onclick="closeModal('permissionModal')">Cancel</button>
+                    <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Submit
+                        Request</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <div id="attendanceHistoryModal" class="modal">
+        <div class="modal-content" style="max-width:500px;">
+            <div class="flex justify-between items-center mb-4">
+                <h3 style="margin:0;">Detailed History</h3>
+                <button class="btn-icon" style="background:none;border:none;cursor:pointer;font-size:20px;" onclick="closeModal('attendanceHistoryModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="historyModalBody" style="font-size:14px;">
+                <!-- dynamic -->
+            </div>
         </div>
     </div>
 
@@ -417,6 +471,7 @@ require_once 'includes/brand.php';
         }
 
         const PUNCH_KEY = 'vycrm_punch_start';
+        const BREAK_KEY = 'vycrm_break_start';
         function formatElapsed(ms) {
             const s = Math.floor(ms / 1000);
             return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map(n => String(n).padStart(2, '0')).join(':');
@@ -424,14 +479,24 @@ require_once 'includes/brand.php';
 
         function tickTimer() {
             const start = localStorage.getItem(PUNCH_KEY);
+            const breakStart = localStorage.getItem(BREAK_KEY);
             const el = document.getElementById('globalPunchTimer');
             const val = document.getElementById('punchTimerValue');
-            if (!el || !val) return;
-            if (start) {
+            const bEl = document.getElementById('globalBreakTimer');
+            const bVal = document.getElementById('breakTimerValue');
+
+            if (start && el && val) {
                 val.textContent = formatElapsed(Date.now() - parseInt(start, 10));
                 el.style.display = 'flex';
-            } else {
+            } else if (el) {
                 el.style.display = 'none';
+            }
+
+            if (breakStart && bEl && bVal) {
+                bVal.textContent = formatElapsed(Date.now() - parseInt(breakStart, 10));
+                bEl.style.display = 'flex';
+            } else if (bEl) {
+                bEl.style.display = 'none';
             }
         }
 
@@ -444,13 +509,14 @@ require_once 'includes/brand.php';
                 const btnOut = document.getElementById('btnCheckOut');
                 const btnBIn = document.getElementById('btnBreakIn');
                 const btnBOut = document.getElementById('btnBreakOut');
-                
+
                 if (data.is_punched_in) {
-                    if (data.type === 'shift') {
+                    if (!data.is_on_break) {
                         btnIn.style.opacity = '0.5'; btnIn.style.pointerEvents = 'none';
                         btnOut.style.opacity = '1'; btnOut.style.pointerEvents = 'auto';
                         btnBIn.style.opacity = '1'; btnBIn.style.pointerEvents = 'auto';
                         btnBOut.style.opacity = '0.5'; btnBOut.style.pointerEvents = 'none';
+                        localStorage.removeItem(BREAK_KEY);
                         if (!localStorage.getItem(PUNCH_KEY)) {
                             // Sync with server time by calculating elapsed duration
                             // This solves the 5.5h offset issue once and for all
@@ -461,12 +527,18 @@ require_once 'includes/brand.php';
                                 localStorage.setItem(PUNCH_KEY, (new Date(data.punch_in)).getTime().toString());
                             }
                         }
-                    } else if (data.type === 'break') {
+                    } else { // On Break
                         btnIn.style.opacity = '0.5'; btnIn.style.pointerEvents = 'none';
                         btnOut.style.opacity = '0.5'; btnOut.style.pointerEvents = 'none';
                         btnBIn.style.opacity = '0.5'; btnBIn.style.pointerEvents = 'none';
                         btnBOut.style.opacity = '1'; btnBOut.style.pointerEvents = 'auto';
                         localStorage.removeItem(PUNCH_KEY);
+                        if (!localStorage.getItem(BREAK_KEY)) {
+                            if (data.break_in_ms && data.server_time) {
+                                const elapsed = data.server_time - data.break_in_ms;
+                                localStorage.setItem(BREAK_KEY, (Date.now() - elapsed).toString());
+                            }
+                        }
                     }
                 } else {
                     btnIn.style.opacity = '1'; btnIn.style.pointerEvents = 'auto';
@@ -474,6 +546,7 @@ require_once 'includes/brand.php';
                     btnBIn.style.opacity = '0.5'; btnBIn.style.pointerEvents = 'none';
                     btnBOut.style.opacity = '0.5'; btnBOut.style.pointerEvents = 'none';
                     localStorage.removeItem(PUNCH_KEY);
+                    localStorage.removeItem(BREAK_KEY);
                 }
                 tickTimer();
             }
@@ -482,7 +555,7 @@ require_once 'includes/brand.php';
         async function apiPunch(action) {
             const res = await fetch('/api/attendance.php', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `action=${action}`
             });
             const data = await res.json();
@@ -496,26 +569,60 @@ require_once 'includes/brand.php';
         }
 
         async function loadAttendanceHistory() {
-            const res = await fetch('/api/attendance.php?action=history'); 
+            const res = await fetch('/api/attendance.php?action=history');
             const data = await res.json();
             const tbody = document.getElementById('attendanceHistoryBody');
             if (data.success && data.data && data.data.length > 0) {
-                tbody.innerHTML = data.data.map(at => {
-                    const statusTag = at.type === 'break' 
-                        ? '<span class="badge" style="background:rgba(245,158,11,.1);border:1px solid #f59e0b;color:#f59e0b;">Break</span>'
-                        : '<span class="badge" style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;">Present</span>';
+                window.currentAttendanceData = data.data;
+                tbody.innerHTML = data.data.map((at, index) => {
+                    let statusColor = '#10b981';
+                    let statusBg = 'rgba(16,185,129,.1)';
+                    if (at.status === 'Break') {
+                        statusColor = '#f59e0b';
+                        statusBg = 'rgba(245,158,11,.1)';
+                    }
+                    const statusTag = `<span class="badge" style="background:${statusBg};border:1px solid ${statusColor};color:${statusColor};">${at.status || 'Present'}</span>`;
                     return `
                     <tr>
-                        <td class="text-bold">${at.date}</td>
-                        <td>${at.punch_in ? new Date(at.punch_in).toLocaleTimeString() : '-'}</td>
-                        <td>${at.punch_out ? new Date(at.punch_out).toLocaleTimeString() : '-'}</td>
+                        <td class="text-bold">${formatVyDate(at.date)}</td>
+                        <td>${formatVyTime(at.punch_in)}</td>
+                        <td>${formatVyTime(at.punch_out)}</td>
                         <td>${at.total_hours || '-'}</td>
-                        <td>${at.type === 'shift' ? statusTag : statusTag}</td>
+                        <td>${at.total_break_hours || '-'}</td>
+                        <td>${statusTag}</td>
+                        <td><button class="btn-icon" style="color:var(--primary); padding:5px 10px; background:var(--surface);" onclick='viewAttendanceHistory(${index})'><i class="fa-solid fa-eye"></i></button></td>
                     </tr>`;
                 }).join('');
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No records found for today.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">No attendance records found.</td></tr>';
             }
+        }
+
+        function viewAttendanceHistory(index) {
+            const at = window.currentAttendanceData[index];
+            let html = `<p><strong>Date:</strong> ${formatVyDate(at.date)}</p>
+                        <p><strong>First Punch In:</strong> ${formatVyTime(at.punch_in)}</p>
+                        <p><strong>Last Punch Out:</strong> ${formatVyTime(at.punch_out)}</p>
+                        <p><strong>Total Hours:</strong> ${at.total_hours || '-'}</p>
+                        <p><strong>Total Break Hours:</strong> ${at.total_break_hours || '-'}</p>
+                        <hr style="margin:15px 0; border:0; border-top:1px solid var(--border);">
+                        <h4 style="margin-bottom:10px;">Break History</h4>`;
+            
+            const breaks = at.break_history ? JSON.parse(at.break_history) : [];
+            if (breaks.length > 0) {
+                html += `<ul style="list-style:none; padding:0; margin:0;">`;
+                breaks.forEach((b, i) => {
+                    html += `<li style="padding:8px 0; border-bottom:1px solid #f1f1f1;">
+                        <strong>Break ${i+1}:</strong> ${formatVyTime(b.start)} - ${formatVyTime(b.end)}
+                    </li>`;
+                });
+                html += `</ul>`;
+            } else {
+                html += `<p style="color:var(--text-muted); margin-top:10px;">No breaks recorded.</p>`;
+            }
+            
+            document.getElementById('historyModalBody').innerHTML = html;
+            openModal('attendanceHistoryModal');
         }
 
         async function loadLeaves() {
@@ -526,8 +633,8 @@ require_once 'includes/brand.php';
                 tbody.innerHTML = data.data.map(l => `
                     <tr>
                         <td class="text-bold">${l.leave_type}</td>
-                        <td>${l.from_date}</td>
-                        <td>${l.to_date}</td>
+                        <td>${formatVyDate(l.from_date)}</td>
+                        <td>${formatVyDate(l.to_date)}</td>
                         <td>${l.reason}</td>
                         <td><span class="badge badge-${l.status === 'pending' ? 'warm' : (l.status === 'approved' ? 'success' : 'hot')}">${l.status}</span></td>
                     </tr>
@@ -542,7 +649,7 @@ require_once 'includes/brand.php';
                 const tbody = document.getElementById('permissionHistoryBody');
                 tbody.innerHTML = data.data.map(p => `
                     <tr>
-                        <td class="text-bold">${p.date}</td>
+                        <td class="text-bold">${formatVyDate(p.date)}</td>
                         <td>${p.time_window}</td>
                         <td>${p.duration}</td>
                         <td>${p.reason}</td>
@@ -598,7 +705,7 @@ require_once 'includes/brand.php';
 
         function toggleProfileDropdown(e) { e.stopPropagation(); document.getElementById('profileDropdown').classList.toggle('show'); }
 
-        window.onclick = function(event) {
+        window.onclick = function (event) {
             if (!event.target.closest('.profile-pill')) {
                 const dropdowns = document.getElementsByClassName("profile-dropdown");
                 for (let i = 0; i < dropdowns.length; i++) { dropdowns[i].classList.remove('show'); }
@@ -610,6 +717,7 @@ require_once 'includes/brand.php';
         loadAttendanceHistory();
     </script>
 </body>
+
 </html>
 pt>
 </body>

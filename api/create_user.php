@@ -10,6 +10,8 @@ if ($_SERVER['REQUEST_METHOD'] != 'POST') {
 }
 
 $username = $_POST['username'] ?? '';
+$first_name = $_POST['first_name'] ?? '';
+$last_name = $_POST['last_name'] ?? '';
 $email = $_POST['email'] ?? '';
 $password = $_POST['password'] ?? '';
 $roleId = $_POST['role_id'] ?? null;
@@ -35,8 +37,8 @@ try {
     
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
     
-    $stmt = $conn->prepare("INSERT INTO {$prefix}users (username, email, password, role_id) VALUES (?, ?, ?, ?)");
-    $stmt->execute([$username, $email, $hashedPassword, $roleId]);
+    $stmt = $conn->prepare("INSERT INTO {$prefix}users (username, first_name, last_name, email, password, role_id) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$username, $first_name, $last_name, $email, $hashedPassword, $roleId]);
     
     echo json_encode(['success' => true, 'message' => 'User created successfully']);
 } catch (Exception $e) {

@@ -13,14 +13,28 @@ if (!isset($_SESSION['token']) || time() > $_SESSION['expiry']) {
 require_once 'config/database.php';
 
 // Set global tenant context for the page
-$tenant_slug   = $_SESSION['tenant_slug'];
-$tenant_db     = $_SESSION['tenant_db'];
+$tenant_slug = $_SESSION['tenant_slug'];
+$tenant_db = $_SESSION['tenant_db'];
 $tenant_prefix = $_SESSION['tenant_prefix'];
-$username      = $_SESSION['username'];
+$username = $_SESSION['username'];
 
 // Get Tenant Connection
 $tenantDb = Database::getTenantConn($tenant_db);
 if (!$tenantDb) {
     die("Error: Could not establish tenant connection.");
+}
+
+try {
+    $stmt = $tenantDb->prepare("SELECT time_format, date_format, profile_picture, first_name, last_name FROM {$tenant_prefix}users WHERE id = ?");
+    $stmt->execute([$_SESSION['user_id']]);
+    $user_prefs = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $_SESSION['time_format'] = $user_prefs['time_format'] ?? '12h';
+    $_SESSION['date_format'] = $user_prefs['date_format'] ?? 'd M, Y';
+    $_SESSION['profile_picture'] = $user_prefs['profile_picture'] ?? '';
+    $_SESSION['first_name'] = $user_prefs['first_name'] ?? '';
+    $_SESSION['last_name'] = $user_prefs['last_name'] ?? '';
+} catch (Exception $e) {
+    // If columns don't exist yet, ignore
 }
 ?>

@@ -131,10 +131,7 @@ $customerCreated = isset($_GET['customer_created']) ? 1 : 0;
             </div>
             <div class="topbar-right">
                 <a href="invoices.php" class="btn-secondary"><i class="fa-solid fa-table-list"></i> Invoice List</a>
-                <div class="profile-pill">
-                    <img src="/images/admin.jpg" onerror="this.src='https://ui-avatars.com/api/?name=Admin&background=7b5ef0&color=fff'" alt="Admin">
-                    <span class="name"><?= htmlspecialchars($_SESSION["username"]) ?></span>
-                </div>
+                <?php include 'includes/profile_pill.php'; ?>
             </div>
         </header>
         <div class="content-scroll">

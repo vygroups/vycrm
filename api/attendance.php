@@ -26,6 +26,14 @@ $today = date('Y-m-d');
 $now = date('Y-m-d H:i:s');
 
 try {
+    // Auto-migrate new columns if they don't exist
+    try {
+        $conn->exec("ALTER TABLE {$prefix}attendance ADD COLUMN break_history TEXT DEFAULT '[]'");
+        $conn->exec("ALTER TABLE {$prefix}attendance ADD COLUMN total_break_hours VARCHAR(50) DEFAULT NULL");
+    } catch (PDOException $e) {
+        // Columns already exist
+    }
+
     switch ($action) {
         case 'status':
             $stmt = $conn->prepare("SELECT * FROM {$prefix}attendance WHERE user_id = ? AND date = ? ORDER BY id DESC LIMIT 1");
@@ -35,56 +43,93 @@ try {
             if ($record) {
                 $is_punched_in = ($record['punch_in'] && !$record['punch_out']);
                 $punch_in_ms = $record['punch_in'] ? (strtotime($record['punch_in']) * 1000) : null;
+                $is_on_break = ($record['status'] === 'Break');
+
+                $break_in_ms = null;
+                if ($is_on_break) {
+                    $history = json_decode($record['break_history'] ?: '[]', true);
+                    if (count($history) > 0) {
+                        $last = end($history);
+                        if (!empty($last['start']) && empty($last['end'])) {
+                            $break_in_ms = strtotime($last['start']) * 1000;
+                        }
+                    }
+                }
+
                 echo json_encode([
                     'success' => true,
                     'is_punched_in' => $is_punched_in,
+                    'is_on_break' => $is_on_break,
                     'type' => $record['type'] ?? 'shift',
                     'punch_in' => $record['punch_in'],
                     'punch_in_ms' => $punch_in_ms,
+                    'break_in_ms' => $break_in_ms,
                     'server_time' => time() * 1000
                 ]);
             } else {
-                echo json_encode(['success' => true, 'is_punched_in' => false]);
+                echo json_encode(['success' => true, 'is_punched_in' => false, 'is_on_break' => false]);
             }
             break;
 
         case 'punch_in':
             // Check if ANY regular shift already exists for today
-            $stmt = $conn->prepare("SELECT id FROM {$prefix}attendance WHERE user_id = ? AND date = ? AND type = 'shift' LIMIT 1");
+            $stmt = $conn->prepare("SELECT id FROM {$prefix}attendance WHERE user_id = ? AND date = ? LIMIT 1");
             $stmt->execute([$user_id, $today]);
             if ($stmt->fetch()) {
                 echo json_encode(['success' => false, 'message' => 'You have already punched in for today. Each day only one punch is allowed.']);
                 exit;
             }
 
-            $stmt = $conn->prepare("INSERT INTO {$prefix}attendance (user_id, date, punch_in, status, type) VALUES (?, ?, ?, 'Present', 'shift')");
+            $stmt = $conn->prepare("INSERT INTO {$prefix}attendance (user_id, date, punch_in, status, type, break_history) VALUES (?, ?, ?, 'Present', 'shift', '[]')");
             $stmt->execute([$user_id, $today, $now]);
             echo json_encode(['success' => true, 'message' => 'Punched in successfully', 'punch_in' => $now, 'punch_in_ms' => strtotime($now) * 1000]);
             break;
 
         case 'punch_out':
-            $stmt = $conn->prepare("UPDATE {$prefix}attendance SET punch_out = ? WHERE user_id = ? AND date = ? AND punch_out IS NULL ORDER BY id DESC LIMIT 1");
-            $stmt->execute([$now, $user_id, $today]);
-            
-            $stmt = $conn->prepare("SELECT punch_in, punch_out FROM {$prefix}attendance WHERE user_id = ? AND date = ? AND punch_out IS NOT NULL ORDER BY id DESC LIMIT 1");
+            $stmt = $conn->prepare("SELECT * FROM {$prefix}attendance WHERE user_id = ? AND date = ? AND punch_out IS NULL ORDER BY id DESC LIMIT 1");
             $stmt->execute([$user_id, $today]);
-            $row = $stmt->fetch();
-            if ($row) {
-                $start = new DateTime($row['punch_in']);
-                $end = new DateTime($row['punch_out']);
-                $interval = $start->diff($end);
-                $total_hours = $interval->format('%h hrs %i mins');
-                
-                $stmt = $conn->prepare("UPDATE {$prefix}attendance SET total_hours = ? WHERE user_id = ? AND date = ? ORDER BY id DESC LIMIT 1");
-                $stmt->execute([$total_hours, $user_id, $today]);
-            }
+            $record = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            echo json_encode(['success' => true, 'message' => 'Punched out successfully', 'total_hours' => $total_hours ?? '']);
+            if (!$record) {
+                 echo json_encode(['success' => false, 'message' => 'Already punched out or not punched in']);
+                 exit;
+            }
+            
+            $history = json_decode($record['break_history'] ?: '[]', true);
+            $total_break_seconds = 0;
+            
+            if ($record['status'] === 'Break' && count($history) > 0) {
+                $last_idx = count($history) - 1;
+                if (!isset($history[$last_idx]['end']) || !$history[$last_idx]['end']) {
+                    $history[$last_idx]['end'] = $now;
+                }
+            }
+            
+            foreach ($history as $b) {
+                if (!empty($b['start']) && !empty($b['end'])) {
+                    $total_break_seconds += strtotime($b['end']) - strtotime($b['start']);
+                }
+            }
+            
+            $history_json = json_encode($history);
+            $bh = floor($total_break_seconds / 3600);
+            $bm = floor(($total_break_seconds % 3600) / 60);
+            $total_break_hours_str = ($bh > 0 || $bm > 0) ? ($bh . ' hrs ' . $bm . ' mins') : '';
+            
+            $start = new DateTime($record['punch_in']);
+            $end = new DateTime($now);
+            $interval = $start->diff($end);
+            $total_hours = $interval->format('%h hrs %i mins');
+            
+            $stmt = $conn->prepare("UPDATE {$prefix}attendance SET punch_out = ?, status = 'Present', total_hours = ?, break_history = ?, total_break_hours = ? WHERE id = ?");
+            $stmt->execute([$now, $total_hours, $history_json, $total_break_hours_str, $record['id']]);
+
+            echo json_encode(['success' => true, 'message' => 'Punched out successfully', 'total_hours' => $total_hours]);
             break;
 
         case 'history':
-            $stmt = $conn->prepare("SELECT * FROM {$prefix}attendance WHERE user_id = ? AND date = ? ORDER BY punch_in ASC");
-            $stmt->execute([$user_id, $today]);
+            $stmt = $conn->prepare("SELECT * FROM {$prefix}attendance WHERE user_id = ? ORDER BY date DESC LIMIT 30");
+            $stmt->execute([$user_id]);
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             break;
 
@@ -109,14 +154,59 @@ try {
             break;
 
         case 'break_in':
-            $conn->prepare("UPDATE {$prefix}attendance SET punch_out = ? WHERE user_id = ? AND date = ? AND punch_out IS NULL AND type='shift'")->execute([$now, $user_id, $today]);
-            $conn->prepare("INSERT INTO {$prefix}attendance (user_id, date, punch_in, status, type) VALUES (?, ?, ?, 'Break', 'break')")->execute([$user_id, $today, $now]);
+            $stmt = $conn->prepare("SELECT * FROM {$prefix}attendance WHERE user_id = ? AND date = ? AND punch_out IS NULL ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$user_id, $today]);
+            $record = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$record) {
+                echo json_encode(['success' => false, 'message' => 'Not punched in']);
+                exit;
+            }
+            if ($record['status'] === 'Break') {
+                echo json_encode(['success' => false, 'message' => 'Already on break']);
+                exit;
+            }
+
+            $history = json_decode($record['break_history'] ?: '[]', true);
+            $history[] = ['start' => $now, 'end' => null];
+            $history_json = json_encode($history);
+
+            $stmt = $conn->prepare("UPDATE {$prefix}attendance SET status = 'Break', break_history = ? WHERE id = ?");
+            $stmt->execute([$history_json, $record['id']]);
             echo json_encode(['success' => true, 'message' => 'Break started']);
             break;
 
         case 'break_out':
-            $conn->prepare("UPDATE {$prefix}attendance SET punch_out = ? WHERE user_id = ? AND date = ? AND punch_out IS NULL AND type='break'")->execute([$now, $user_id, $today]);
-            $conn->prepare("INSERT INTO {$prefix}attendance (user_id, date, punch_in, status, type) VALUES (?, ?, ?, 'Present', 'shift')")->execute([$user_id, $today, $now]);
+            $stmt = $conn->prepare("SELECT * FROM {$prefix}attendance WHERE user_id = ? AND date = ? AND punch_out IS NULL ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$user_id, $today]);
+            $record = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$record || $record['status'] !== 'Break') {
+                echo json_encode(['success' => false, 'message' => 'Not on break']);
+                exit;
+            }
+
+            $history = json_decode($record['break_history'] ?: '[]', true);
+            $total_break_seconds = 0;
+            if (count($history) > 0) {
+                $last_idx = count($history) - 1;
+                $history[$last_idx]['end'] = $now;
+            }
+
+            // Calculate total break hours
+            foreach ($history as $b) {
+                if (!empty($b['start']) && !empty($b['end'])) {
+                    $total_break_seconds += strtotime($b['end']) - strtotime($b['start']);
+                }
+            }
+            $history_json = json_encode($history);
+            
+            $bh = floor($total_break_seconds / 3600);
+            $bm = floor(($total_break_seconds % 3600) / 60);
+            $total_break_hours_str = ($bh > 0 || $bm > 0) ? ($bh . ' hrs ' . $bm . ' mins') : '';
+
+            $stmt = $conn->prepare("UPDATE {$prefix}attendance SET status = 'Present', break_history = ?, total_break_hours = ? WHERE id = ?");
+            $stmt->execute([$history_json, $total_break_hours_str, $record['id']]);
             echo json_encode(['success' => true, 'message' => 'Break ended, shift resumed']);
             break;
 

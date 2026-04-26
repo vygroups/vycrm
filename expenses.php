@@ -70,10 +70,7 @@ $totalExpense = array_sum(array_column($expenses, 'amount'));
         <header class="topbar">
             <div class="breadcrumb">Finance / <span class="current">Expenses</span></div>
             <div class="topbar-right">
-                <div class="profile-pill">
-                    <img src="/images/admin.jpg" alt="Admin">
-                    <span class="name"><?= htmlspecialchars($_SESSION["username"]) ?></span>
-                </div>
+                <?php include 'includes/profile_pill.php'; ?>
             </div>
         </header>
         <div class="content-scroll">
