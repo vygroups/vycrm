@@ -9,6 +9,10 @@ try {
     $conn = Database::getTenantConn($dbName);
     $prefix = $_SESSION['tenant_prefix'];
     
+    // Auto-migrate columns if they don't exist
+    try { $conn->exec("ALTER TABLE {$prefix}users ADD COLUMN first_name VARCHAR(50) DEFAULT ''"); } catch (PDOException $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}users ADD COLUMN last_name VARCHAR(50) DEFAULT ''"); } catch (PDOException $e) {}
+
     // Fetch Roles
     $stmtRoles = $conn->query("SELECT * FROM {$prefix}roles ORDER BY name ASC");
     $allRoles = $stmtRoles->fetchAll(PDO::FETCH_ASSOC);
@@ -61,13 +65,14 @@ $v = time();
                 <div class="table-responsive">
                     <table class="crm-table">
                         <thead>
-                            <tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Created At</th><th>Actions</th></tr>
+                            <tr><th>ID</th><th>User</th><th>Username</th><th>Email</th><th>Role</th><th>Created At</th><th>Actions</th></tr>
                         </thead>
                         <tbody>
                             <?php foreach ($users as $u): ?>
                             <tr>
                                 <td>#<?= $u['id'] ?></td>
-                                <td class="text-bold"><?= htmlspecialchars($u['username']) ?></td>
+                                <td class="text-bold"><?= htmlspecialchars(trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''))) ?: '-' ?></td>
+                                <td><?= htmlspecialchars($u['username']) ?></td>
                                 <td><?= htmlspecialchars($u['email']) ?></td>
                                 <td>
                                     <span class="role-badge">
@@ -93,6 +98,16 @@ $v = time();
             <button class="btn-icon" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <form id="addUserForm">
+            <div style="display: flex; gap: 15px;">
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">First Name</label>
+                    <input type="text" class="form-control" name="first_name" required placeholder="e.g. John">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label class="form-label">Last Name</label>
+                    <input type="text" class="form-control" name="last_name" required placeholder="e.g. Doe">
+                </div>
+            </div>
             <div class="form-group">
                 <label class="form-label">Username</label>
                 <input type="text" class="form-control" name="username" required placeholder="e.g. jdoe">

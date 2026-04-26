@@ -44,8 +44,13 @@ try {
         </header>
 
         <div class="content-scroll">
-            <div class="table-panel mb-5">
-                <div class="table-header"><div class="table-title">Pending Leave Applications</div></div>
+            <div class="table-panel" style="margin-bottom: 40px;">
+                <div class="table-header" style="cursor:pointer;" onclick="togglePanel(this)">
+                    <div class="table-title">Pending Leave Applications</div>
+                    <div class="table-actions">
+                        <i class="fa-solid fa-chevron-up transition-transform" style="transition: transform 0.3s ease;"></i>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table class="crm-table">
                         <thead><tr><th>User</th><th>Leave Type</th><th>From</th><th>To</th><th>Reason</th><th>Actions</th></tr></thead>
@@ -72,7 +77,12 @@ try {
             </div>
 
             <div class="table-panel">
-                <div class="table-header"><div class="table-title">Pending Permission Requests</div></div>
+                <div class="table-header" style="cursor:pointer;" onclick="togglePanel(this)">
+                    <div class="table-title">Pending Permission Requests</div>
+                    <div class="table-actions">
+                        <i class="fa-solid fa-chevron-up transition-transform" style="transition: transform 0.3s ease;"></i>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table class="crm-table">
                         <thead><tr><th>User</th><th>Date</th><th>Window</th><th>Duration</th><th>Reason</th><th>Actions</th></tr></thead>
@@ -102,6 +112,19 @@ try {
 </div>
 
 <script>
+function togglePanel(headerElement) {
+    const panel = headerElement.nextElementSibling;
+    const icon = headerElement.querySelector('i');
+    
+    if (panel.style.display === 'none') {
+        panel.style.display = '';
+        icon.style.transform = 'rotate(0deg)';
+    } else {
+        panel.style.display = 'none';
+        icon.style.transform = 'rotate(180deg)';
+    }
+}
+
 async function updateReq(type, id, status) {
     const endpoint = type === 'leave' ? '/api/leaves.php' : '/api/permissions.php';
     const res = await fetch(endpoint, {

@@ -219,12 +219,7 @@ $inactiveProducts = count($products) - count($activeProducts);
                 <div class="topbar-right">
                     <a href="product_create.php" class="btn-primary" style="width:auto;padding:13px 18px;"><i
                             class="fa-solid fa-plus"></i> Add Product</a>
-                    <div class="profile-pill">
-                        <img src="/images/admin.jpg"
-                            onerror="this.src='https://ui-avatars.com/api/?name=Admin&background=7b5ef0&color=fff'"
-                            alt="Admin">
-                        <span class="name"><?= htmlspecialchars($_SESSION["username"]) ?></span>
-                    </div>
+                    <?php include 'includes/profile_pill.php'; ?>
                 </div>
             </header>
             <div class="content-scroll">

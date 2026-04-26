@@ -109,10 +109,7 @@ if (!$product) {
             </div>
             <div class="topbar-right">
                 <a href="products.php" class="btn-secondary"><i class="fa-solid fa-table-list"></i> Product List</a>
-                <div class="profile-pill">
-                    <img src="/images/admin.jpg" onerror="this.src='https://ui-avatars.com/api/?name=Admin&background=7b5ef0&color=fff'" alt="Admin">
-                    <span class="name"><?= htmlspecialchars($_SESSION["username"]) ?></span>
-                </div>
+                <?php include 'includes/profile_pill.php'; ?>
             </div>
         </header>
         <div class="content-scroll">

@@ -55,6 +55,8 @@ try {
         $_SESSION['token'] = $token;
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['username'];
+        $_SESSION['first_name'] = $user['first_name'] ?? '';
+        $_SESSION['last_name'] = $user['last_name'] ?? '';
         $_SESSION['tenant_slug'] = $companySlug;
         $_SESSION['tenant_db'] = $company['db_name'];
         $_SESSION['tenant_prefix'] = $tenantPrefix;

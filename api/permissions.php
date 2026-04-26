@@ -39,6 +39,45 @@ try {
             $perm_id = $_POST['id'];
             $status = $_POST['status'];
 
+            // Admin/Manager check
+            $stmt = $conn->prepare("SELECT user_id FROM {$prefix}permissions WHERE id = ?");
+            $stmt->execute([$perm_id]);
+            $req_user_id = $stmt->fetchColumn();
+
+            if ($req_user_id == $user_id) {
+                echo json_encode(['success' => false, 'message' => 'You cannot approve your own request']);
+                exit;
+            }
+
+            $stmt = $conn->prepare("SELECT role_id FROM {$prefix}users WHERE id = ?");
+            $stmt->execute([$user_id]);
+            $my_role_id = $stmt->fetchColumn();
+
+            $stmt = $conn->prepare("SELECT role_id FROM {$prefix}users WHERE id = ?");
+            $stmt->execute([$req_user_id]);
+            $req_role_id = $stmt->fetchColumn();
+
+            $is_admin = false;
+            if (!$my_role_id) {
+                $is_admin = true;
+            } else {
+                $stmt = $conn->prepare("SELECT name FROM {$prefix}roles WHERE id = ?");
+                $stmt->execute([$my_role_id]);
+                $role_name = strtolower($stmt->fetchColumn() ?: '');
+                if (strpos($role_name, 'admin') !== false || strpos($role_name, 'manager') !== false) {
+                    $is_admin = true;
+                }
+            }
+
+            if (!$is_admin && $my_role_id && $req_role_id) {
+                $stmt = $conn->prepare("SELECT id FROM {$prefix}role_hierarchy WHERE parent_role_id = ? AND child_role_id = ?");
+                $stmt->execute([$my_role_id, $req_role_id]);
+                if (!$stmt->fetch()) {
+                    echo json_encode(['success' => false, 'message' => 'You do not have permission to approve this request']);
+                    exit;
+                }
+            }
+
             $stmt = $conn->prepare("UPDATE {$prefix}permissions SET status = ? WHERE id = ?");
             $stmt->execute([$status, $perm_id]);
             

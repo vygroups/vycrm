@@ -33,16 +33,54 @@ try {
 
             $stmt = $conn->prepare("INSERT INTO {$prefix}leaves (user_id, leave_type, from_date, to_date, reason, status) VALUES (?, ?, ?, ?, ?, 'pending')");
             $stmt->execute([$user_id, $leave_type, $from_date, $to_date, $reason]);
-            
+
             echo json_encode(['success' => true, 'message' => 'Leave applied successfully']);
         } elseif ($action == 'update_status') {
-            // Admin/Manager check should be here
             $leave_id = $_POST['id'];
             $status = $_POST['status']; // 'approved' or 'rejected'
 
+            // Admin/Manager check
+            $stmt = $conn->prepare("SELECT user_id FROM {$prefix}leaves WHERE id = ?");
+            $stmt->execute([$leave_id]);
+            $req_user_id = $stmt->fetchColumn();
+
+            if ($req_user_id == $user_id) {
+                echo json_encode(['success' => false, 'message' => 'You cannot approve your own request']);
+                exit;
+            }
+
+            $stmt = $conn->prepare("SELECT role_id FROM {$prefix}users WHERE id = ?");
+            $stmt->execute([$user_id]);
+            $my_role_id = $stmt->fetchColumn();
+
+            $stmt = $conn->prepare("SELECT role_id FROM {$prefix}users WHERE id = ?");
+            $stmt->execute([$req_user_id]);
+            $req_role_id = $stmt->fetchColumn();
+
+            $is_admin = false;
+            if (!$my_role_id) {
+                $is_admin = true;
+            } else {
+                $stmt = $conn->prepare("SELECT name FROM {$prefix}roles WHERE id = ?");
+                $stmt->execute([$my_role_id]);
+                $role_name = strtolower($stmt->fetchColumn() ?: '');
+                if (strpos($role_name, 'admin') !== false || strpos($role_name, 'manager') !== false) {
+                    $is_admin = true;
+                }
+            }
+
+            if (!$is_admin && $my_role_id && $req_role_id) {
+                $stmt = $conn->prepare("SELECT id FROM {$prefix}role_hierarchy WHERE parent_role_id = ? AND child_role_id = ?");
+                $stmt->execute([$my_role_id, $req_role_id]);
+                if (!$stmt->fetch()) {
+                    echo json_encode(['success' => false, 'message' => 'You do not have permission to approve this request']);
+                    exit;
+                }
+            }
+
             $stmt = $conn->prepare("UPDATE {$prefix}leaves SET status = ? WHERE id = ?");
             $stmt->execute([$status, $leave_id]);
-            
+
             echo json_encode(['success' => true, 'message' => 'Leave status updated']);
         }
     } else {

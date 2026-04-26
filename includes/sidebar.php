@@ -192,4 +192,34 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
         // Save to localStorage
         localStorage.setItem('sidebar_state_' + id, isCollapsed ? 'collapsed' : 'expanded');
     }
+
+    // Global Date & Time Formatter based on User Preferences
+    window.vyUserPrefs = {
+        timeFormat: "<?= $_SESSION['time_format'] ?? '12h' ?>",
+        dateFormat: "<?= $_SESSION['date_format'] ?? 'd M, Y' ?>"
+    };
+    
+    function formatVyDate(dateStr) {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        if (isNaN(d)) return dateStr;
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        switch (window.vyUserPrefs.dateFormat) {
+            case 'Y-m-d': return `${year}-${month}-${day}`;
+            case 'd/m/Y': return `${day}/${month}/${year}`;
+            case 'm/d/Y': return `${month}/${day}/${year}`;
+            default: return `${day} ${shortMonths[d.getMonth()]}, ${year}`;
+        }
+    }
+    
+    function formatVyTime(dateStr) {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        if (isNaN(d)) return dateStr;
+        const is12h = window.vyUserPrefs.timeFormat === '12h';
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: is12h });
+    }
 </script>
