@@ -9,10 +9,6 @@ try {
     $conn = Database::getTenantConn($dbName);
     $prefix = $_SESSION['tenant_prefix'];
     
-    // Auto-migrate columns if they don't exist
-    try { $conn->exec("ALTER TABLE {$prefix}users ADD COLUMN first_name VARCHAR(50) DEFAULT ''"); } catch (PDOException $e) {}
-    try { $conn->exec("ALTER TABLE {$prefix}users ADD COLUMN last_name VARCHAR(50) DEFAULT ''"); } catch (PDOException $e) {}
-
     // Fetch Roles
     $stmtRoles = $conn->query("SELECT * FROM {$prefix}roles ORDER BY name ASC");
     $allRoles = $stmtRoles->fetchAll(PDO::FETCH_ASSOC);

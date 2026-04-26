@@ -16,9 +16,14 @@ CREATE TABLE IF NOT EXISTS role_hierarchy (
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
+    first_name VARCHAR(50) DEFAULT '',
+    last_name VARCHAR(50) DEFAULT '',
     password VARCHAR(255) NOT NULL,
     email VARCHAR(100) NOT NULL,
     role_id INT DEFAULT NULL,
+    time_format VARCHAR(10) DEFAULT '12h',
+    date_format VARCHAR(20) DEFAULT 'd M, Y',
+    profile_picture TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
