@@ -25,7 +25,7 @@ if (!$tenantDb) {
 }
 
 try {
-    $stmt = $tenantDb->prepare("SELECT time_format, date_format, profile_picture, first_name, last_name FROM {$tenant_prefix}users WHERE id = ?");
+    $stmt = $tenantDb->prepare("SELECT time_format, date_format, profile_picture, first_name, last_name, is_admin, role_id FROM {$tenant_prefix}users WHERE id = ?");
     $stmt->execute([$_SESSION['user_id']]);
     $user_prefs = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -34,6 +34,8 @@ try {
     $_SESSION['profile_picture'] = $user_prefs['profile_picture'] ?? '';
     $_SESSION['first_name'] = $user_prefs['first_name'] ?? '';
     $_SESSION['last_name'] = $user_prefs['last_name'] ?? '';
+    $_SESSION['is_admin'] = (int)($user_prefs['is_admin'] ?? 0);
+    $_SESSION['role_id'] = $user_prefs['role_id'] ?? null;
 } catch (Exception $e) {
     // If columns don't exist yet, ignore
 }

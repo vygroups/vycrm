@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255) NOT NULL,
     email VARCHAR(100) NOT NULL,
     role_id INT DEFAULT NULL,
+    is_admin TINYINT(1) DEFAULT 0,
     time_format VARCHAR(10) DEFAULT '12h',
     date_format VARCHAR(20) DEFAULT 'd M, Y',
     profile_picture TEXT DEFAULT NULL,

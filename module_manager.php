@@ -117,7 +117,7 @@ if (!empty($_GET['edit'])) {
                                 </div>
                                 <div class="mm-field-actions">
                                     <button class="mm-icon-btn" onclick="editField(<?= $field['id'] ?>, <?= htmlspecialchars(json_encode($field)) ?>)" title="Edit"><i class="fa-solid fa-pencil"></i></button>
-                                    <?php if(in_array($field['field_type'], ['dropdown','multi_picker'])): ?>
+                                    <?php if(in_array($field['field_type'], ['dropdown','multi_picker', 'radio_group'])): ?>
                                     <button class="mm-icon-btn" onclick="manageOptions(<?= $field['id'] ?>, <?= htmlspecialchars(json_encode($field['options'])) ?>)" title="Options"><i class="fa-solid fa-list"></i></button>
                                     <?php endif; ?>
                                     <button class="mm-icon-btn" onclick="manageRules(<?= $field['id'] ?>, <?= $editModule['id'] ?>)" title="Rules"><i class="fa-solid fa-code-branch"></i></button>
@@ -216,7 +216,7 @@ if (!empty($_GET['edit'])) {
                 <label><input type="checkbox" id="fieldSearchable"> Searchable</label>
                 <label><input type="checkbox" id="fieldListVisible" checked> Show in List</label>
             </div>
-            <!-- Options for dropdown/multi_picker -->
+            <!-- Options for dropdown/multi_picker/radio_group -->
             <div id="fieldOptionsSection" style="display:none;" class="mm-options-section">
                 <label class="form-label">Options</label>
                 <div id="fieldOptionsList"></div>
@@ -367,7 +367,7 @@ function openFieldModal(blockId, moduleId, editData=null){
 function editField(id, fieldData){ openFieldModal(fieldData.block_id, fieldData.module_id, fieldData); }
 function onFieldTypeChange(){
     const t = document.getElementById('fieldType').value;
-    document.getElementById('fieldOptionsSection').style.display = (t==='dropdown'||t==='multi_picker') ? '' : 'none';
+    document.getElementById('fieldOptionsSection').style.display = (t==='dropdown'||t==='multi_picker'||t==='radio_group') ? '' : 'none';
     document.getElementById('fieldApiConfig').style.display = t==='api_call_picker' ? '' : 'none';
 }
 function addOptionRow(label='', value=''){

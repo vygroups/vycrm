@@ -23,10 +23,12 @@ function dm_field_types(): array
         'textarea'        => ['label' => 'Textarea',             'icon' => 'fa-solid fa-align-left'],
         'checkbox'        => ['label' => 'Checkbox',             'icon' => 'fa-solid fa-square-check'],
         'dropdown'        => ['label' => 'Dropdown',             'icon' => 'fa-solid fa-caret-down'],
+        'radio_group'     => ['label' => 'Radio Group',          'icon' => 'fa-solid fa-circle-dot'],
         'multi_picker'    => ['label' => 'Multi Picker',         'icon' => 'fa-solid fa-list-check'],
         'date'            => ['label' => 'Date Picker',          'icon' => 'fa-solid fa-calendar'],
         'datetime'        => ['label' => 'Date & Time Picker',   'icon' => 'fa-solid fa-calendar-day'],
         'time'            => ['label' => 'Time Picker',          'icon' => 'fa-solid fa-clock'],
+        'duration'        => ['label' => 'Duration Picker',      'icon' => 'fa-solid fa-stopwatch'],
         'name'            => ['label' => 'Name Field',           'icon' => 'fa-solid fa-id-card'],
         'country'         => ['label' => 'Country Picker',       'icon' => 'fa-solid fa-globe'],
         'state'           => ['label' => 'State Picker',         'icon' => 'fa-solid fa-map-location-dot'],
@@ -357,7 +359,7 @@ function dm_fetch_record(PDO $conn, string $p, int $recordId): ?array
 function dm_fetch_users(PDO $conn, string $p): array
 {
     try {
-        $stmt = $conn->query("SELECT id, username FROM users ORDER BY username ASC");
+        $stmt = $conn->query("SELECT id, username, first_name, last_name FROM {$p}users ORDER BY username ASC");
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         return [];

@@ -99,21 +99,23 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
         </div>
 
         <!-- Settings -->
-        <div class="sidebar-section" onclick="toggleSidebarGroup('group-set')">
-            <span>SETTINGS</span> <i class="fa-solid fa-chevron-down toggle-caret"></i>
-        </div>
-        <div class="sidebar-group" id="group-set">
-            <a href="profile.php" class="nav-item <?= $currentFile === 'profile.php' ? 'active' : '' ?>">
-                <i class="fa-solid fa-briefcase"></i><span class="nav-text">Business Profile</span>
-            </a>
-            <a href="invoice_settings.php"
-                class="nav-item <?= $currentFile === 'invoice_settings.php' ? 'active' : '' ?>">
-                <i class="fa-solid fa-print"></i><span class="nav-text">Invoice Settings</span>
-            </a>
-            <a href="module_manager.php" class="nav-item <?= $currentFile === 'module_manager.php' ? 'active' : '' ?>">
-                <i class="fa-solid fa-cubes"></i><span class="nav-text">Module Manager</span>
-            </a>
-        </div>
+        <?php if (!empty($_SESSION['is_admin'])): ?>
+            <div class="sidebar-section" onclick="toggleSidebarGroup('group-set')">
+                <span>SETTINGS</span> <i class="fa-solid fa-chevron-down toggle-caret"></i>
+            </div>
+            <div class="sidebar-group" id="group-set">
+                <a href="profile.php" class="nav-item <?= $currentFile === 'profile.php' ? 'active' : '' ?>">
+                    <i class="fa-solid fa-briefcase"></i><span class="nav-text">Business Profile</span>
+                </a>
+                <a href="invoice_settings.php"
+                    class="nav-item <?= $currentFile === 'invoice_settings.php' ? 'active' : '' ?>">
+                    <i class="fa-solid fa-print"></i><span class="nav-text">Invoice Settings</span>
+                </a>
+                <a href="module_manager.php" class="nav-item <?= $currentFile === 'module_manager.php' ? 'active' : '' ?>">
+                    <i class="fa-solid fa-cubes"></i><span class="nav-text">Module Manager</span>
+                </a>
+            </div>
+        <?php endif; ?>
     </div>
 </aside>
 

@@ -1,6 +1,7 @@
 <?php
 require_once 'config/database.php';
 require_once 'includes/upload_paths.php';
+require_once 'includes/dynamic_modules.php';
 
 $db = Database::getMasterConn();
 $prefix = Database::getMasterPrefix();
@@ -62,10 +63,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
 
                         // 2. Insert the admin user with the role_id
                         $stmt = $tenantConn->prepare("
-                            INSERT INTO users (username, password, email, role_id)
-                            VALUES ('admin', ?, 'admin@company.com', ?)
+                            INSERT INTO users (username, password, email, role_id, is_admin)
+                            VALUES ('admin', ?, 'admin@company.com', ?, 1)
                         ");
                         $stmt->execute([$pass, $roleId]);
+                    }
+
+                    // Create Default Calls Module
+                    dm_ensure_tables($tenantConn, '');
+                    $connModules = $tenantConn->prepare("INSERT INTO modules (name, slug, icon, description, sort_order) VALUES ('Calls Module', 'calls_module', 'fa-solid fa-phone-volume', 'Manage inbound and outbound calls', 1)");
+                    $connModules->execute();
+                    $moduleId = $tenantConn->lastInsertId();
+
+                    $connBlocks = $tenantConn->prepare("INSERT INTO module_blocks (module_id, name, sort_order) VALUES (?, 'Call Log Details', 0)");
+                    $connBlocks->execute([$moduleId]);
+                    $blockId = $tenantConn->lastInsertId();
+
+                    $fields = [
+                        ['Assignee', 'assigned_to', 0, 0],
+                        ['Caller Name', 'text', 1, 1],
+                        ['From Number', 'phone', 2, 1],
+                        ['To Number', 'phone', 3, 1],
+                        ['Call Start', 'datetime', 4, 1],
+                        ['Call End', 'datetime', 5, 1],
+                        ['Duration', 'text', 6, 0],
+                        ['Call Type', 'dropdown', 7, 1],
+                        ['Notes or Comments', 'textarea', 8, 0],
+                    ];
+
+                    $stmtField = $tenantConn->prepare("INSERT INTO module_fields (block_id, module_id, field_key, label, field_type, is_required, is_list_visible, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+
+                    foreach ($fields as $f) {
+                        $fieldKey = strtolower(str_replace(' ', '_', $f[0]));
+                        $stmtField->execute([$blockId, $moduleId, $fieldKey, $f[0], $f[1], $f[3], 1, $f[2]]);
+                        if ($f[1] === 'dropdown') {
+                            $fieldId = $tenantConn->lastInsertId();
+                            $stmtOpt = $tenantConn->prepare("INSERT INTO module_field_options (field_id, label, value, sort_order) VALUES (?, ?, ?, ?)");
+                            $stmtOpt->execute([$fieldId, 'Incoming', 'Incoming', 0]);
+                            $stmtOpt->execute([$fieldId, 'Outgoing', 'Outgoing', 1]);
+                            $stmtOpt->execute([$fieldId, 'Missed', 'Missed', 2]);
+                            $stmtOpt->execute([$fieldId, 'Rejected', 'Rejected', 3]);
+                        }
                     }
 
                     // Save in master DB (WITH LOGO)

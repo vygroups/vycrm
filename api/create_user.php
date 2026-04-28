@@ -16,6 +16,7 @@ $email = $_POST['email'] ?? '';
 $password = $_POST['password'] ?? '';
 $roleId = $_POST['role_id'] ?? null;
 if ($roleId === '') $roleId = null;
+$is_admin = isset($_POST['is_admin']) && $_POST['is_admin'] === '1' ? 1 : 0;
 
 if (!$username || !$email || !$password) {
     echo json_encode(['success' => false, 'message' => 'Missing required fields']);
@@ -37,8 +38,8 @@ try {
     
     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
     
-    $stmt = $conn->prepare("INSERT INTO {$prefix}users (username, first_name, last_name, email, password, role_id) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$username, $first_name, $last_name, $email, $hashedPassword, $roleId]);
+    $stmt = $conn->prepare("INSERT INTO {$prefix}users (username, first_name, last_name, email, password, role_id, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$username, $first_name, $last_name, $email, $hashedPassword, $roleId, $is_admin]);
     
     echo json_encode(['success' => true, 'message' => 'User created successfully']);
 } catch (Exception $e) {

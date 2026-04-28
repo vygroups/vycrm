@@ -57,6 +57,7 @@ try {
         $_SESSION['username'] = $user['username'];
         $_SESSION['first_name'] = $user['first_name'] ?? '';
         $_SESSION['last_name'] = $user['last_name'] ?? '';
+        $_SESSION['is_admin'] = (int)($user['is_admin'] ?? 0);
         $_SESSION['tenant_slug'] = $companySlug;
         $_SESSION['tenant_db'] = $company['db_name'];
         $_SESSION['tenant_prefix'] = $tenantPrefix;

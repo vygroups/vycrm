@@ -8,15 +8,38 @@ $dbName = $_SESSION['tenant_db'];
 $prefix = $_SESSION['tenant_prefix'];
 $conn = Database::getTenantConn($dbName);
 
+// Fetch child roles for hierarchy filtering
+$childRoleIds = [];
+$isAdmin = !empty($_SESSION['is_admin']);
+$myRoleId = $_SESSION['role_id'] ?? null;
+
+if (!$isAdmin && $myRoleId) {
+    try {
+        $stmt = $conn->prepare("SELECT child_role_id FROM {$prefix}role_hierarchy WHERE parent_role_id = ?");
+        $stmt->execute([$myRoleId]);
+        $childRoleIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Exception $e) {}
+}
+
 // Fetch All Pending Requests
 try {
+    $whereClause = "WHERE l.status = 'pending'";
+    if (!$isAdmin) {
+        if (!empty($childRoleIds)) {
+            $whereClause .= " AND u.role_id IN (" . implode(',', array_map('intval', $childRoleIds)) . ")";
+        } else {
+            $whereClause .= " AND 1=0"; // Show nothing if no child roles
+        }
+    }
+
     // Leaves
-    $stmtLeaves = $conn->prepare("SELECT l.*, u.username FROM {$prefix}leaves l JOIN {$prefix}users u ON l.user_id = u.id WHERE l.status = 'pending' ORDER BY l.created_at DESC");
+    $stmtLeaves = $conn->prepare("SELECT l.*, u.username, u.first_name, u.last_name FROM {$prefix}leaves l JOIN {$prefix}users u ON l.user_id = u.id $whereClause ORDER BY l.created_at DESC");
     $stmtLeaves->execute();
     $pendingLeaves = $stmtLeaves->fetchAll(PDO::FETCH_ASSOC);
 
-    // Permissions
-    $stmtPerms = $conn->prepare("SELECT p.*, u.username FROM {$prefix}permissions p JOIN {$prefix}users u ON p.user_id = u.id WHERE p.status = 'pending' ORDER BY p.created_at DESC");
+    // Permissions (using similar logic for p)
+    $whereClauseP = str_replace('l.', 'p.', $whereClause);
+    $stmtPerms = $conn->prepare("SELECT p.*, u.username, u.first_name, u.last_name FROM {$prefix}permissions p JOIN {$prefix}users u ON p.user_id = u.id $whereClauseP ORDER BY p.created_at DESC");
     $stmtPerms->execute();
     $pendingPerms = $stmtPerms->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
@@ -57,7 +80,10 @@ try {
                         <tbody>
                             <?php foreach ($pendingLeaves as $l): ?>
                             <tr id="leave-<?= $l['id'] ?>">
-                                <td class="text-bold"><?= htmlspecialchars($l['username']) ?></td>
+                                <td class="text-bold"><?php 
+                                    $fullName = trim(($l['first_name'] ?? '') . ' ' . ($l['last_name'] ?? ''));
+                                    echo htmlspecialchars($fullName ?: $l['username']);
+                                ?></td>
                                 <td><?= htmlspecialchars($l['leave_type']) ?></td>
                                 <td><?= $l['from_date'] ?></td>
                                 <td><?= $l['to_date'] ?></td>
@@ -89,7 +115,10 @@ try {
                         <tbody>
                             <?php foreach ($pendingPerms as $p): ?>
                             <tr id="perm-<?= $p['id'] ?>">
-                                <td class="text-bold"><?= htmlspecialchars($p['username']) ?></td>
+                                <td class="text-bold"><?php 
+                                    $fullName = trim(($p['first_name'] ?? '') . ' ' . ($p['last_name'] ?? ''));
+                                    echo htmlspecialchars($fullName ?: $p['username']);
+                                ?></td>
                                 <td><?= $p['date'] ?></td>
                                 <td><?= htmlspecialchars($p['time_window']) ?></td>
                                 <td><?= htmlspecialchars($p['duration']) ?></td>

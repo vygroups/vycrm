@@ -61,7 +61,7 @@ $v = time();
                 <div class="table-responsive">
                     <table class="crm-table">
                         <thead>
-                            <tr><th>ID</th><th>User</th><th>Username</th><th>Email</th><th>Role</th><th>Created At</th><th>Actions</th></tr>
+                            <tr><th>ID</th><th>User</th><th>Username</th><th>Email</th><th>Role</th><th>Admin</th><th>Created At</th><th>Actions</th></tr>
                         </thead>
                         <tbody>
                             <?php foreach ($users as $u): ?>
@@ -74,6 +74,13 @@ $v = time();
                                     <span class="role-badge">
                                         <?= htmlspecialchars($u['role_name'] ?? 'No Role') ?>
                                     </span>
+                                </td>
+                                <td>
+                                    <?php if (!empty($u['is_admin'])): ?>
+                                        <span class="badge" style="background:rgba(255,0,0,0.1);color:red;padding:4px 8px;border-radius:4px;font-size:11px;">Yes</span>
+                                    <?php else: ?>
+                                        <span class="badge" style="background:#eee;color:#666;padding:4px 8px;border-radius:4px;font-size:11px;">No</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td><?= date('M d, Y', strtotime($u['created_at'])) ?></td>
                                 <td><button class="btn-icon" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button></td>
@@ -125,6 +132,10 @@ $v = time();
                     <?php endforeach; ?>
                 </select>
                 <p style="font-size:11px; color:var(--text-muted); margin-top:5px;">Manage roles in <a href="roles.php">Roles Configuration</a></p>
+            </div>
+            <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                <input type="checkbox" name="is_admin" id="is_admin" value="1" style="width:20px;height:20px;accent-color:var(--primary);cursor:pointer;">
+                <label for="is_admin" class="form-label" style="margin:0;cursor:pointer;">Admin Permission <small class="text-muted">(Grants access to settings & company management)</small></label>
             </div>
             <button type="submit" class="btn-primary" style="margin-top:20px;">CREATE USER ACCOUNT</button>
         </form>

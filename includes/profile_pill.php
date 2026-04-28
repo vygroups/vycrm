@@ -18,9 +18,11 @@ $profile_pic = !empty($_SESSION['profile_picture']) ? htmlspecialchars($_SESSION
     <div class="profile-dropdown" id="profileDropdown">
         <a href="/user_profile.php" class="dropdown-item"><i class="fa-regular fa-user"></i> My Profile</a>
         <div class="dropdown-divider"></div>
-        <a href="/users.php" class="dropdown-item"><i class="fa-solid fa-users"></i> User Management</a>
-        <a href="/roles.php" class="dropdown-item"><i class="fa-solid fa-wand-magic-sparkles"></i> Studio (Roles)</a>
-        <div class="dropdown-divider"></div>
+        <?php if (!empty($_SESSION['is_admin'])): ?>
+            <a href="/users.php" class="dropdown-item"><i class="fa-solid fa-users"></i> User Management</a>
+            <a href="/roles.php" class="dropdown-item"><i class="fa-solid fa-wand-magic-sparkles"></i> Studio (Roles)</a>
+            <div class="dropdown-divider"></div>
+        <?php endif; ?>
         <a href="/logout.php" class="dropdown-item" style="color: var(--hot);"><i
                 class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a>
     </div>

@@ -52,6 +52,8 @@ foreach ($module['blocks'] as $block) {
     <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css" type="text/css">
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.default.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <style>
         .ts-wrapper { width: 100%; }
         .ts-control { border-radius: 12px; border: 1px solid var(--border); padding: 8px 16px; font-size: 14px; min-height: 44px; background: var(--surface); display: flex; align-items: center; box-shadow: none !important; }
@@ -112,6 +114,15 @@ foreach ($module['blocks'] as $block) {
                                             <option value="<?= htmlspecialchars($opt['value']) ?>" <?= $val === $opt['value'] ? 'selected' : '' ?>><?= htmlspecialchars($opt['label']) ?></option>
                                             <?php endforeach; ?>
                                         </select>
+                                    <?php break; case 'radio_group': ?>
+                                        <div class="dm-radio-group">
+                                            <?php foreach($field['options'] as $idx => $opt): ?>
+                                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;">
+                                                <input type="radio" name="radio_<?= $fid ?>" class="dm-field" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($opt['value']) ?>" <?= $val === $opt['value'] ? 'checked' : '' ?> <?= ($field['is_required'] && $idx === 0) ? 'required' : '' ?> style="accent-color:var(--primary);width:16px;height:16px;">
+                                                <span style="font-size:14px;"><?= htmlspecialchars($opt['label']) ?></span>
+                                            </label>
+                                            <?php endforeach; ?>
+                                        </div>
                                     <?php break; case 'multi_picker': ?>
                                         <?php $selectedVals = json_decode($val, true) ?: []; ?>
                                         <select multiple class="dm-field dm-multi-picker dm-tom-select" data-field-id="<?= $fid ?>" placeholder="Search and select...">
@@ -120,11 +131,16 @@ foreach ($module['blocks'] as $block) {
                                             <?php endforeach; ?>
                                         </select>
                                     <?php break; case 'date': ?>
-                                        <input type="date" class="form-control dm-field" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?>>
+                                        <input type="text" class="form-control dm-field dm-date-picker" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?> placeholder="Select Date">
                                     <?php break; case 'datetime': ?>
-                                        <input type="datetime-local" class="form-control dm-field" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?>>
+                                        <input type="text" class="form-control dm-field dm-datetime-picker" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?> placeholder="Select Date & Time">
                                     <?php break; case 'time': ?>
-                                        <input type="time" class="form-control dm-field" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?>>
+                                        <input type="text" class="form-control dm-field dm-time-picker" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?> placeholder="Select Time">
+                                    <?php break; case 'duration': ?>
+                                        <div style="display:flex;gap:10px;align-items:center;">
+                                            <input type="number" class="form-control dm-field" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?> min="0" placeholder="e.g. 100">
+                                            <span class="text-muted" style="font-size:14px;">seconds</span>
+                                        </div>
                                     <?php break; case 'name': ?>
                                         <?php $nameParts = json_decode($val, true) ?: ['first'=>'','last'=>'']; ?>
                                         <div style="display:flex;gap:12px;">
@@ -149,8 +165,11 @@ foreach ($module['blocks'] as $block) {
                                     <?php break; case 'assigned_to': ?>
                                         <select class="form-control dm-field" data-field-id="<?= $fid ?>" <?= $field['is_required'] ? 'required' : '' ?>>
                                             <option value="">Select User...</option>
-                                            <?php foreach($users as $u): ?>
-                                            <option value="<?= $u['id'] ?>" <?= $val == $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['username']) ?></option>
+                                            <?php foreach($users as $u): 
+                                                $displayName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                                                $displayText = $displayName ? "$displayName (" . $u['username'] . ")" : $u['username'];
+                                            ?>
+                                            <option value="<?= $u['id'] ?>" <?= $val == $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($displayText) ?></option>
                                             <?php endforeach; ?>
                                         </select>
                                     <?php break; case 'api_call_picker': ?>
@@ -241,6 +260,10 @@ function getFieldValue(fieldId) {
     const el = document.querySelector(`.dm-field[data-field-id="${fieldId}"]`);
     if (el) {
         if (el.type === 'checkbox') return el.checked ? '1' : '';
+        if (el.type === 'radio') {
+            const checkedRadio = document.querySelector(`input[type="radio"][data-field-id="${fieldId}"]:checked`);
+            return checkedRadio ? checkedRadio.value : '';
+        }
         return el.value;
     }
     const names = document.querySelectorAll(`.dm-name-field[data-field-id="${fieldId}"]`);
@@ -265,6 +288,23 @@ function collectValues() {
 
 function saveRecord() {
     if (IS_VIEW_ONLY) return;
+    
+    // Manual Mandatory Field Validation
+    let missingFields = [];
+    document.querySelectorAll('.dm-field[required], .dm-tom-select[required], .dm-name-field[required], input[type="file"][required]').forEach(el => {
+        const fid = el.dataset.fieldId;
+        const val = getFieldValue(fid);
+        if (!val || val === '""' || val === '[]') {
+            const label = el.closest('.mr-field-group').querySelector('.mr-field-label').textContent.replace('*', '').trim();
+            if (!missingFields.includes(label)) missingFields.push(label);
+        }
+    });
+
+    if (missingFields.length > 0) {
+        alert('Please fill in the following required fields: \n- ' + missingFields.join('\n- '));
+        return;
+    }
+
     const values = collectValues();
     const formData = new FormData();
     formData.append('action', 'save_record');
@@ -442,6 +482,37 @@ document.querySelectorAll('.dm-attachment input[type="file"]').forEach(input => 
             }
         }
     });
+});
+
+// Initialize Flatpickr for Date & Time fields
+const dateFormat = "<?= $_SESSION['date_format'] ?? 'd M, Y' ?>";
+const is12Hour = "<?= $_SESSION['time_format'] ?? '12h' ?>" === '12h';
+const timeFormat = is12Hour ? 'h:i K' : 'H:i';
+
+flatpickr('.dm-date-picker', {
+    altInput: true,
+    altFormat: dateFormat,
+    dateFormat: "Y-m-d",
+    allowInput: true
+});
+
+flatpickr('.dm-datetime-picker', {
+    enableTime: true,
+    altInput: true,
+    altFormat: dateFormat + " " + timeFormat,
+    dateFormat: "Y-m-d H:i",
+    time_24hr: !is12Hour,
+    allowInput: true
+});
+
+flatpickr('.dm-time-picker', {
+    enableTime: true,
+    noCalendar: true,
+    altInput: true,
+    altFormat: timeFormat,
+    dateFormat: "H:i",
+    time_24hr: !is12Hour,
+    allowInput: true
 });
 
 // API Call Picker search

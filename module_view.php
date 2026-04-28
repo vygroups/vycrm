@@ -21,6 +21,13 @@ $data = dm_fetch_records($conn, $prefix, $moduleId, $search ?: null);
 $fields = $data['fields'];
 $records = $data['records'];
 $total = $data['total'];
+
+$usersStmt = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users");
+$usersList = [];
+foreach ($usersStmt->fetchAll(PDO::FETCH_ASSOC) as $u) {
+    $name = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+    $usersList[$u['id']] = $name ?: $u['username'];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,7 +62,9 @@ $total = $data['total'];
                     </form>
                     <div style="display:flex;gap:10px;align-items:center;">
                         <span class="text-muted text-sm"><?= $total ?> record<?= $total !== 1 ? 's' : '' ?></span>
+                        <?php if (!empty($_SESSION['is_admin'])): ?>
                         <a href="module_manager.php?edit=<?= $moduleId ?>" class="mm-btn mm-btn-sm mm-btn-outline"><i class="fa-solid fa-cog"></i> Configure</a>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -69,7 +78,7 @@ $total = $data['total'];
                                     <th><?= htmlspecialchars($f['label']) ?></th>
                                     <?php endforeach; ?>
                                     <th>Created</th>
-                                    <th>Actions</th>
+                                    <th class="sticky-actions-th">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -89,6 +98,27 @@ $total = $data['total'];
                                         } elseif ($f['field_type'] === 'multi_picker') {
                                             $decoded = json_decode($val, true);
                                             echo is_array($decoded) ? htmlspecialchars(implode(', ', $decoded)) : htmlspecialchars($val);
+                                        } elseif ($f['field_type'] === 'date' && $val) {
+                                            $df = $_SESSION['date_format'] ?? 'd M, Y';
+                                            echo htmlspecialchars(date($df, strtotime($val)));
+                                        } elseif ($f['field_type'] === 'datetime' && $val) {
+                                            $df = $_SESSION['date_format'] ?? 'd M, Y';
+                                            $tf = ($_SESSION['time_format'] ?? '12h') === '24h' ? 'H:i' : 'h:i A';
+                                            echo htmlspecialchars(date("$df $tf", strtotime($val)));
+                                        } elseif ($f['field_type'] === 'time' && $val) {
+                                            $tf = ($_SESSION['time_format'] ?? '12h') === '24h' ? 'H:i' : 'h:i A';
+                                            echo htmlspecialchars(date($tf, strtotime($val)));
+                                        } elseif ($f['field_type'] === 'assigned_to' && $val) {
+                                            echo htmlspecialchars($usersList[$val] ?? "User #$val");
+                                        } elseif ($f['field_type'] === 'duration' && $val !== '') {
+                                            $seconds = (int)$val;
+                                            if ($seconds < 60) {
+                                                echo $seconds . ' sec';
+                                            } elseif ($seconds < 3600) {
+                                                echo floor($seconds / 60) . ' min ' . ($seconds % 60) . ' sec';
+                                            } else {
+                                                echo floor($seconds / 3600) . ' hr ' . floor(($seconds % 3600) / 60) . ' min';
+                                            }
                                         } else {
                                             $display = mb_strlen($val) > 50 ? mb_substr($val, 0, 50) . '…' : $val;
                                             echo htmlspecialchars($display ?: '-');
@@ -96,7 +126,7 @@ $total = $data['total'];
                                     ?></td>
                                     <?php endforeach; ?>
                                     <td class="text-muted text-sm"><?= date('d M Y', strtotime($rec['created_at'])) ?></td>
-                                    <td>
+                                    <td class="sticky-actions-td">
                                         <div style="display:flex;gap:4px;">
                                             <a href="module_record.php?module=<?= $moduleId ?>&record=<?= $rec['id'] ?>&view=1" class="mm-icon-btn" title="View"><i class="fa-solid fa-eye"></i></a>
                                             <a href="module_record.php?module=<?= $moduleId ?>&record=<?= $rec['id'] ?>" class="mm-icon-btn" title="Edit"><i class="fa-solid fa-pencil"></i></a>
