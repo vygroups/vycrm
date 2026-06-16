@@ -6,18 +6,16 @@ require_once '../config/database.php';
 date_default_timezone_set('Asia/Kolkata');
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
-    exit;
-}
+require_once '../includes/api_auth.php';
 
-$user_id = $_SESSION['user_id'];
-$dbName = $_SESSION['tenant_db'];
-$prefix = $_SESSION['tenant_prefix'];
-$conn = Database::getTenantConn($dbName);
-
-if (!$conn) {
-    echo json_encode(['success' => false, 'message' => 'Database connection failed']);
+try {
+    $context = api_require_context();
+    $user_id = $context['user_id'];
+    $dbName = $context['db_name'];
+    $prefix = $context['prefix'];
+    $conn = $context['conn'];
+} catch (Throwable $e) {
+    echo json_encode(['success' => false, 'message' => 'Unauthorized: ' . $e->getMessage()]);
     exit;
 }
 

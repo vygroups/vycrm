@@ -21,7 +21,7 @@ function api_ensure_token_table(PDO $masterConn, string $masterPrefix): void
 
 function api_extract_bearer_token(): ?string
 {
-    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['Authorization'] ?? '';
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['Authorization'] ?? $_SERVER['HTTP_X_AUTHORIZATION'] ?? $_SERVER['X_Authorization'] ?? $_SERVER['HTTP_X_API_TOKEN'] ?? $_SERVER['X_API_Token'] ?? '';
     if ($header && preg_match('/Bearer\s+(.+)/i', $header, $matches)) {
         return trim($matches[1]);
     }
@@ -88,13 +88,13 @@ function api_require_context(): array
     $stmt = $masterConn->prepare("
         SELECT *
         FROM {$masterPrefix}api_tokens
-        WHERE token_hash = ? AND expires_at > NOW()
+        WHERE token_hash = ?
         LIMIT 1
     ");
     $stmt->execute([hash('sha256', $token)]);
     $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$tokenRow) {
+    if (!$tokenRow || strtotime($tokenRow['expires_at']) < time()) {
         throw new RuntimeException('Unauthorized');
     }
 

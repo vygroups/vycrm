@@ -4,9 +4,9 @@ function vycrm_module_config(): array
 {
     return [
         'billing' => [
-            'title' => 'Billing & Transactions',
-            'section_label' => 'Billing & Transactions',
-            'icon' => 'fa-solid fa-wallet',
+            'title' => 'Invoices',
+            'section_label' => 'Invoices',
+            'icon' => 'fa-solid fa-file-invoice-dollar',
             'description' => 'Sales, purchases, customers, vendors, products, and daily transaction workflows.',
             'links' => [
                 ['label' => 'Customers', 'href' => 'customers.php'],
@@ -18,9 +18,9 @@ function vycrm_module_config(): array
             ],
         ],
         'hr_operations' => [
-            'title' => 'Attendance & Operations',
-            'section_label' => 'Attendance & Operations',
-            'icon' => 'fa-solid fa-users-gear',
+            'title' => 'Attendance',
+            'section_label' => 'Attendance',
+            'icon' => 'fa-solid fa-calendar-check',
             'description' => 'Attendance, reports, approvals, and day-to-day employee operations from one place.',
             'links' => [
                 ['label' => 'Attendance', 'href' => 'attendance.php'],

@@ -5,13 +5,18 @@ require_once __DIR__ . '/dynamic_modules.php';
 $currentFile = basename($_SERVER['PHP_SELF']);
 $moduleConfig = vycrm_module_config();
 
-// Load dynamic modules for sidebar
+// Load dynamic and core modules for sidebar
 $_sidebarDynModules = [];
+$_sidebarAttendanceEnabled = false;
+$_sidebarBillingEnabled = false;
+
 try {
     $_sidebarConn = Database::getTenantConn($_SESSION['tenant_db']);
     if ($_sidebarConn) {
         dm_ensure_tables($_sidebarConn, $_SESSION['tenant_prefix']);
         $_sidebarDynModules = dm_fetch_active_modules($_sidebarConn, $_SESSION['tenant_prefix']);
+        $_sidebarAttendanceEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'attendance_enabled', '1') === '1';
+        $_sidebarBillingEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'billing_enabled', '1') === '1';
     }
 } catch (Throwable $e) {
 }
@@ -48,8 +53,9 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
         <?php endif; ?>
 
         <!-- HR / Attendance -->
+        <?php if ($_sidebarAttendanceEnabled): ?>
         <div class="sidebar-section" onclick="toggleSidebarGroup('group-hr')">
-            <span><?= htmlspecialchars(strtoupper($moduleConfig['hr_operations']['section_label'] ?? 'ATTENDANCE')) ?></span>
+            <span>ATTENDANCE</span>
             <i class="fa-solid fa-chevron-down toggle-caret"></i>
         </div>
         <div class="sidebar-group" id="group-hr">
@@ -66,10 +72,12 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
                 <i class="fa-solid fa-clipboard-check"></i><span class="nav-text">Approvals</span>
             </a>
         </div>
+        <?php endif; ?>
 
         <!-- Billing / Invoice -->
+        <?php if ($_sidebarBillingEnabled): ?>
         <div class="sidebar-section" onclick="toggleSidebarGroup('group-bill')">
-            <span><?= htmlspecialchars(strtoupper($moduleConfig['billing']['section_label'] ?? 'BILLING')) ?></span> <i
+            <span>INVOICES</span> <i
                 class="fa-solid fa-chevron-down toggle-caret"></i>
         </div>
         <div class="sidebar-group" id="group-bill">
@@ -97,6 +105,7 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
                 <i class="fa-solid fa-boxes-stacked"></i><span class="nav-text">Products/Service</span>
             </a>
         </div>
+        <?php endif; ?>
 
         <!-- Settings -->
         <?php if (!empty($_SESSION['is_admin'])): ?>

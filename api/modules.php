@@ -71,15 +71,28 @@ try {
             $maxSort = (int)$conn->query("SELECT COALESCE(MAX(sort_order),0) FROM {$prefix}modules")->fetchColumn();
 
             $stmt = $conn->prepare("
-                INSERT INTO {$prefix}modules (name, slug, icon, description, sort_order) 
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO {$prefix}modules (name, slug, icon, description, sort_order, visibility_rule) 
+                VALUES (?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$name, $slug, $icon, $desc, $maxSort + 1]);
+            $stmt->execute([$name, $slug, $icon, $desc, $maxSort + 1, $input['visibility_rule'] ?? 'all']);
             $moduleId = (int)$conn->lastInsertId();
 
             // Auto-create a default block
             $bStmt = $conn->prepare("INSERT INTO {$prefix}module_blocks (module_id, name, sort_order) VALUES (?, 'General Information', 0)");
             $bStmt->execute([$moduleId]);
+            $blockId = (int)$conn->lastInsertId();
+
+            // Insert default system fields
+            $sysFields = [
+                ['Created By', 'sys_created_by', 'created_by_sys', 1, 0],
+                ['Created On', 'sys_created_at', 'created_at_sys', 1, 1],
+                ['Updated By', 'sys_updated_by', 'updated_by_sys', 0, 2],
+                ['Updated On', 'sys_updated_at', 'updated_at_sys', 0, 3],
+            ];
+            $sfStmt = $conn->prepare("INSERT INTO {$prefix}module_fields (block_id, module_id, label, field_type, field_key, is_list_visible, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            foreach ($sysFields as $f) {
+                $sfStmt->execute([$blockId, $moduleId, $f[0], $f[1], $f[2], $f[3], $f[4]]);
+            }
 
             commerce_json_response(['success' => true, 'id' => $moduleId, 'slug' => $slug]);
 
@@ -88,7 +101,7 @@ try {
             if (!$id) throw new RuntimeException('Module ID required');
             $sets = [];
             $params = [];
-            foreach (['name', 'icon', 'description', 'status'] as $col) {
+            foreach (['name', 'icon', 'description', 'status', 'visibility_rule'] as $col) {
                 if (isset($input[$col])) {
                     $sets[] = "$col = ?";
                     $params[] = $input[$col];
@@ -103,9 +116,24 @@ try {
             $conn->prepare("UPDATE {$prefix}modules SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
             commerce_json_response(['success' => true]);
 
+        case 'update_system_setting':
+            $key = $input['key'] ?? '';
+            $value = $input['value'] ?? '';
+            if (!$key) throw new RuntimeException('Setting key required');
+            dm_set_system_setting($conn, $prefix, $key, $value);
+            commerce_json_response(['success' => true]);
+
         case 'delete':
             $id = (int)($input['id'] ?? 0);
             if (!$id) throw new RuntimeException('Module ID required');
+            
+            // Protect core modules
+            $chk = $conn->prepare("SELECT module_type FROM {$prefix}modules WHERE id = ?");
+            $chk->execute([$id]);
+            if ($chk->fetchColumn() === 'core') {
+                throw new RuntimeException('Cannot delete system modules');
+            }
+
             $conn->prepare("DELETE FROM {$prefix}modules WHERE id = ?")->execute([$id]);
             commerce_json_response(['success' => true]);
 
@@ -318,7 +346,7 @@ try {
             try {
                 if ($recordId) {
                     // Update existing
-                    $conn->prepare("UPDATE {$prefix}module_records SET updated_at = NOW() WHERE id = ?")->execute([$recordId]);
+                    $conn->prepare("UPDATE {$prefix}module_records SET updated_at = NOW(), updated_by = ? WHERE id = ?")->execute([$userId, $recordId]);
                 } else {
                     // Create new
                     $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by) VALUES (?, ?)")->execute([$moduleId, $userId]);

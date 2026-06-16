@@ -5,7 +5,7 @@ session_start();
 if (!isset($_SESSION['token']) || time() > $_SESSION['expiry']) {
     $tenantSlug = preg_replace('/[^a-z0-9_-]/', '', strtolower($_SESSION['tenant_slug'] ?? ''));
     session_destroy();
-    header('Location: ' . ($tenantSlug !== '' ? '/login/' . $tenantSlug : '/index.php'));
+    header('Location: ' . ($tenantSlug !== '' ? '/index.php?company=' . $tenantSlug : '/index.php'));
     exit;
 }
 

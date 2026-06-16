@@ -60,6 +60,8 @@ foreach ($module['blocks'] as $block) {
         .ts-control.focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(123,94,240,0.2) !important; }
         .ts-dropdown { border-radius: 12px; border-color: var(--border); box-shadow: var(--shadow-lg); font-size: 14px; z-index: 10000; overflow: hidden; margin-top: 4px; }
         .ts-dropdown .active { background-color: rgba(123,94,240,0.1); color: var(--primary); }
+        .dm-radio-group { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 5px 0; }
+        .dm-radio-group label { margin-bottom: 0 !important; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -214,6 +216,10 @@ foreach ($module['blocks'] as $block) {
                                             <input type="text" class="form-control dm-field" data-field-id="<?= $fid ?>" placeholder="Latitude, Longitude" value="<?= htmlspecialchars($val) ?>">
                                             <button class="mm-icon-btn" style="position:absolute; right:5px; top:5px; background:var(--surface);" onclick="openMapPicker(<?= $fid ?>, 'coordinates')" type="button" title="Pick on map"><i class="fa-solid fa-location-crosshairs" style="color:var(--primary);"></i></button>
                                         </div>
+                                    <?php break; case 'sys_created_by': case 'sys_created_at': case 'sys_updated_by': case 'sys_updated_at': ?>
+                                        <div style="padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; color: var(--text-muted); min-height: 42px; display: flex; align-items: center;">
+                                            <?= htmlspecialchars($val ?: 'N/A') ?>
+                                        </div>
                                     <?php break; default: ?>
                                         <input type="text" class="form-control dm-field" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>">
                                 <?php endswitch; ?>
@@ -291,7 +297,7 @@ function saveRecord() {
     
     // Manual Mandatory Field Validation
     let missingFields = [];
-    document.querySelectorAll('.dm-field[required], .dm-tom-select[required], .dm-name-field[required], input[type="file"][required]').forEach(el => {
+    document.querySelectorAll('[data-field-id][required]').forEach(el => {
         const fid = el.dataset.fieldId;
         const val = getFieldValue(fid);
         if (!val || val === '""' || val === '[]') {

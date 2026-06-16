@@ -3,22 +3,12 @@ require_once __DIR__ . '/../config/database.php';
 
 function commerce_get_tenant_context(): array
 {
-    if (!isset($_SESSION['user_id'], $_SESSION['tenant_db'], $_SESSION['tenant_prefix'])) {
-        throw new RuntimeException('Unauthorized');
+    require_once __DIR__ . '/api_auth.php';
+    try {
+        return api_require_context();
+    } catch (Throwable $e) {
+        throw new RuntimeException('Unauthorized: ' . $e->getMessage());
     }
-
-    $conn = Database::getTenantConn($_SESSION['tenant_db']);
-    if (!$conn) {
-        throw new RuntimeException('Database connection failed');
-    }
-
-    return [
-        'user_id' => (int) $_SESSION['user_id'],
-        'username' => $_SESSION['username'] ?? '',
-        'db_name' => $_SESSION['tenant_db'],
-        'prefix' => $_SESSION['tenant_prefix'],
-        'conn' => $conn,
-    ];
 }
 
 function commerce_ensure_tables(PDO $conn, string $prefix): void
@@ -283,6 +273,133 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             repeat_header TINYINT(1) NOT NULL DEFAULT 0,
             default_printer TINYINT(1) NOT NULL DEFAULT 1,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    /* ──────────────────────────── DYNAMIC MODULES SCHEMA ──────────────────────────── */
+
+    // 1. Modules
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}modules (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(150) NOT NULL,
+            slug VARCHAR(150) NOT NULL UNIQUE,
+            icon VARCHAR(100) DEFAULT 'fa-solid fa-cube',
+            description TEXT DEFAULT NULL,
+            status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+            sort_order INT NOT NULL DEFAULT 0,
+            visibility_rule ENUM('all','owner','role_down','role_equal_down','role_up') NOT NULL DEFAULT 'all',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_modules_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // 2. System Settings
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}system_settings (
+            setting_key VARCHAR(100) PRIMARY KEY,
+            setting_value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $conn->exec("INSERT IGNORE INTO {$prefix}system_settings (setting_key, setting_value) VALUES ('attendance_enabled', '1'), ('billing_enabled', '1')");
+
+    // 3. Blocks (sections within a module form)
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_blocks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            module_id INT NOT NULL,
+            name VARCHAR(150) NOT NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE,
+            INDEX idx_blocks_module (module_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // 4. Fields
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_fields (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            block_id INT NOT NULL,
+            module_id INT NOT NULL,
+            field_key VARCHAR(100) NOT NULL,
+            label VARCHAR(150) NOT NULL,
+            field_type VARCHAR(50) NOT NULL DEFAULT 'text',
+            placeholder VARCHAR(255) DEFAULT NULL,
+            default_value TEXT DEFAULT NULL,
+            is_required TINYINT(1) NOT NULL DEFAULT 0,
+            is_unique TINYINT(1) NOT NULL DEFAULT 0,
+            is_searchable TINYINT(1) NOT NULL DEFAULT 0,
+            is_list_visible TINYINT(1) NOT NULL DEFAULT 1,
+            sort_order INT NOT NULL DEFAULT 0,
+            config JSON DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (block_id) REFERENCES {$prefix}module_blocks(id) ON DELETE CASCADE,
+            FOREIGN KEY (module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE,
+            INDEX idx_fields_block (block_id),
+            INDEX idx_fields_module (module_id),
+            UNIQUE KEY uk_field_key_module (module_id, field_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // 5. Field Options (for dropdown / multi_picker)
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_field_options (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            field_id INT NOT NULL,
+            label VARCHAR(255) NOT NULL,
+            value VARCHAR(255) NOT NULL,
+            sort_order INT NOT NULL DEFAULT 0,
+            FOREIGN KEY (field_id) REFERENCES {$prefix}module_fields(id) ON DELETE CASCADE,
+            INDEX idx_options_field (field_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // 6. Field Rules (dependencies & conditionals)
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_field_rules (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            field_id INT NOT NULL,
+            rule_type ENUM('dependency','conditional') NOT NULL,
+            source_field_id INT NOT NULL,
+            operator VARCHAR(20) NOT NULL DEFAULT 'equals',
+            value TEXT DEFAULT NULL,
+            action VARCHAR(50) NOT NULL DEFAULT 'show',
+            config JSON DEFAULT NULL,
+            FOREIGN KEY (field_id) REFERENCES {$prefix}module_fields(id) ON DELETE CASCADE,
+            FOREIGN KEY (source_field_id) REFERENCES {$prefix}module_fields(id) ON DELETE CASCADE,
+            INDEX idx_rules_field (field_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // 7. Records (EAV — header row per module entry)
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_records (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            module_id INT NOT NULL,
+            created_by INT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            updated_by INT DEFAULT NULL,
+            FOREIGN KEY (module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE,
+            INDEX idx_records_module (module_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // 8. Record Values (EAV — one row per field value)
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_record_values (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            record_id INT NOT NULL,
+            field_id INT NOT NULL,
+            value TEXT DEFAULT NULL,
+            FOREIGN KEY (record_id) REFERENCES {$prefix}module_records(id) ON DELETE CASCADE,
+            FOREIGN KEY (field_id) REFERENCES {$prefix}module_fields(id) ON DELETE CASCADE,
+            INDEX idx_values_record (record_id),
+            INDEX idx_values_field (field_id),
+            UNIQUE KEY uk_record_field (record_id, field_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 }
