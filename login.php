@@ -62,7 +62,7 @@ try {
         echo json_encode([
             'success' => true, 
             'message' => 'Login successful',
-            'redirect' => '../dashboard.php'
+            'redirect' => '/dashboard.php'
         ]);
     } else {
         echo json_encode(['success' => false, 'message' => 'Invalid username or password']);

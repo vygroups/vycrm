@@ -8,7 +8,7 @@ $companySlug = $_GET['company'] ?? '';
 // Redirect to dashboard if already logged in for this company
 if (isset($_SESSION['token']) && isset($_SESSION['tenant_slug']) && time() < $_SESSION['expiry']) {
     if (!$companySlug || $_SESSION['tenant_slug'] === $companySlug) {
-        header('Location: dashboard.php');
+        header('Location: /dashboard.php');
         exit;
     }
 }

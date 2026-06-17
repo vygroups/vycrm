@@ -67,7 +67,7 @@ try {
         echo json_encode([
             'success' => true, 
             'message' => 'Login successful',
-            'redirect' => '../dashboard.php',
+            'redirect' => '/dashboard.php',
             'api_token' => $apiToken,
             'token_type' => 'Bearer'
         ]);
