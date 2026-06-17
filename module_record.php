@@ -130,7 +130,7 @@ foreach ($module['blocks'] as $block) {
                     <div class="mr-block-body">
                         <div class="mr-field-grid">
                         <?php foreach ($block['fields'] as $field):
-                            if (strpos($field['field_type'], 'sys_') === 0) {
+                            if (strpos($field['field_type'], 'sys_') === 0 && !$isViewOnly) {
                                 continue;
                             }
                             $fid = $field['id'];
