@@ -85,6 +85,9 @@ foreach ($module['blocks'] as $block) {
                     <div class="mr-block-body">
                         <div class="mr-field-grid">
                         <?php foreach ($block['fields'] as $field):
+                            if (strpos($field['field_type'], 'sys_') === 0) {
+                                continue;
+                            }
                             $fid = $field['id'];
                             $val = $record['values'][$fid] ?? ($field['default_value'] ?? '');
                             $fullWidth = in_array($field['field_type'], ['textarea', 'attachment', 'name']);

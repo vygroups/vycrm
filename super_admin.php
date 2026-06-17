@@ -283,7 +283,7 @@ endif; ?>
                             <td>
                                 <?= htmlspecialchars($c['name'])?>
                             </td>
-                            <td><a href="/index.php?company=<?= $c['slug']?>" target="_blank"><code>/index.php?company=<?= $c['slug']?></code></a></td>
+                            <td><a href="/<?= $c['slug']?>" target="_blank"><code>/<?= $c['slug']?></code></a></td>
                             <td><code><?= $c['db_name']?></code></td>
                             <td>
                                 <?= date('Y-m-d', strtotime($c['created_at']))?>
