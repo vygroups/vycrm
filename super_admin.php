@@ -106,6 +106,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                         }
                     }
 
+                    // Insert default system fields
+                    $sysFields = [
+                        ['Created By', 'sys_created_by', 'created_by_sys', 1, 9],
+                        ['Created On', 'sys_created_at', 'created_at_sys', 1, 10],
+                        ['Updated By', 'sys_updated_by', 'updated_by_sys', 0, 11],
+                        ['Updated On', 'sys_updated_at', 'updated_at_sys', 0, 12],
+                    ];
+                    $sfStmt = $tenantConn->prepare("INSERT INTO module_fields (block_id, module_id, label, field_type, field_key, is_list_visible, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                    foreach ($sysFields as $f) {
+                        $sfStmt->execute([$blockId, $moduleId, $f[0], $f[1], $f[2], $f[3], $f[4]]);
+                    }
+
                     // Save in master DB (WITH LOGO)
                     $stmt = $db->prepare("
                         INSERT INTO {$prefix}companies (name, slug, db_name, logo)

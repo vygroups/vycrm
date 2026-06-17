@@ -1,6 +1,30 @@
 import os
 import ftplib
+import socket
 from pathlib import Path
+
+# Monkey-patch ftplib.FTP.makepasv to handle servers that return 229 to PASV
+def custom_makepasv(self):
+    if self.af == socket.AF_INET:
+        try:
+            host, port = ftplib.parse229(self.sendcmd('EPSV'), self.sock.getpeername())
+            return host, port
+        except Exception:
+            resp = self.sendcmd('PASV')
+            if resp.startswith('229'):
+                host, port = ftplib.parse229(resp, self.sock.getpeername())
+                return host, port
+            untrusted_host, port = ftplib.parse227(resp)
+            if self.trust_server_pasv_ipv4_address:
+                host = untrusted_host
+            else:
+                host = self.sock.getpeername()[0]
+            return host, port
+    else:
+        host, port = ftplib.parse229(self.sendcmd('EPSV'), self.sock.getpeername())
+    return host, port
+
+ftplib.FTP.makepasv = custom_makepasv
 
 # FTP Credentials
 HOST = "147.93.99.228"
@@ -50,6 +74,8 @@ def main():
         ftp.quit()
         print("Deployment successful!")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Deployment failed: {e}")
 
 if __name__ == "__main__":

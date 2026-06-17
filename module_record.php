@@ -39,6 +39,33 @@ $countries = dm_get_countries();
 $states = dm_get_states();
 $allModules = dm_fetch_active_modules($conn, $prefix);
 
+// Fetch field change counts if editing an existing record
+$fieldChangeCounts = [];
+$fullRecordHistory = [];
+if ($recordId) {
+    // 1. Get counts
+    $cntStmt = $conn->prepare("
+        SELECT field_id, COUNT(*) as cnt 
+        FROM {$prefix}module_record_history 
+        WHERE record_id = ? 
+        GROUP BY field_id
+    ");
+    $cntStmt->execute([$recordId]);
+    $fieldChangeCounts = $cntStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    // 2. Get full audit log
+    $histStmt = $conn->prepare("
+        SELECT h.*, u.username, u.first_name, u.last_name, f.label as field_label 
+        FROM {$prefix}module_record_history h
+        LEFT JOIN users u ON u.id = h.changed_by
+        LEFT JOIN {$prefix}module_fields f ON f.id = h.field_id
+        WHERE h.record_id = ?
+        ORDER BY h.changed_at DESC
+    ");
+    $histStmt->execute([$recordId]);
+    $fullRecordHistory = $histStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 // Collect all field rules for JS
 $allRules = [];
 foreach ($module['blocks'] as $block) {
@@ -112,7 +139,14 @@ foreach ($module['blocks'] as $block) {
                             $req = $field['is_required'] ? '<span class="required-star">*</span>' : '';
                         ?>
                             <div class="mr-field-group <?= $fullWidth ? 'full-width' : '' ?>" id="field-wrap-<?= $fid ?>" data-field-id="<?= $fid ?>" data-field-type="<?= $field['field_type'] ?>" data-field-label="<?= htmlspecialchars($field['label']) ?>">
-                                <label class="mr-field-label"><?= htmlspecialchars($field['label']) ?> <?= $req ?></label>
+                                <label class="mr-field-label">
+                                    <?= htmlspecialchars($field['label']) ?> <?= $req ?>
+                                    <?php if (!empty($fieldChangeCounts[$fid])): ?>
+                                        <span class="field-history-badge" onclick="openFieldHistory(<?= $fid ?>, '<?= htmlspecialchars($field['label']) ?>')" title="Click to view change history" style="cursor:pointer; margin-left:8px; font-size:11px; padding:2px 8px; background:rgba(123,94,240,0.1); color:var(--primary); border-radius:12px; font-weight:600; display:inline-flex; align-items:center; gap:4px;">
+                                            <i class="fa-solid fa-clock-rotate-left"></i> <?= $fieldChangeCounts[$fid] ?> change<?= $fieldChangeCounts[$fid] > 1 ? 's' : '' ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </label>
                                 <?php switch($field['field_type']):
                                     case 'text': case 'email': case 'url': case 'number': case 'currency': ?>
                                         <input type="<?= $field['field_type'] === 'email' ? 'email' : ($field['field_type'] === 'url' ? 'url' : ($field['field_type'] === 'number' || $field['field_type'] === 'currency' ? 'number' : 'text')) ?>"
@@ -280,9 +314,63 @@ foreach ($module['blocks'] as $block) {
                     </div>
                 </div>
                 <?php endforeach; ?>
+
+                <?php if ($recordId && !empty($fullRecordHistory)): ?>
+                <!-- Record Audit Trail Card -->
+                <div class="mr-block" style="margin-top: 28px;">
+                    <div class="mr-block-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <span><i class="fa-solid fa-timeline"></i> Record Audit Trail / Change Logs</span>
+                        <span style="font-size:12px; font-weight:600; padding:2px 8px; background:rgba(123,94,240,0.1); color:var(--primary); border-radius:10px;">Total Updates: <?= count($fullRecordHistory) ?></span>
+                    </div>
+                    <div class="mr-block-body">
+                        <div class="audit-timeline" style="position:relative; padding-left:24px; border-left:2px solid var(--border); margin: 10px 0;">
+                            <?php foreach ($fullRecordHistory as $log): 
+                                $displayName = trim(($log['first_name'] ?? '') . ' ' . ($log['last_name'] ?? ''));
+                                $userDisplay = $displayName ?: ($log['username'] ?? 'System/Unknown');
+                                $dateDisplay = date('d M, Y H:i', strtotime($log['changed_at']));
+                            ?>
+                                <div class="timeline-item" style="position:relative; margin-bottom:20px;">
+                                    <div class="timeline-dot" style="position:absolute; left:-31px; top:4px; width:12px; height:12px; border-radius:50%; background:var(--primary); border:2px solid #fff;"></div>
+                                    <div class="timeline-meta" style="font-size:12px; color:var(--text-muted); margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                                        <strong><?= htmlspecialchars($userDisplay) ?></strong>
+                                        <span>•</span>
+                                        <span><?= $dateDisplay ?></span>
+                                    </div>
+                                    <div class="timeline-content" style="font-size:14px; color:var(--text-main); background:#fcfcfd; padding:10px 14px; border-radius:8px; border:1px solid var(--border);">
+                                        Updated field <span style="font-weight:600; color:var(--primary); cursor:pointer; text-decoration:underline;" onclick="openFieldHistory(<?= intval($log['field_id']) ?>, '<?= htmlspecialchars(addslashes($log['field_label'] ?: 'Unknown Field'), ENT_QUOTES) ?>')" title="Click to view history for this field"><?= htmlspecialchars($log['field_label'] ?: 'Unknown Field') ?></span>:
+                                        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px; font-size:13px;">
+                                            <span style="text-decoration:line-through; color:#ef4444; background:rgba(239,68,68,0.08); padding:2px 6px; border-radius:4px; font-family:monospace;"><?= htmlspecialchars($log['old_value'] !== '' ? $log['old_value'] : '(empty)') ?></span>
+                                            <i class="fa-solid fa-arrow-right" style="color:var(--text-muted); font-size:12px;"></i>
+                                            <span style="color:#10b981; background:rgba(16,185,129,0.08); padding:2px 6px; border-radius:4px; font-weight:600; font-family:monospace;"><?= htmlspecialchars($log['new_value'] !== '' ? $log['new_value'] : '(empty)') ?></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
     </main>
+</div>
+
+<!-- Field History Modal -->
+<div class="mm-modal-overlay" id="historyModal">
+    <div class="mm-modal">
+        <div class="mm-modal-header">
+            <h3 id="historyModalTitle">Field Change History</h3>
+            <button class="mm-icon-btn" onclick="closeModal('historyModal')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="mm-modal-body" style="padding:20px; max-height:400px; overflow-y:auto;">
+            <div id="historyModalContent">
+                <!-- Content loaded via Ajax -->
+            </div>
+        </div>
+        <div class="mm-modal-footer">
+            <button class="mm-btn mm-btn-primary" onclick="closeModal('historyModal')">Close</button>
+        </div>
+    </div>
 </div>
 
 <!-- Map Picker Modal -->
@@ -816,6 +904,60 @@ function confirmMapSelection() {
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('sidebar-collapsed');}
+
+function openFieldHistory(fieldId, fieldLabel) {
+    document.getElementById('historyModalTitle').innerHTML = `<i class="fa-clock-rotate-left fa-solid"></i> Change History: <b>${fieldLabel}</b>`;
+    const contentDiv = document.getElementById('historyModalContent');
+    contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; margin-bottom:10px; display:block;"></i> Loading history logs...</div>';
+    document.getElementById('historyModal').classList.add('show');
+
+    fetch(API + `?action=get_record_history&record_id=${RECORD_ID}&field_id=${fieldId}`)
+    .then(r => r.json())
+    .then(r => {
+        if (!r.success) {
+            contentDiv.innerHTML = `<div style="color:#ef4444; text-align:center;">Error: ${r.error || 'Failed to load'}</div>`;
+            return;
+        }
+        if (!r.history || r.history.length === 0) {
+            contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">No changes logged for this field.</div>';
+            return;
+        }
+        
+        let html = '<div style="display:flex; flex-direction:column; gap:16px;">';
+        r.history.forEach(log => {
+            const oldVal = log.old_value !== '' ? log.old_value : '(empty)';
+            const newVal = log.new_value !== '' ? log.new_value : '(empty)';
+            html += `
+                <div style="border-bottom:1px solid var(--border); padding-bottom:12px;">
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px; display:flex; justify-content:space-between;">
+                        <strong>${log.user_display}</strong>
+                        <span>${log.date_display}</span>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:13px; margin-top:6px;">
+                        <span style="text-decoration:line-through; color:#ef4444; background:rgba(239,68,68,0.08); padding:2px 6px; border-radius:4px; font-family:monospace;">${escapeHtml(oldVal)}</span>
+                        <i class="fa-solid fa-arrow-right" style="color:var(--text-muted); font-size:11px;"></i>
+                        <span style="color:#10b981; background:rgba(16,185,129,0.08); padding:2px 6px; border-radius:4px; font-weight:600; font-family:monospace;">${escapeHtml(newVal)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        contentDiv.innerHTML = html;
+    })
+    .catch(err => {
+        contentDiv.innerHTML = `<div style="color:#ef4444; text-align:center;">Network error occurred.</div>`;
+    });
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 </script>
 </body>
 </html>

@@ -396,6 +396,23 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             UNIQUE KEY uk_record_field (record_id, field_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    // 9. Record History / Audit Log
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_record_history (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            record_id INT NOT NULL,
+            field_id INT NOT NULL,
+            old_value TEXT DEFAULT NULL,
+            new_value TEXT DEFAULT NULL,
+            changed_by INT DEFAULT NULL,
+            changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (record_id) REFERENCES {$prefix}module_records(id) ON DELETE CASCADE,
+            FOREIGN KEY (field_id) REFERENCES {$prefix}module_fields(id) ON DELETE CASCADE,
+            INDEX idx_history_record (record_id),
+            INDEX idx_history_field (field_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
 }
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array

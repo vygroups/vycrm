@@ -360,3 +360,17 @@ CREATE TABLE IF NOT EXISTS module_record_values (
     INDEX idx_values_field (field_id),
     UNIQUE KEY uk_record_field (record_id, field_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS module_record_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    record_id INT NOT NULL,
+    field_id INT NOT NULL,
+    old_value TEXT DEFAULT NULL,
+    new_value TEXT DEFAULT NULL,
+    changed_by INT DEFAULT NULL,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (record_id) REFERENCES module_records(id) ON DELETE CASCADE,
+    FOREIGN KEY (field_id) REFERENCES module_fields(id) ON DELETE CASCADE,
+    INDEX idx_history_record (record_id),
+    INDEX idx_history_field (field_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

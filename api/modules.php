@@ -378,17 +378,44 @@ try {
                     }
                 }
 
+                // Fetch old values for comparison (only for existing records)
+                $oldValues = [];
+                if ($recordId > 0) {
+                    $oldStmt = $conn->prepare("SELECT field_id, value FROM {$prefix}module_record_values WHERE record_id = ?");
+                    $oldStmt->execute([$recordId]);
+                    $oldValues = $oldStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+                }
+
                 // Upsert values
                 $upsertStmt = $conn->prepare("
                     INSERT INTO {$prefix}module_record_values (record_id, field_id, value)
                     VALUES (?, ?, ?)
                     ON DUPLICATE KEY UPDATE value = VALUES(value)
                 ");
-                foreach ($values as $fieldId => $value) {
-                    if (is_array($value)) {
-                        $value = json_encode($value);
+
+                // Prepare history insert statement
+                $historyStmt = $conn->prepare("
+                    INSERT INTO {$prefix}module_record_history (record_id, field_id, old_value, new_value, changed_by)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+
+                foreach ($values as $fieldId => $newValue) {
+                    if (is_array($newValue)) {
+                        $newValue = json_encode($newValue);
                     }
-                    $upsertStmt->execute([$recordId, (int)$fieldId, $value]);
+                    
+                    // Audit change if it is an update
+                    if ($recordId > 0) {
+                        $oldVal = isset($oldValues[$fieldId]) ? $oldValues[$fieldId] : '';
+                        $normOld = trim((string)$oldVal);
+                        $normNew = trim((string)$newValue);
+                        
+                        if ($normOld !== $normNew) {
+                            $historyStmt->execute([$recordId, (int)$fieldId, $normOld, $normNew, $userId]);
+                        }
+                    }
+
+                    $upsertStmt->execute([$recordId, (int)$fieldId, $newValue]);
                 }
 
                 $conn->commit();
@@ -417,6 +444,39 @@ try {
 
         case 'get_field_types':
             commerce_json_response(['success' => true, 'types' => dm_field_types()]);
+
+        case 'get_record_history':
+            $recId = (int)($input['record_id'] ?? $_GET['record_id'] ?? 0);
+            $fieldId = (int)($input['field_id'] ?? $_GET['field_id'] ?? 0);
+            if (!$recId) throw new RuntimeException('Record ID required');
+
+            $sql = "
+                SELECT h.*, u.username, u.first_name, u.last_name, f.label as field_label 
+                FROM {$prefix}module_record_history h
+                LEFT JOIN users u ON u.id = h.changed_by
+                LEFT JOIN {$prefix}module_fields f ON f.id = h.field_id
+                WHERE h.record_id = ?
+            ";
+            $params = [$recId];
+            if ($fieldId) {
+                $sql .= " AND h.field_id = ?";
+                $params[] = $fieldId;
+            }
+            $sql .= " ORDER BY h.changed_at DESC";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->execute($params);
+            $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Format human-readable details
+            foreach ($history as &$row) {
+                $displayName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+                $row['user_display'] = $displayName ?: ($row['username'] ?? 'System/Unknown');
+                $row['date_display'] = date('Y-m-d H:i:s', strtotime($row['changed_at']));
+            }
+            unset($row);
+
+            commerce_json_response(['success' => true, 'history' => $history]);
 
         /* ════════════════ LOOKUP: Records of another module (for API Call Picker) ════════════════ */
 
