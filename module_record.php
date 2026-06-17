@@ -10,6 +10,19 @@ $prefix = $context['prefix'];
 dm_ensure_tables($conn, $prefix);
 commerce_ensure_tables($conn, $prefix);
 
+$defaultCountry = 'IN';
+$defaultCurrency = '₹';
+try {
+    $profileStmt = $conn->query("SELECT country, currency_symbol FROM {$prefix}business_profile WHERE id = 1");
+    $businessProfile = $profileStmt ? $profileStmt->fetch(PDO::FETCH_ASSOC) : null;
+    if (!empty($businessProfile['country'])) {
+        $defaultCountry = $businessProfile['country'];
+    }
+    if (!empty($businessProfile['currency_symbol'])) {
+        $defaultCurrency = $businessProfile['currency_symbol'];
+    }
+} catch (Throwable $e) {}
+
 $moduleId = (int)($_GET['module'] ?? 0);
 if (!$moduleId) { header('Location: module_manager.php'); exit; }
 $module = dm_fetch_module_full($conn, $prefix, $moduleId);
@@ -62,6 +75,11 @@ foreach ($module['blocks'] as $block) {
         .ts-dropdown .active { background-color: rgba(123,94,240,0.1); color: var(--primary); }
         .dm-radio-group { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 5px 0; }
         .dm-radio-group label { margin-bottom: 0 !important; white-space: nowrap; }
+
+        /* Premium Toasts */
+        #vyToastContainer { position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; }
+        .vy-toast { border-radius:10px; padding:14px 20px; min-width:280px; max-width:360px; font-size:14px; font-weight:600; box-shadow:0 8px 25px rgba(0,0,0,.12); display:flex; align-items:center; gap:10px; opacity:0; transform:translateX(30px); transition:all .35s cubic-bezier(.25,.8,.25,1); }
+        .vy-toast.show { opacity:1; transform:translateX(0); }
     </style>
 </head>
 <body>
@@ -93,16 +111,46 @@ foreach ($module['blocks'] as $block) {
                             $fullWidth = in_array($field['field_type'], ['textarea', 'attachment', 'name']);
                             $req = $field['is_required'] ? '<span class="required-star">*</span>' : '';
                         ?>
-                            <div class="mr-field-group <?= $fullWidth ? 'full-width' : '' ?>" id="field-wrap-<?= $fid ?>" data-field-id="<?= $fid ?>">
+                            <div class="mr-field-group <?= $fullWidth ? 'full-width' : '' ?>" id="field-wrap-<?= $fid ?>" data-field-id="<?= $fid ?>" data-field-type="<?= $field['field_type'] ?>" data-field-label="<?= htmlspecialchars($field['label']) ?>">
                                 <label class="mr-field-label"><?= htmlspecialchars($field['label']) ?> <?= $req ?></label>
                                 <?php switch($field['field_type']):
-                                    case 'text': case 'email': case 'url': case 'number': case 'currency': case 'phone': ?>
+                                    case 'text': case 'email': case 'url': case 'number': case 'currency': ?>
                                         <input type="<?= $field['field_type'] === 'email' ? 'email' : ($field['field_type'] === 'url' ? 'url' : ($field['field_type'] === 'number' || $field['field_type'] === 'currency' ? 'number' : 'text')) ?>"
                                                class="form-control dm-field" data-field-id="<?= $fid ?>"
                                                placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
                                                value="<?= htmlspecialchars($val) ?>"
                                                <?= $field['field_type'] === 'currency' ? 'step="0.01"' : '' ?>
                                                <?= $field['is_required'] ? 'required' : '' ?>>
+                                    <?php break; case 'phone': 
+                                        $dialCodes = [
+                                            'IN' => '+91', 'US' => '+1', 'GB' => '+44', 'AE' => '+971', 'SA' => '+966',
+                                            'AU' => '+61', 'CA' => '+1', 'SG' => '+65', 'MY' => '+60', 'DE' => '+49',
+                                            'FR' => '+33', 'JP' => '+81', 'CN' => '+86', 'KR' => '+82', 'BR' => '+55',
+                                            'ZA' => '+27', 'NZ' => '+64', 'QA' => '+974', 'KW' => '+965', 'BH' => '+973',
+                                            'OM' => '+968', 'NP' => '+977', 'LK' => '+94', 'BD' => '+880'
+                                        ];
+                                        $selectedPrefix = $defaultCountry;
+                                        $phoneNum = $val;
+                                        foreach ($dialCodes as $cCode => $prefixCode) {
+                                            if (strpos($val, $prefixCode) === 0) {
+                                                $selectedPrefix = $cCode;
+                                                $phoneNum = substr($val, strlen($prefixCode));
+                                                $phoneNum = ltrim($phoneNum, " -");
+                                                break;
+                                            }
+                                        }
+                                        ?>
+                                        <div class="phone-input-wrapper" style="display: flex; gap: 8px; width: 100%;">
+                                            <select class="form-control phone-prefix-select dm-phone-prefix" data-field-id="<?= $fid ?>" style="width: 120px; flex-shrink: 0; padding: 12px 16px; border-radius: 12px; border: 1.5px solid var(--border); font-size: 14px; background: #fff; box-sizing: border-box;">
+                                                <?php foreach ($dialCodes as $cCode => $prefixCode): ?>
+                                                    <option value="<?= htmlspecialchars($prefixCode) ?>" <?= $selectedPrefix === $cCode ? 'selected' : '' ?>><?= $cCode ?> (<?= $prefixCode ?>)</option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            <input type="text" class="form-control dm-field dm-phone-number" data-field-id="<?= $fid ?>"
+                                                   placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
+                                                   value="<?= htmlspecialchars($phoneNum) ?>"
+                                                   <?= $field['is_required'] ? 'required' : '' ?> style="flex-grow: 1;">
+                                        </div>
                                     <?php break; case 'textarea': ?>
                                         <textarea class="form-control dm-field" data-field-id="<?= $fid ?>" rows="3"
                                                   placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
@@ -266,6 +314,14 @@ function getFieldValue(fieldId) {
     const multi = document.querySelector(`select.dm-multi-picker[data-field-id="${fieldId}"]`);
     if (multi) return JSON.stringify([...multi.selectedOptions].map(o => o.value));
 
+    const phoneNumEl = document.querySelector(`.dm-phone-number[data-field-id="${fieldId}"]`);
+    if (phoneNumEl) {
+        const prefixEl = document.querySelector(`.dm-phone-prefix[data-field-id="${fieldId}"]`);
+        const prefix = prefixEl ? prefixEl.value : '';
+        const number = phoneNumEl.value.trim();
+        return number ? (prefix + number) : '';
+    }
+
     const el = document.querySelector(`.dm-field[data-field-id="${fieldId}"]`);
     if (el) {
         if (el.type === 'checkbox') return el.checked ? '1' : '';
@@ -295,22 +351,129 @@ function collectValues() {
     return values;
 }
 
+// Premium Toast Utility
+function vyToast(msg, type = 'error') {
+    const colors = { 
+        success: { border: '#10b981', bg: '#ecfdf5', text: '#065f46' }, 
+        error: { border: '#ef4444', bg: '#fef2f2', text: '#991b1b' } 
+    };
+    const config = colors[type] || colors.error;
+    
+    let container = document.getElementById('vyToastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'vyToastContainer';
+        document.body.appendChild(container);
+    }
+    const t = document.createElement('div');
+    t.className = 'vy-toast';
+    t.style.background = config.bg;
+    t.style.color = config.text;
+    t.style.borderLeft = '4px solid ' + config.border;
+    t.innerHTML = `<span>${type === 'success' ? '✅' : '❌'}</span><span>${msg}</span>`;
+    container.appendChild(t);
+    requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
+}
+
+function showFieldError(fieldId, errorMsg) {
+    const wrap = document.getElementById('field-wrap-' + fieldId);
+    if (!wrap) return;
+
+    wrap.querySelectorAll('.form-control, .ts-control, select, textarea').forEach(el => {
+        el.style.borderColor = '#ef4444';
+        el.classList.add('is-invalid');
+    });
+
+    let errDiv = wrap.querySelector('.error-msg');
+    if (!errDiv) {
+        errDiv = document.createElement('div');
+        errDiv.className = 'error-msg';
+        errDiv.style.color = '#ef4444';
+        errDiv.style.fontSize = '12px';
+        errDiv.style.marginTop = '4px';
+        wrap.appendChild(errDiv);
+    }
+    errDiv.textContent = errorMsg;
+}
+
+function validateFields() {
+    let hasErrors = false;
+    
+    // Clear previous error messages & styles
+    document.querySelectorAll('.mr-field-group .error-msg').forEach(el => el.remove());
+    document.querySelectorAll('.mr-field-group .form-control, .mr-field-group .ts-control, .mr-field-group select, .mr-field-group textarea').forEach(el => {
+        el.style.borderColor = '';
+        el.classList.remove('is-invalid');
+    });
+    
+    document.querySelectorAll('.mr-field-group').forEach(wrap => {
+        if (wrap.style.display === 'none') return;
+        
+        const fid = wrap.dataset.fieldId;
+        const type = wrap.dataset.fieldType;
+        const label = wrap.dataset.fieldLabel;
+        const val = getFieldValue(fid);
+        const isRequired = wrap.querySelector('[required]') !== null || wrap.querySelector('.required-star') !== null;
+        
+        // 1. Mandatory Check
+        if (isRequired) {
+            if (!val || val === '""' || val === '[]' || val === '{"first":"","last":""}') {
+                showFieldError(fid, `"${label}" is required.`);
+                hasErrors = true;
+                return;
+            }
+        }
+        
+        // If field is empty and not required, skip format checks
+        if (!val || val === '""' || val === '[]' || val === '{"first":"","last":""}') {
+            return;
+        }
+        
+        // 2. Format Checks
+        if (type === 'email') {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(val)) {
+                showFieldError(fid, `"${label}" must be a valid email address.`);
+                hasErrors = true;
+            }
+        } else if (type === 'phone') {
+            const phoneRegex = /^\+?[0-9\s\-()]{7,20}$/;
+            if (!phoneRegex.test(val)) {
+                showFieldError(fid, `"${label}" must be a valid phone number.`);
+                hasErrors = true;
+            }
+        } else if (type === 'number' || type === 'currency' || type === 'duration') {
+            if (isNaN(val) || val.trim() === '') {
+                showFieldError(fid, `"${label}" must be a valid number.`);
+                hasErrors = true;
+            }
+        } else if (type === 'url') {
+            const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+            if (!urlRegex.test(val)) {
+                showFieldError(fid, `"${label}" must be a valid URL.`);
+                hasErrors = true;
+            }
+        } else if (type === 'name') {
+            try {
+                const nameObj = JSON.parse(val);
+                if (isRequired && (!nameObj.first || nameObj.first.trim() === '')) {
+                    showFieldError(fid, `"${label}" First Name is required.`);
+                    hasErrors = true;
+                }
+            } catch(e) {}
+        }
+    });
+    
+    return hasErrors;
+}
+
 function saveRecord() {
     if (IS_VIEW_ONLY) return;
     
-    // Manual Mandatory Field Validation
-    let missingFields = [];
-    document.querySelectorAll('[data-field-id][required]').forEach(el => {
-        const fid = el.dataset.fieldId;
-        const val = getFieldValue(fid);
-        if (!val || val === '""' || val === '[]') {
-            const label = el.closest('.mr-field-group').querySelector('.mr-field-label').textContent.replace('*', '').trim();
-            if (!missingFields.includes(label)) missingFields.push(label);
-        }
-    });
-
-    if (missingFields.length > 0) {
-        alert('Please fill in the following required fields: \n- ' + missingFields.join('\n- '));
+    const hasErrors = validateFields();
+    if (hasErrors) {
+        vyToast('Please correct the highlighted errors before saving.', 'error');
         return;
     }
 
@@ -332,9 +495,12 @@ function saveRecord() {
     fetch(API, {
         method: 'POST', body: formData
     }).then(r => r.json()).then(r => {
-        if (r.success) { window.location.href = 'module_view.php?module=' + MODULE_ID; }
-        else alert(r.error);
-    }).catch(e => alert('Error: ' + e.message));
+        if (r.success) { 
+            vyToast('Record saved successfully!', 'success');
+            setTimeout(() => { window.location.href = 'module_view.php?module=' + MODULE_ID; }, 1000);
+        }
+        else vyToast(r.error, 'error');
+    }).catch(e => vyToast('Error: ' + e.message, 'error'));
 }
 
 // Country → State dependency
@@ -414,7 +580,7 @@ function applyRules() {
 
 // Disable fields if view only
 if (IS_VIEW_ONLY) {
-    document.querySelectorAll('.dm-field, .dm-multi-picker, .dm-name-field, input[type=file]').forEach(el => el.disabled = true);
+    document.querySelectorAll('.dm-field, .dm-multi-picker, .dm-name-field, .dm-phone-prefix, input[type=file]').forEach(el => el.disabled = true);
     document.querySelectorAll('.mr-add-option, .mm-icon-btn, .dm-api-picker button').forEach(el => {
         if(el.closest('.mr-form-container')) el.style.display = 'none';
     });

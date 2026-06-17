@@ -60,23 +60,19 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
-    try {
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN unit VARCHAR(20) DEFAULT 'PCS' AFTER tax_percent");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN opening_stock DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER unit");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN stock_quantity DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER opening_stock");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN hsn_code VARCHAR(50) DEFAULT NULL AFTER stock_quantity");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN category VARCHAR(100) DEFAULT NULL AFTER hsn_code");
-    } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN unit VARCHAR(20) DEFAULT 'PCS' AFTER tax_percent"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN opening_stock DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER unit"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN stock_quantity DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER opening_stock"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN hsn_code VARCHAR(50) DEFAULT NULL AFTER stock_quantity"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN category VARCHAR(100) DEFAULT NULL AFTER hsn_code"); } catch (Throwable $e) {}
 
     // Migration: Add 4 price tiers + MFG/EXP to products
-    try {
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN purchase_price DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER unit_price");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN pts DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER purchase_price");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN ptr DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER pts");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN mrp DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER ptr");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN mfg_date DATE DEFAULT NULL AFTER category");
-        $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN exp_date DATE DEFAULT NULL AFTER mfg_date");
-    } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN purchase_price DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER unit_price"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN pts DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER purchase_price"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN ptr DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER pts"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN mrp DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER ptr"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN mfg_date DATE DEFAULT NULL AFTER category"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}products ADD COLUMN exp_date DATE DEFAULT NULL AFTER mfg_date"); } catch (Throwable $e) {}
 
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}invoices (
@@ -107,10 +103,8 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
         $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN customer_id INT DEFAULT NULL AFTER invoice_number");
     } catch (Throwable $e) {}
 
-    try {
-        $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER grand_total");
-        $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN payment_status ENUM('unpaid', 'partially_paid', 'paid') NOT NULL DEFAULT 'unpaid' AFTER status");
-    } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER grand_total"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN payment_status ENUM('unpaid', 'partially_paid', 'paid') NOT NULL DEFAULT 'unpaid' AFTER status"); } catch (Throwable $e) {}
 
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}invoice_items (
@@ -137,13 +131,11 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
-    try {
-        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN unit VARCHAR(20) DEFAULT NULL AFTER quantity");
-        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN hsn_code VARCHAR(50) DEFAULT NULL AFTER unit");
-        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN batch_no VARCHAR(100) DEFAULT NULL AFTER hsn_code");
-        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN mfg_date DATE DEFAULT NULL AFTER batch_no");
-        $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN exp_date DATE DEFAULT NULL AFTER mfg_date");
-    } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN unit VARCHAR(20) DEFAULT NULL AFTER quantity"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN hsn_code VARCHAR(50) DEFAULT NULL AFTER unit"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN batch_no VARCHAR(100) DEFAULT NULL AFTER hsn_code"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN mfg_date DATE DEFAULT NULL AFTER batch_no"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN exp_date DATE DEFAULT NULL AFTER mfg_date"); } catch (Throwable $e) {}
 
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}attendance (
@@ -238,17 +230,19 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             account_no VARCHAR(100) DEFAULT NULL,
             ifsc_code VARCHAR(50) DEFAULT NULL,
             terms TEXT DEFAULT NULL,
+            country VARCHAR(50) DEFAULT 'IN',
+            currency_symbol VARCHAR(10) DEFAULT '₹',
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
-    try {
-        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN logo_path VARCHAR(255) DEFAULT NULL AFTER business_category");
-        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN bank_name VARCHAR(150) DEFAULT NULL AFTER signature_path");
-        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN account_no VARCHAR(100) DEFAULT NULL AFTER bank_name");
-        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN ifsc_code VARCHAR(50) DEFAULT NULL AFTER account_no");
-        $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN terms TEXT DEFAULT NULL AFTER ifsc_code");
-    } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN logo_path VARCHAR(255) DEFAULT NULL AFTER business_category"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN bank_name VARCHAR(150) DEFAULT NULL AFTER signature_path"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN account_no VARCHAR(100) DEFAULT NULL AFTER bank_name"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN ifsc_code VARCHAR(50) DEFAULT NULL AFTER account_no"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN terms TEXT DEFAULT NULL AFTER ifsc_code"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN country VARCHAR(50) DEFAULT 'IN' AFTER terms"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}business_profile ADD COLUMN currency_symbol VARCHAR(10) DEFAULT '₹' AFTER country"); } catch (Throwable $e) {}
 
     // Invoice print/field settings
     $conn->exec("

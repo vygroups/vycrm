@@ -3,6 +3,7 @@ require_once 'auth_check.php';
 require_once 'includes/commerce.php';
 require_once 'includes/brand.php';
 require_once 'includes/upload_paths.php';
+require_once 'includes/dynamic_modules.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
@@ -24,9 +25,16 @@ if (!$profile) {
         'address' => '', 'business_type' => '', 'business_category' => '',
         'logo_path' => $companyData['logo'] ?? '',
         'signature_path' => '',
-        'bank_name' => '', 'account_no' => '', 'ifsc_code' => '', 'terms' => ''
+        'bank_name' => '', 'account_no' => '', 'ifsc_code' => '', 'terms' => '',
+        'country' => 'IN', 'currency_symbol' => '₹'
     ];
 } else {
+    if (empty($profile['country'])) {
+        $profile['country'] = 'IN';
+    }
+    if (empty($profile['currency_symbol'])) {
+        $profile['currency_symbol'] = '₹';
+    }
     // If profile exists but logo_path is empty, fallback to master company logo
     if (empty($profile['logo_path']) && !empty($companyData['logo'])) {
         $profile['logo_path'] = $companyData['logo'];
@@ -44,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accountNo = $_POST['account_no'] ?? '';
     $ifscCode = $_POST['ifsc_code'] ?? '';
     $terms = $_POST['terms'] ?? '';
+    $country = $_POST['country'] ?? 'IN';
+    $currencySymbol = $_POST['currency_symbol'] ?? '₹';
 
     // Business name comes from master, use it directly
     $bName = $companyData['name'] ?? ($profile['business_name'] ?? '');
@@ -84,10 +94,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $stmt = $conn->prepare("
         REPLACE INTO {$prefix}business_profile 
-        (id, business_name, gstin, phone, email, address, business_type, business_category, logo_path, signature_path, bank_name, account_no, ifsc_code, terms) 
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, business_name, gstin, phone, email, address, business_type, business_category, logo_path, signature_path, bank_name, account_no, ifsc_code, terms, country, currency_symbol) 
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    $stmt->execute([$bName, $gst, $phone, $email, $addr, $bType, $bCat, $logoPath, $sigPath, $bankName, $accountNo, $ifscCode, $terms]);
+    $stmt->execute([$bName, $gst, $phone, $email, $addr, $bType, $bCat, $logoPath, $sigPath, $bankName, $accountNo, $ifscCode, $terms, $country, $currencySymbol]);
     header("Location: profile.php?success=1");
     exit;
 }
@@ -181,6 +191,19 @@ if (!empty($profile['signature_path'])) {
                                     <div class="form-group">
                                         <label class="form-label">Business Address</label>
                                         <textarea name="address" class="form-control" rows="3" placeholder="Full registered address..."><?= htmlspecialchars($profile['address'] ?? '') ?></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Country</label>
+                                        <select name="country" class="form-control">
+                                            <option value="">Select Country...</option>
+                                            <?php foreach (dm_get_countries() as $code => $cname): ?>
+                                                <option value="<?= $code ?>" <?= ($profile['country'] ?? 'IN') == $code ? 'selected' : '' ?>><?= htmlspecialchars($cname) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Currency Symbol</label>
+                                        <input type="text" name="currency_symbol" class="form-control" placeholder="e.g. ₹, $, £" value="<?= htmlspecialchars($profile['currency_symbol'] ?? '₹') ?>">
                                     </div>
                                 </div>
                                 <div>
