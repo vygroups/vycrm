@@ -693,7 +693,16 @@ function dm_get_visible_user_ids(PDO $conn, string $p, int $userId, ?int $roleId
         }
     }
 
-    return array_unique(array_map('intval', $allowedUserIds));
+}
+
+/**
+ * Fetch all fields for a dynamic module.
+ */
+function dm_fetch_module_fields(PDO $conn, string $p, int $moduleId): array
+{
+    $stmt = $conn->prepare("SELECT * FROM {$p}module_fields WHERE module_id = ? ORDER BY sort_order ASC");
+    $stmt->execute([$moduleId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 /**
@@ -731,14 +740,14 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
     }
 
     // Prepare system user lists for placeholder resolution
-    $usersStmt = $conn->query("SELECT id, username, first_name, last_name, email, phone FROM {$p}users");
+    $usersStmt = $conn->query("SELECT id, username, first_name, last_name, email FROM {$p}users");
     $userMap = [];
     foreach ($usersStmt->fetchAll(PDO::FETCH_ASSOC) as $u) {
         $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
         $userMap[$u['id']] = [
             'name' => $fullName ?: $u['username'],
             'email' => $u['email'],
-            'phone' => $u['phone']
+            'phone' => ''
         ];
     }
 
@@ -784,8 +793,10 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
                 $uid = (int)$recipientValue;
                 if ($w['action_type'] === 'email') {
                     $recipient = $userMap[$uid]['email'] ?? '';
-                } else {
+                } elseif ($w['action_type'] === 'whatsapp') {
                     $recipient = $userMap[$uid]['phone'] ?? '';
+                } else {
+                    $recipient = $userMap[$uid]['name'] ?? "User #$uid";
                 }
             } else {
                 $recipient = $recipientValue;
@@ -847,20 +858,55 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
         $errorMsg = null;
 
         if ($w['action_type'] === 'email') {
-            $headers = "MIME-Version: 1.0\r\n";
-            $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-            $headers .= "From: VY-AI CRM Automation <no-reply@vygroups.com>\r\n";
-            
-            // Send email
-            $mailSent = @mail($recipient, $subject, nl2br($body), $headers);
-            if (!$mailSent) {
-                $status = 'failed';
-                $errorMsg = 'PHP mail() dispatch returned false';
+            $smtpHost = dm_get_system_setting($conn, $p, 'smtp_host', '');
+            $smtpPort = (int)dm_get_system_setting($conn, $p, 'smtp_port', 0);
+            $smtpUser = dm_get_system_setting($conn, $p, 'smtp_user', '');
+            $smtpPass = dm_get_system_setting($conn, $p, 'smtp_pass', '');
+            $smtpFromEmail = dm_get_system_setting($conn, $p, 'smtp_from_email', '');
+            $smtpFromName = dm_get_system_setting($conn, $p, 'smtp_from_name', '');
+            $smtpEnc = dm_get_system_setting($conn, $p, 'smtp_encryption', 'none');
+
+            if ($smtpHost && $smtpPort) {
+                // Route email via configured SMTP settings
+                try {
+                    dm_send_smtp_email($smtpHost, $smtpPort, $smtpUser, $smtpPass, $smtpFromEmail, $smtpFromName, $recipient, $subject, $body, $smtpEnc);
+                } catch (Throwable $e) {
+                    $status = 'failed';
+                    $errorMsg = 'SMTP Error: ' . $e->getMessage();
+                }
+            } else {
+                // Fall back to standard php mail() function
+                $headers = "MIME-Version: 1.0\r\n";
+                $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+                $headers .= "From: VY-AI CRM Automation <no-reply@vygroups.com>\r\n";
+                
+                $mailSent = @mail($recipient, $subject, nl2br($body), $headers);
+                if (!$mailSent) {
+                    $status = 'failed';
+                    $errorMsg = 'PHP mail() dispatch returned false';
+                }
             }
-        } else {
-            // WhatsApp Simulated Dispatch
+        } elseif ($w['action_type'] === 'whatsapp') {
+            $whatsappApiUrl = dm_get_system_setting($conn, $p, 'whatsapp_api_url', '');
+            $whatsappToken = dm_get_system_setting($conn, $p, 'whatsapp_access_token', '');
+
+            if ($whatsappApiUrl && $whatsappToken) {
+                // Dispatch via WhatsApp Gateway API URL
+                try {
+                    dm_send_whatsapp_message($whatsappApiUrl, $whatsappToken, $recipient, $body);
+                } catch (Throwable $e) {
+                    $status = 'failed';
+                    $errorMsg = 'WhatsApp API Error: ' . $e->getMessage();
+                }
+            } else {
+                // Simulated dispatch fallback
+                $status = 'sent';
+                $errorMsg = 'WhatsApp simulated dispatch: message stored in database logs';
+            }
+        } elseif ($w['action_type'] === 'push') {
+            // Push Notification simulated dispatch
             $status = 'sent';
-            $errorMsg = 'WhatsApp simulated dispatch: message stored in database logs';
+            $errorMsg = 'Push notification simulated delivery: notification stored in database logs';
         }
 
         // 4. Log execution
@@ -879,4 +925,148 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
             $errorMsg
         ]);
     }
+}
+
+/**
+ * Sends a transactional email securely via raw SMTP sockets.
+ */
+function dm_send_smtp_email(string $host, int $port, string $user, string $pass, string $fromEmail, string $fromName, string $to, string $subject, string $body, string $encryption = 'none'): bool
+{
+    $timeout = 15;
+    $socketHost = ($encryption === 'ssl') ? 'ssl://' . $host : $host;
+    $socket = @fsockopen($socketHost, $port, $errno, $errstr, $timeout);
+    if (!$socket) {
+        throw new Exception("Could not connect to SMTP server $host:$port: $errstr ($errno)");
+    }
+
+    $read = function($socket) {
+        $response = '';
+        while (($str = fgets($socket, 515)) !== false) {
+            $response .= $str;
+            if (substr($str, 3, 1) === ' ') {
+                break;
+            }
+        }
+        return $response;
+    };
+
+    $send = function($socket, $cmd) use ($read) {
+        fwrite($socket, $cmd . "\r\n");
+        return $read($socket);
+    };
+
+    $read($socket); // banner
+
+    // EHLO
+    $send($socket, "EHLO " . ($_SERVER['SERVER_NAME'] ?? 'localhost'));
+
+    if ($encryption === 'tls') {
+        $res = $send($socket, "STARTTLS");
+        if (strpos($res, '220') === false) {
+            throw new Exception("STARTTLS failed: " . $res);
+        }
+        if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+            throw new Exception("Failed to enable TLS encryption");
+        }
+        // Resend EHLO after TLS
+        $send($socket, "EHLO " . ($_SERVER['SERVER_NAME'] ?? 'localhost'));
+    }
+
+    // AUTH LOGIN
+    if ($user && $pass) {
+        $res = $send($socket, "AUTH LOGIN");
+        if (strpos($res, '334') === false) {
+            throw new Exception("AUTH LOGIN not supported by server: " . $res);
+        }
+        $res = $send($socket, base64_encode($user));
+        if (strpos($res, '334') === false) {
+            throw new Exception("Username rejected: " . $res);
+        }
+        $res = $send($socket, base64_encode($pass));
+        if (strpos($res, '235') === false) {
+            throw new Exception("Password rejected: " . $res);
+        }
+    }
+
+    // MAIL FROM
+    $res = $send($socket, "MAIL FROM:<" . $fromEmail . ">");
+    if (strpos($res, '250') === false) {
+        throw new Exception("MAIL FROM failed: " . $res);
+    }
+
+    // RCPT TO
+    $res = $send($socket, "RCPT TO:<" . $to . ">");
+    if (strpos($res, '250') === false && strpos($res, '251') === false) {
+        throw new Exception("RCPT TO failed: " . $res);
+    }
+
+    // DATA
+    $res = $send($socket, "DATA");
+    if (strpos($res, '354') === false) {
+        throw new Exception("DATA command rejected: " . $res);
+    }
+
+    // Headers & Message
+    $headers = [
+        "MIME-Version: 1.0",
+        "Content-Type: text/html; charset=UTF-8",
+        "From: " . ($fromName ? '"' . $fromName . '" <' . $fromEmail . '>' : $fromEmail),
+        "To: " . $to,
+        "Subject: " . $subject,
+        "Date: " . date('r'),
+        "Message-ID: <" . time() . '.' . uniqid() . '@' . $host . ">"
+    ];
+
+    $message = implode("\r\n", $headers) . "\r\n\r\n" . nl2br($body) . "\r\n.";
+    $res = $send($socket, $message);
+
+    // QUIT
+    $send($socket, "QUIT");
+    fclose($socket);
+
+    if (strpos($res, '250') === false) {
+        throw new Exception("Failed to send message body: " . $res);
+    }
+    return true;
+}
+
+/**
+ * Sends a WhatsApp text message using curl to Meta Cloud API or standard webhook gateway.
+ */
+function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, string $body): bool
+{
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $apiUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    
+    $headers = [
+        "Authorization: Bearer " . $token,
+        "Content-Type: application/json"
+    ];
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    
+    $payload = json_encode([
+        "messaging_product" => "whatsapp",
+        "recipient_type" => "individual",
+        "to" => $to,
+        "type" => "text",
+        "text" => [
+            "body" => $body
+        ]
+    ]);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    
+    if ($err) {
+        throw new Exception("Curl error: " . $err);
+    }
+    if ($httpCode >= 400) {
+        throw new Exception("WhatsApp API returned HTTP $httpCode: $response");
+    }
+    return true;
 }

@@ -41,6 +41,18 @@ if (!$profile) {
     }
 }
 
+// Fetch integration credentials settings
+$smtpHost = dm_get_system_setting($conn, $prefix, 'smtp_host', '');
+$smtpPort = dm_get_system_setting($conn, $prefix, 'smtp_port', '');
+$smtpUser = dm_get_system_setting($conn, $prefix, 'smtp_user', '');
+$smtpPass = dm_get_system_setting($conn, $prefix, 'smtp_pass', '');
+$smtpFromEmail = dm_get_system_setting($conn, $prefix, 'smtp_from_email', '');
+$smtpFromName = dm_get_system_setting($conn, $prefix, 'smtp_from_name', '');
+$smtpEnc = dm_get_system_setting($conn, $prefix, 'smtp_encryption', 'none');
+
+$whatsappApiUrl = dm_get_system_setting($conn, $prefix, 'whatsapp_api_url', '');
+$whatsappToken = dm_get_system_setting($conn, $prefix, 'whatsapp_access_token', '');
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gst = $_POST['gstin'] ?? '';
     $phone = $_POST['phone'] ?? '';
@@ -98,6 +110,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt->execute([$bName, $gst, $phone, $email, $addr, $bType, $bCat, $logoPath, $sigPath, $bankName, $accountNo, $ifscCode, $terms, $country, $currencySymbol]);
+
+    // Save SMTP and WhatsApp credentials settings
+    $smtp_host = $_POST['smtp_host'] ?? '';
+    $smtp_port = $_POST['smtp_port'] ?? '';
+    $smtp_user = $_POST['smtp_user'] ?? '';
+    $smtp_pass = $_POST['smtp_pass'] ?? '';
+    $smtp_from_email = $_POST['smtp_from_email'] ?? '';
+    $smtp_from_name = $_POST['smtp_from_name'] ?? '';
+    $smtp_enc = $_POST['smtp_encryption'] ?? 'none';
+
+    $whatsapp_api_url = $_POST['whatsapp_api_url'] ?? '';
+    $whatsapp_access_token = $_POST['whatsapp_access_token'] ?? '';
+
+    dm_set_system_setting($conn, $prefix, 'smtp_host', $smtp_host);
+    dm_set_system_setting($conn, $prefix, 'smtp_port', $smtp_port);
+    dm_set_system_setting($conn, $prefix, 'smtp_user', $smtp_user);
+    dm_set_system_setting($conn, $prefix, 'smtp_pass', $smtp_pass);
+    dm_set_system_setting($conn, $prefix, 'smtp_from_email', $smtp_from_email);
+    dm_set_system_setting($conn, $prefix, 'smtp_from_name', $smtp_from_name);
+    dm_set_system_setting($conn, $prefix, 'smtp_encryption', $smtp_enc);
+
+    dm_set_system_setting($conn, $prefix, 'whatsapp_api_url', $whatsapp_api_url);
+    dm_set_system_setting($conn, $prefix, 'whatsapp_access_token', $whatsapp_access_token);
+
     header("Location: profile.php?success=1");
     exit;
 }
@@ -284,6 +320,63 @@ if (!empty($profile['signature_path'])) {
                                             <?php endif; ?>
                                             <input type="file" name="signature" accept="image/*" onchange="previewFile(this, 'sigPreview', 'sigHint')">
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notification & Gateway Integration Credentials -->
+                    <div class="settings-card">
+                        <div class="card-header">
+                            <div class="card-title"><i class="fa-solid fa-gears"></i> Notification & Integration Gateways</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="grid-layout">
+                                <div>
+                                    <div class="section-title"><i class="fa-solid fa-envelope"></i> SMTP Email Server Settings</div>
+                                    <div class="form-group">
+                                        <label class="form-label">SMTP Host</label>
+                                        <input type="text" name="smtp_host" class="form-control" placeholder="e.g. smtp.gmail.com" value="<?= htmlspecialchars($smtpHost) ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">SMTP Port</label>
+                                        <input type="number" name="smtp_port" class="form-control" placeholder="e.g. 587" value="<?= htmlspecialchars($smtpPort) ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">SMTP Username</label>
+                                        <input type="text" name="smtp_user" class="form-control" placeholder="e.g. you@gmail.com" value="<?= htmlspecialchars($smtpUser) ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">SMTP Password</label>
+                                        <input type="password" name="smtp_pass" class="form-control" placeholder="SMTP Password" value="<?= htmlspecialchars($smtpPass) ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">From Email Address</label>
+                                        <input type="email" name="smtp_from_email" class="form-control" placeholder="e.g. alerts@yourcompany.com" value="<?= htmlspecialchars($smtpFromEmail) ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">From Name</label>
+                                        <input type="text" name="smtp_from_name" class="form-control" placeholder="e.g. Alert System" value="<?= htmlspecialchars($smtpFromName) ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Encryption Type</label>
+                                        <select name="smtp_encryption" class="form-control">
+                                            <option value="none" <?= $smtpEnc === 'none' ? 'selected' : '' ?>>None</option>
+                                            <option value="ssl" <?= $smtpEnc === 'ssl' ? 'selected' : '' ?>>SSL</option>
+                                            <option value="tls" <?= $smtpEnc === 'tls' ? 'selected' : '' ?>>TLS / STARTTLS</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="section-title"><i class="fa-brands fa-whatsapp"></i> WhatsApp Cloud API Settings</div>
+                                    <div class="form-group">
+                                        <label class="form-label">API Endpoint URL</label>
+                                        <input type="url" name="whatsapp_api_url" class="form-control" placeholder="https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages" value="<?= htmlspecialchars($whatsappApiUrl) ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">System Access Token (Bearer)</label>
+                                        <textarea name="whatsapp_access_token" class="form-control" rows="5" placeholder="EAABwz... (Permanent Access Token)"><?= htmlspecialchars($whatsappToken) ?></textarea>
                                     </div>
                                 </div>
                             </div>

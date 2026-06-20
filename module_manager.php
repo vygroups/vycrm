@@ -48,6 +48,7 @@ try {
 } catch (Exception $e) {
     // Fallback if table doesn't exist
 }
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -249,9 +250,11 @@ try {
                         <div id="tabContentWorkflows" style="display:none; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:var(--shadow-sm);">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                                 <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-main);">Automation Rules</h3>
-                                <button class="mm-btn mm-btn-primary" onclick="openWorkflowModal()" style="display:inline-flex; align-items:center; gap:6px;">
-                                    <i class="fa-solid fa-plus"></i> Add Workflow
-                                </button>
+                                <div style="display:flex; gap:10px;">
+                                    <button class="mm-btn mm-btn-primary" onclick="openWorkflowModal()" style="display:inline-flex; align-items:center; gap:6px;">
+                                        <i class="fa-solid fa-plus"></i> Add Workflow
+                                    </button>
+                                </div>
                             </div>
                             
                             <div class="crm-card" style="padding:0; overflow:hidden; margin-bottom:30px; border:1px solid var(--border);">
@@ -511,6 +514,8 @@ try {
         </div>
     </div>
 
+
+
     <!-- Add/Edit Workflow Modal -->
     <div class="mm-modal-overlay" id="workflowModal">
         <div class="mm-modal mm-modal-lg" style="background:#fff; border-radius:12px; width:700px; box-shadow:var(--shadow-lg);">
@@ -547,6 +552,7 @@ try {
                         <select id="workflowActionType" class="form-control" onchange="onWorkflowActionTypeChange()" style="width:100%;">
                             <option value="email">Send Email</option>
                             <option value="whatsapp">Send WhatsApp Message</option>
+                            <option value="push">Send Push Notification</option>
                         </select>
                     </div>
                     <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
@@ -595,12 +601,14 @@ try {
         const EDIT_MODULE_FIELDS = <?= json_encode($jsFields) ?>;
         const ALL_USERS = <?= json_encode($usersList) ?>;
 
+
         function api(action, data = {}) {
             return fetch(API, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action, ...data })
             }).then(r => r.json());
         }
+        function openModal(id) { document.getElementById(id).classList.add('show'); }
         function openCreateModal() { document.getElementById('createModuleModal').classList.add('show'); document.getElementById('newModuleName').focus(); }
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
@@ -927,6 +935,8 @@ try {
             }
         }
 
+
+
         async function loadWorkflows() {
             try {
                 const res = await fetch(`${API}?action=list_workflows&module_id=${MODULE_ID}`);
@@ -952,7 +962,14 @@ try {
             tbody.innerHTML = workflowsList.map(w => {
                 const triggerField = w.trigger_field_label || `Field #${w.trigger_field_id}`;
                 const condition = `If <strong>${escapeHtml(triggerField)}</strong> changes to "<strong>${escapeHtml(w.trigger_value)}</strong>"`;
-                const action = w.action_type === 'email' ? '<i class="fa-solid fa-envelope" style="color:#3b82f6;"></i> Send Email' : '<i class="fa-solid fa-message" style="color:#10b981;"></i> Send WhatsApp';
+                let action = '';
+                if (w.action_type === 'email') {
+                    action = '<i class="fa-solid fa-envelope" style="color:#3b82f6;"></i> Send Email';
+                } else if (w.action_type === 'whatsapp') {
+                    action = '<i class="fa-solid fa-message" style="color:#10b981;"></i> Send WhatsApp';
+                } else if (w.action_type === 'push') {
+                    action = '<i class="fa-solid fa-bell" style="color:#eab308;"></i> Push Notification';
+                }
                 
                 let recipient = '';
                 if (w.recipient_field_id) {
@@ -1006,7 +1023,14 @@ try {
                             ? '<span class="status-badge" style="background:rgba(16,185,129,0.1); color:#10b981; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700;">Sent</span>'
                             : '<span class="status-badge" style="background:rgba(239,68,68,0.1); color:#ef4444; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700;">Failed</span>';
                         
-                        const action = l.action_type === 'email' ? 'Email' : 'WhatsApp';
+                        let action = '';
+                        if (l.action_type === 'email') {
+                            action = 'Email';
+                        } else if (l.action_type === 'whatsapp') {
+                            action = 'WhatsApp';
+                        } else if (l.action_type === 'push') {
+                            action = 'Push Notification';
+                        }
                         const ruleName = escapeHtml(l.workflow_name || `Rule #${l.workflow_id}`);
                         
                         return `

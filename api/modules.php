@@ -543,6 +543,23 @@ try {
             $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
             commerce_json_response(['success' => true, 'logs' => $logs]);
 
+        case 'save_integration_settings':
+            $smtpSettings = [
+                'smtp_host' => trim($input['smtp_host'] ?? ''),
+                'smtp_port' => trim($input['smtp_port'] ?? ''),
+                'smtp_user' => trim($input['smtp_user'] ?? ''),
+                'smtp_pass' => trim($input['smtp_pass'] ?? ''),
+                'smtp_from_email' => trim($input['smtp_from_email'] ?? ''),
+                'smtp_from_name' => trim($input['smtp_from_name'] ?? ''),
+                'smtp_encryption' => trim($input['smtp_encryption'] ?? 'none'),
+                'whatsapp_api_url' => trim($input['whatsapp_api_url'] ?? ''),
+                'whatsapp_access_token' => trim($input['whatsapp_access_token'] ?? ''),
+            ];
+            foreach ($smtpSettings as $key => $val) {
+                dm_set_system_setting($conn, $prefix, $key, $val);
+            }
+            commerce_json_response(['success' => true]);
+
         /* ════════════════════ UTILITY ════════════════════ */
 
         case 'get_states':

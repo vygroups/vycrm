@@ -439,7 +439,7 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             name VARCHAR(150) NOT NULL,
             trigger_field_id INT NOT NULL,
             trigger_value VARCHAR(255) NOT NULL,
-            action_type ENUM('email', 'whatsapp') NOT NULL,
+            action_type ENUM('email', 'whatsapp', 'push') NOT NULL,
             recipient_field_id INT DEFAULT NULL,
             recipient_custom VARCHAR(255) DEFAULT NULL,
             template_subject VARCHAR(255) DEFAULT NULL,
@@ -460,7 +460,7 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             workflow_id INT NOT NULL,
             record_id INT NOT NULL,
             recipient VARCHAR(255) NOT NULL,
-            action_type ENUM('email', 'whatsapp') NOT NULL,
+            action_type ENUM('email', 'whatsapp', 'push') NOT NULL,
             subject VARCHAR(255) DEFAULT NULL,
             body TEXT NOT NULL,
             status ENUM('sent', 'failed') DEFAULT 'sent',
@@ -472,6 +472,9 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             INDEX idx_workflow_logs_record (record_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    try { $conn->exec("ALTER TABLE {$prefix}module_workflows MODIFY COLUMN action_type ENUM('email', 'whatsapp', 'push') NOT NULL"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}workflow_logs MODIFY COLUMN action_type ENUM('email', 'whatsapp', 'push') NOT NULL"); } catch (Throwable $e) {}
 }
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array
