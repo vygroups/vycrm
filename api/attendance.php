@@ -7,6 +7,7 @@ date_default_timezone_set('Asia/Kolkata');
 header('Content-Type: application/json');
 
 require_once '../includes/api_auth.php';
+require_once '../includes/dynamic_modules.php';
 
 try {
     $context = api_require_context();
@@ -126,26 +127,92 @@ try {
             break;
 
         case 'history':
-            $stmt = $conn->prepare("SELECT * FROM {$prefix}attendance WHERE user_id = ? ORDER BY date DESC LIMIT 30");
-            $stmt->execute([$user_id]);
-            echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            $targetUser = isset($_GET['user_id']) ? $_GET['user_id'] : $user_id;
+
+            // Fetch logged-in user details from db
+            $userQuery = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
+            $userQuery->execute([$user_id]);
+            $userData = $userQuery->fetch(PDO::FETCH_ASSOC);
+            $my_role_id = $userData ? $userData['role_id'] : null;
+            $isAdmin = $userData ? (int)$userData['is_admin'] : 0;
+            
+            if (!$isAdmin && $my_role_id) {
+                $stmt = $conn->prepare("SELECT name FROM {$prefix}roles WHERE id = ?");
+                $stmt->execute([$my_role_id]);
+                $role_name = strtolower($stmt->fetchColumn() ?: '');
+                if (strpos($role_name, 'admin') !== false || strpos($role_name, 'manager') !== false) {
+                    $isAdmin = true;
+                }
+            }
+
+            $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+            $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, $rule, $isAdmin);
+
+            if ($targetUser === 'all') {
+                if ($allowedUserIds !== null) {
+                    if (empty($allowedUserIds)) {
+                        echo json_encode(['success' => true, 'data' => []]);
+                        exit;
+                    }
+                    $inClause = implode(',', array_map('intval', $allowedUserIds));
+                    $stmt = $conn->query("SELECT a.*, u.username FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id WHERE a.user_id IN ($inClause) ORDER BY a.date DESC LIMIT 100");
+                } else {
+                    $stmt = $conn->query("SELECT a.*, u.username FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id ORDER BY a.date DESC LIMIT 100");
+                }
+                echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            } else {
+                $targetUser = (int)$targetUser;
+                if ($targetUser !== (int)$user_id) {
+                    if ($allowedUserIds !== null && !in_array($targetUser, $allowedUserIds)) {
+                        echo json_encode(['success' => true, 'data' => []]);
+                        exit;
+                    }
+                }
+                
+                $stmt = $conn->prepare("SELECT a.*, u.username FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id WHERE a.user_id = ? ORDER BY a.date DESC LIMIT 30");
+                $stmt->execute([$targetUser]);
+                echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            }
             break;
 
         case 'report':
             $startDate = $_GET['start_date'] ?? date('Y-m-01');
             $endDate = $_GET['end_date'] ?? date('Y-m-d');
-            $targetUser = (int) ($_GET['user_id'] ?? $user_id);
             
+            $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+            $isAdmin = !empty($_SESSION['is_admin']);
+            $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : null, $rule, $isAdmin);
+
+            $whereClauses = ["a.date BETWEEN ? AND ?"];
+            $params = [$startDate, $endDate];
+
+            if ($allowedUserIds !== null) {
+                if (isset($_GET['user_id']) && $_GET['user_id'] !== '') {
+                    $requestedUid = (int)$_GET['user_id'];
+                    if (in_array($requestedUid, $allowedUserIds)) {
+                        $whereClauses[] = "a.user_id = ?";
+                        $params[] = $requestedUid;
+                    } else {
+                        echo json_encode(['success' => true, 'data' => []]);
+                        exit;
+                    }
+                } else {
+                    $whereClauses[] = "a.user_id IN (" . implode(',', array_map('intval', $allowedUserIds ?: [0])) . ")";
+                }
+            } else {
+                if (isset($_GET['user_id']) && $_GET['user_id'] !== '') {
+                    $whereClauses[] = "a.user_id = ?";
+                    $params[] = (int)$_GET['user_id'];
+                }
+            }
+
             $stmt = $conn->prepare("
                 SELECT a.*, u.username 
                 FROM {$prefix}attendance a
                 JOIN users u ON u.id = a.user_id
-                WHERE a.date BETWEEN ? AND ? " . ($_GET['user_id'] ? "AND a.user_id = ?" : "") . "
+                WHERE " . implode(' AND ', $whereClauses) . "
                 ORDER BY a.date DESC, a.punch_in ASC
             ");
-            
-            $params = [$startDate, $endDate];
-            if ($_GET['user_id']) $params[] = $targetUser;
             
             $stmt->execute($params);
             echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);

@@ -468,12 +468,23 @@ function commerce_fetch_invoice_detail(PDO $conn, string $prefix, int $invoiceId
 
 function commerce_fetch_invoice_stats(PDO $conn, string $prefix): array
 {
+    require_once __DIR__ . '/dynamic_modules.php';
+    $rule = dm_get_system_setting($conn, $prefix, 'billing_visibility', 'all');
+    $isAdmin = !empty($_SESSION['is_admin']);
+    $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)($_SESSION['user_id'] ?? 0), isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : null, $rule, $isAdmin);
+
+    $where = "";
+    if ($allowedUserIds !== null) {
+        $where = "WHERE created_by IN (" . implode(',', array_map('intval', $allowedUserIds ?: [0])) . ")";
+    }
+
     $stmt = $conn->query("
         SELECT 
             SUM(grand_total) as total_sale,
             SUM(paid_amount) as total_paid,
             SUM(grand_total - paid_amount) as total_unpaid
         FROM {$prefix}invoices
+        $where
     ");
     $stats = $stmt->fetch(PDO::FETCH_ASSOC);
     return [
@@ -582,11 +593,22 @@ function commerce_fetch_products(PDO $conn, string $prefix, ?string $search = nu
 
 function commerce_fetch_invoices(PDO $conn, string $prefix): array
 {
+    require_once __DIR__ . '/dynamic_modules.php';
+    $rule = dm_get_system_setting($conn, $prefix, 'billing_visibility', 'all');
+    $isAdmin = !empty($_SESSION['is_admin']);
+    $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)($_SESSION['user_id'] ?? 0), isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : null, $rule, $isAdmin);
+
+    $where = "";
+    if ($allowedUserIds !== null) {
+        $where = "WHERE i.created_by IN (" . implode(',', array_map('intval', $allowedUserIds ?: [0])) . ")";
+    }
+
     $stmt = $conn->query("
         SELECT i.*,
                COUNT(ii.id) AS item_count
         FROM {$prefix}invoices i
         LEFT JOIN {$prefix}invoice_items ii ON ii.invoice_id = i.id
+        $where
         GROUP BY i.id
         ORDER BY i.created_at DESC
     ");

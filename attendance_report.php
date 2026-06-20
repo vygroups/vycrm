@@ -11,11 +11,25 @@ $context = ['user_id' => $_SESSION['user_id'], 'db_name' => $_SESSION['tenant_db
 $conn = Database::getTenantConn($context['db_name']);
 $tPrefix = $context['prefix'];
 
-// Fetch users for the filter (Admin only)
+require_once 'includes/dynamic_modules.php';
+
+// Fetch users for the filter
 $users = [];
 try {
-    $userStmt = $conn->query("SELECT id, username FROM users ORDER BY username ASC");
-    $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+    $rule = dm_get_system_setting($conn, $tPrefix, 'attendance_visibility', 'all');
+    $isAdmin = !empty($_SESSION['is_admin']);
+    $allowedUserIds = dm_get_visible_user_ids($conn, $tPrefix, (int)$_SESSION['user_id'], isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : null, $rule, $isAdmin);
+    
+    if ($allowedUserIds !== null) {
+        if (!empty($allowedUserIds)) {
+            $inClause = implode(',', array_map('intval', $allowedUserIds));
+            $userStmt = $conn->query("SELECT id, username FROM users WHERE id IN ($inClause) ORDER BY username ASC");
+            $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    } else {
+        $userStmt = $conn->query("SELECT id, username FROM users ORDER BY username ASC");
+        $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 } catch (Exception $e) {
 }
 

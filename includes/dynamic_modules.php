@@ -557,3 +557,61 @@ function dm_get_mapbox_config(): array
         'api_key' => '97fa6WEt6nfzAlJfBuZwwmPPusYX1AEk',
     ];
 }
+
+/**
+ * Get the list of user IDs visible to a specific user based on a visibility rule.
+ * Returns null if all users should be visible (e.g. admin or rule 'all').
+ * Otherwise, returns an array of allowed user IDs (e.g. [1, 2, 3]).
+ */
+function dm_get_visible_user_ids(PDO $conn, string $p, int $userId, ?int $roleId, string $rule, bool $isAdmin = false): ?array
+{
+    if ($isAdmin || $rule === 'all') {
+        return null;
+    }
+
+    $allowedUserIds = [$userId];
+
+    if ($rule === 'owner') {
+        return $allowedUserIds;
+    }
+
+    if ($rule === 'role_down' || $rule === 'role_equal_down') {
+        $childRoles = [];
+        if ($roleId) {
+            $crStmt = $conn->prepare("SELECT child_role_id FROM {$p}role_hierarchy WHERE parent_role_id = ?");
+            $crStmt->execute([$roleId]);
+            $childRoles = $crStmt->fetchAll(PDO::FETCH_COLUMN);
+        }
+
+        $roleFilter = [];
+        if ($rule === 'role_equal_down') {
+            if ($roleId) {
+                $roleFilter[] = $roleId;
+            }
+        }
+        if (!empty($childRoles)) {
+            $roleFilter = array_merge($roleFilter, $childRoles);
+        }
+
+        if (!empty($roleFilter)) {
+            $inClause = implode(',', array_map('intval', $roleFilter));
+            $uStmt = $conn->query("SELECT id FROM {$p}users WHERE role_id IN ($inClause)");
+            $allowedUserIds = array_merge($allowedUserIds, $uStmt->fetchAll(PDO::FETCH_COLUMN));
+        }
+    } elseif ($rule === 'role_up') {
+        $parentRoles = [];
+        if ($roleId) {
+            $prStmt = $conn->prepare("SELECT parent_role_id FROM {$p}role_hierarchy WHERE child_role_id = ?");
+            $prStmt->execute([$roleId]);
+            $parentRoles = $prStmt->fetchAll(PDO::FETCH_COLUMN);
+        }
+
+        if (!empty($parentRoles)) {
+            $inClause = implode(',', array_map('intval', $parentRoles));
+            $uStmt = $conn->query("SELECT id FROM {$p}users WHERE role_id IN ($inClause)");
+            $allowedUserIds = array_merge($allowedUserIds, $uStmt->fetchAll(PDO::FETCH_COLUMN));
+        }
+    }
+
+    return array_unique(array_map('intval', $allowedUserIds));
+}

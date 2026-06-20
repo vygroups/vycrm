@@ -214,10 +214,12 @@ if (!empty($_GET['edit'])) {
                         <?php
                         $attendanceEnabled = dm_get_system_setting($conn, $prefix, 'attendance_enabled', '1') === '1';
                         $billingEnabled = dm_get_system_setting($conn, $prefix, 'billing_enabled', '1') === '1';
+                        $attendanceVisibility = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+                        $billingVisibility = dm_get_system_setting($conn, $prefix, 'billing_visibility', 'all');
                         ?>
-                        <div style="display: flex; gap: 30px;">
+                        <div style="display: flex; gap: 30px; flex-wrap: wrap;">
                             <div
-                                style="display: flex; align-items: center; gap: 12px; padding-right: 30px; border-right: 1px solid var(--border);">
+                                style="display: flex; align-items: center; gap: 12px; padding-right: 30px; border-right: 1px solid var(--border); flex-wrap: wrap;">
                                 <i class="fa-solid fa-calendar-check"
                                     style="color: var(--primary); font-size: 18px;"></i>
                                 <span style="font-weight: 500; font-size: 14px;">Attendance & Operations</span>
@@ -227,9 +229,16 @@ if (!empty($_GET['edit'])) {
                                         <?= $attendanceEnabled ? 'checked' : '' ?>
                                         onchange="toggleSystemModule('attendance_enabled', this.checked)">
                                 </div>
+                                <select class="form-control" onchange="updateSystemVisibility('attendance_visibility', this.value)" style="width: 135px; font-size: 12px; margin-left: 8px; padding: 4px 8px; border-radius: 8px; border: 1.5px solid var(--border); background: #fff; cursor: pointer; height: 32px; box-sizing: border-box;">
+                                    <option value="all" <?= $attendanceVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
+                                    <option value="owner" <?= $attendanceVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
+                                    <option value="role_down" <?= $attendanceVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
+                                    <option value="role_equal_down" <?= $attendanceVisibility === 'role_equal_down' ? 'selected' : '' ?>>Equal & Lower</option>
+                                    <option value="role_up" <?= $attendanceVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
+                                </select>
                             </div>
 
-                            <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                                 <i class="fa-solid fa-file-invoice-dollar" style="color: var(--primary); font-size: 18px;"></i>
                                 <span style="font-weight: 500; font-size: 14px;">Billing & Transactions</span>
                                 <div class="form-check form-switch" style="margin-left: 8px;">
@@ -238,6 +247,13 @@ if (!empty($_GET['edit'])) {
                                         <?= $billingEnabled ? 'checked' : '' ?>
                                         onchange="toggleSystemModule('billing_enabled', this.checked)">
                                 </div>
+                                <select class="form-control" onchange="updateSystemVisibility('billing_visibility', this.value)" style="width: 135px; font-size: 12px; margin-left: 8px; padding: 4px 8px; border-radius: 8px; border: 1.5px solid var(--border); background: #fff; cursor: pointer; height: 32px; box-sizing: border-box;">
+                                    <option value="all" <?= $billingVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
+                                    <option value="owner" <?= $billingVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
+                                    <option value="role_down" <?= $billingVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
+                                    <option value="role_equal_down" <?= $billingVisibility === 'role_equal_down' ? 'selected' : '' ?>>Equal & Lower</option>
+                                    <option value="role_up" <?= $billingVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -447,6 +463,12 @@ if (!empty($_GET['edit'])) {
         }
         function toggleSystemModule(key, enabled) {
             api('update_system_setting', { key, value: enabled ? '1' : '0' }).then(r => {
+                if (r.success) location.reload();
+                else alert(r.error);
+            });
+        }
+        function updateSystemVisibility(key, val) {
+            api('update_system_setting', { key, value: val }).then(r => {
                 if (r.success) location.reload();
                 else alert(r.error);
             });

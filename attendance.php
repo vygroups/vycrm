@@ -252,16 +252,51 @@ require_once 'includes/brand.php';
                 </div>
 
                 <div class="table-panel" style="padding:20px;">
-                    <div class="tabs-header">
-                        <button class="tab-btn active" onclick="switchTab(event,'history')">ATTENDANCE HISTORY</button>
-                        <button class="tab-btn" onclick="switchTab(event,'leaves')">LEAVE REQUESTS</button>
-                        <button class="tab-btn" onclick="switchTab(event,'permissions')">PERMISSIONS</button>
+                    <div class="tabs-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-bottom: 20px;">
+                        <div style="display:flex; gap:10px;">
+                            <button class="tab-btn active" onclick="switchTab(event,'history')">ATTENDANCE HISTORY</button>
+                            <button class="tab-btn" onclick="switchTab(event,'leaves')">LEAVE REQUESTS</button>
+                            <button class="tab-btn" onclick="switchTab(event,'permissions')">PERMISSIONS</button>
+                        </div>
+                        <?php
+                        require_once 'includes/dynamic_modules.php';
+                        $dbName = $_SESSION['tenant_db'];
+                        $prefix = $_SESSION['tenant_prefix'];
+                        $conn = Database::getTenantConn($dbName);
+                        
+                        $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+                        $isAdmin = !empty($_SESSION['is_admin']);
+                        $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$_SESSION['user_id'], isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : null, $rule, $isAdmin);
+                        
+                        $showMemberFilter = ($allowedUserIds === null || count($allowedUserIds) > 1);
+                        if ($showMemberFilter):
+                            $users = [];
+                            try {
+                                if ($allowedUserIds !== null) {
+                                    $inClause = implode(',', array_map('intval', $allowedUserIds));
+                                    $userStmt = $conn->query("SELECT id, username FROM {$prefix}users WHERE id IN ($inClause) ORDER BY username ASC");
+                                } else {
+                                    $userStmt = $conn->query("SELECT id, username FROM {$prefix}users ORDER BY username ASC");
+                                }
+                                $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+                            } catch (Exception $e) {}
+                        ?>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">VIEWING TEAM MEMBER:</span>
+                                <select class="form-control" id="memberFilter" onchange="filterMember(this.value)" style="width:180px; padding:4px 10px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; cursor:pointer; height:32px; box-sizing:border-box;">
+                                    <option value="all">All Team Members</option>
+                                    <?php foreach ($users as $u): ?>
+                                        <option value="<?= $u['id'] ?>" <?= $u['id'] == $_SESSION['user_id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['username']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        <?php endif; ?>
                     </div>
 
                     <div id="history" class="tab-content active table-responsive">
                         <table class="crm-table">
                             <thead>
-                                <tr>
+                                <tr id="historyHeaderRow">
                                     <th>Date</th>
                                     <th>First Punch In</th>
                                     <th>Last Punch Out</th>
@@ -279,7 +314,7 @@ require_once 'includes/brand.php';
 
                     <div id="leaves" class="tab-content table-responsive">
                         <div class="flex justify-between items-center mb-3">
-                            <h4 style="color:var(--text-main);">My Leave Applications</h4>
+                            <h4 style="color:var(--text-main);" id="leavesTitle">My Leave Applications</h4>
                             <button class="btn-primary" style="width:auto;padding:10px 20px;border-radius:10px;"
                                 onclick="openModal('leaveModal')">
                                 <i class="fa-solid fa-plus" style="margin-right:8px;"></i> Request Leave
@@ -287,7 +322,7 @@ require_once 'includes/brand.php';
                         </div>
                         <table class="crm-table">
                             <thead>
-                                <tr>
+                                <tr id="leavesHeaderRow">
                                     <th>Leave Type</th>
                                     <th>From Date</th>
                                     <th>To Date</th>
@@ -303,7 +338,7 @@ require_once 'includes/brand.php';
 
                     <div id="permissions" class="tab-content table-responsive">
                         <div class="flex justify-between items-center mb-3">
-                            <h4 style="color:var(--text-main);">My Permission Requests</h4>
+                            <h4 style="color:var(--text-main);" id="permissionsTitle">My Permission Requests</h4>
                             <button class="btn-primary" style="width:auto;padding:10px 20px;border-radius:10px;"
                                 onclick="openModal('permissionModal')">
                                 <i class="fa-solid fa-plus" style="margin-right:8px;"></i> Request Permission
@@ -311,7 +346,7 @@ require_once 'includes/brand.php';
                         </div>
                         <table class="crm-table">
                             <thead>
-                                <tr>
+                                <tr id="permissionsHeaderRow">
                                     <th>Date</th>
                                     <th>Time Window</th>
                                     <th>Duration</th>
@@ -472,6 +507,31 @@ require_once 'includes/brand.php';
 
         const PUNCH_KEY = 'vycrm_punch_start';
         const BREAK_KEY = 'vycrm_break_start';
+        let selectedUserId = <?= (int)$_SESSION['user_id'] ?>;
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.toString()
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function filterMember(uid) {
+            selectedUserId = uid === 'all' ? 'all' : parseInt(uid, 10);
+            
+            const activeTabBtn = document.querySelector('.tab-btn.active');
+            if (activeTabBtn) {
+                const onclickText = activeTabBtn.getAttribute('onclick') || '';
+                if (onclickText.includes('history')) loadAttendanceHistory();
+                else if (onclickText.includes('leaves')) loadLeaves();
+                else if (onclickText.includes('permissions')) loadPermissions();
+            } else {
+                loadAttendanceHistory();
+            }
+        }
         function formatElapsed(ms) {
             const s = Math.floor(ms / 1000);
             return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map(n => String(n).padStart(2, '0')).join(':');
@@ -569,9 +629,18 @@ require_once 'includes/brand.php';
         }
 
         async function loadAttendanceHistory() {
-            const res = await fetch('/api/attendance.php?action=history');
+            const res = await fetch('/api/attendance.php?action=history&user_id=' + selectedUserId);
             const data = await res.json();
             const tbody = document.getElementById('attendanceHistoryBody');
+            const headerRow = document.getElementById('historyHeaderRow');
+            
+            const isAll = (selectedUserId === 'all');
+            if (headerRow) {
+                headerRow.innerHTML = isAll 
+                    ? `<th>User</th><th>Date</th><th>First Punch In</th><th>Last Punch Out</th><th>Total Hours</th><th>Total Break Hours</th><th>Status</th><th>Action</th>`
+                    : `<th>Date</th><th>First Punch In</th><th>Last Punch Out</th><th>Total Hours</th><th>Total Break Hours</th><th>Status</th><th>Action</th>`;
+            }
+
             if (data.success && data.data && data.data.length > 0) {
                 window.currentAttendanceData = data.data;
                 tbody.innerHTML = data.data.map((at, index) => {
@@ -582,9 +651,11 @@ require_once 'includes/brand.php';
                         statusBg = 'rgba(245,158,11,.1)';
                     }
                     const statusTag = `<span class="badge" style="background:${statusBg};border:1px solid ${statusColor};color:${statusColor};">${at.status || 'Present'}</span>`;
+                    const userCell = isAll ? `<td class="text-bold">${escapeHtml(at.username || 'Unknown')}</td>` : '';
                     return `
                     <tr>
-                        <td class="text-bold">${formatVyDate(at.date)}</td>
+                        ${userCell}
+                        <td class="${isAll ? '' : 'text-bold'}">${formatVyDate(at.date)}</td>
                         <td>${formatVyTime(at.punch_in)}</td>
                         <td>${formatVyTime(at.punch_out)}</td>
                         <td>${at.total_hours || '-'}</td>
@@ -594,13 +665,18 @@ require_once 'includes/brand.php';
                     </tr>`;
                 }).join('');
             } else {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">No attendance records found.</td></tr>';
+                const cols = isAll ? 8 : 7;
+                tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;padding:20px;color:var(--text-muted);">No attendance records found.</td></tr>`;
             }
         }
 
         function viewAttendanceHistory(index) {
             const at = window.currentAttendanceData[index];
-            let html = `<p><strong>Date:</strong> ${formatVyDate(at.date)}</p>
+            let html = '';
+            if (at.username) {
+                html += `<p><strong>Team Member:</strong> ${escapeHtml(at.username)}</p>`;
+            }
+            html += `<p><strong>Date:</strong> ${formatVyDate(at.date)}</p>
                         <p><strong>First Punch In:</strong> ${formatVyTime(at.punch_in)}</p>
                         <p><strong>Last Punch Out:</strong> ${formatVyTime(at.punch_out)}</p>
                         <p><strong>Total Hours:</strong> ${at.total_hours || '-'}</p>
@@ -626,36 +702,68 @@ require_once 'includes/brand.php';
         }
 
         async function loadLeaves() {
-            const res = await fetch('/api/leaves.php');
+            const res = await fetch('/api/leaves.php?user_id=' + selectedUserId);
             const data = await res.json();
+            const tbody = document.getElementById('leaveHistoryBody');
+            const headerRow = document.getElementById('leavesHeaderRow');
+            const leavesTitle = document.getElementById('leavesTitle');
+            
+            const isAll = (selectedUserId === 'all');
+            if (leavesTitle) {
+                leavesTitle.textContent = isAll ? "Team Leave Applications" : "My Leave Applications";
+            }
+            if (headerRow) {
+                headerRow.innerHTML = isAll
+                    ? `<th>User</th><th>Leave Type</th><th>From Date</th><th>To Date</th><th>Reason</th><th>Status</th>`
+                    : `<th>Leave Type</th><th>From Date</th><th>To Date</th><th>Reason</th><th>Status</th>`;
+            }
+
             if (data.success) {
-                const tbody = document.getElementById('leaveHistoryBody');
-                tbody.innerHTML = data.data.map(l => `
+                tbody.innerHTML = data.data.map(l => {
+                    const userCell = isAll ? `<td class="text-bold">${escapeHtml(l.username || 'Unknown')}</td>` : '';
+                    return `
                     <tr>
-                        <td class="text-bold">${l.leave_type}</td>
+                        ${userCell}
+                        <td class="${isAll ? '' : 'text-bold'}">${l.leave_type}</td>
                         <td>${formatVyDate(l.from_date)}</td>
                         <td>${formatVyDate(l.to_date)}</td>
-                        <td>${l.reason}</td>
+                        <td>${escapeHtml(l.reason)}</td>
                         <td><span class="badge badge-${l.status === 'pending' ? 'warm' : (l.status === 'approved' ? 'success' : 'hot')}">${l.status}</span></td>
                     </tr>
-                `).join('') || '<tr><td colspan="5" style="text-align:center;">No leave applications found</td></tr>';
+                `}).join('') || `<tr><td colspan="${isAll ? 6 : 5}" style="text-align:center;padding:20px;color:var(--text-muted);">No leave applications found</td></tr>`;
             }
         }
 
         async function loadPermissions() {
-            const res = await fetch('/api/permissions.php');
+            const res = await fetch('/api/permissions.php?user_id=' + selectedUserId);
             const data = await res.json();
+            const tbody = document.getElementById('permissionHistoryBody');
+            const headerRow = document.getElementById('permissionsHeaderRow');
+            const permissionsTitle = document.getElementById('permissionsTitle');
+            
+            const isAll = (selectedUserId === 'all');
+            if (permissionsTitle) {
+                permissionsTitle.textContent = isAll ? "Team Permission Requests" : "My Permission Requests";
+            }
+            if (headerRow) {
+                headerRow.innerHTML = isAll
+                    ? `<th>User</th><th>Date</th><th>Time Window</th><th>Duration</th><th>Reason</th><th>Status</th>`
+                    : `<th>Date</th><th>Time Window</th><th>Duration</th><th>Reason</th><th>Status</th>`;
+            }
+
             if (data.success) {
-                const tbody = document.getElementById('permissionHistoryBody');
-                tbody.innerHTML = data.data.map(p => `
+                tbody.innerHTML = data.data.map(p => {
+                    const userCell = isAll ? `<td class="text-bold">${escapeHtml(p.username || 'Unknown')}</td>` : '';
+                    return `
                     <tr>
-                        <td class="text-bold">${formatVyDate(p.date)}</td>
-                        <td>${p.time_window}</td>
-                        <td>${p.duration}</td>
-                        <td>${p.reason}</td>
+                        ${userCell}
+                        <td class="${isAll ? '' : 'text-bold'}">${formatVyDate(p.date)}</td>
+                        <td>${escapeHtml(p.time_window)}</td>
+                        <td>${escapeHtml(p.duration)}</td>
+                        <td>${escapeHtml(p.reason)}</td>
                         <td><span class="badge badge-${p.status === 'pending' ? 'warm' : (p.status === 'approved' ? 'success' : 'hot')}">${p.status}</span></td>
                     </tr>
-                `).join('') || '<tr><td colspan="5" style="text-align:center;">No permission requests found</td></tr>';
+                `}).join('') || `<tr><td colspan="${isAll ? 6 : 5}" style="text-align:center;padding:20px;color:var(--text-muted);">No permission requests found</td></tr>`;
             }
         }
 
@@ -686,6 +794,7 @@ require_once 'includes/brand.php';
             evt.currentTarget.classList.add('active');
             if (id === 'leaves') loadLeaves();
             if (id === 'permissions') loadPermissions();
+            if (id === 'history') loadAttendanceHistory();
         }
 
         function toggleSidebar() {
@@ -716,10 +825,6 @@ require_once 'includes/brand.php';
         fetchStatus();
         loadAttendanceHistory();
     </script>
-</body>
-
-</html>
-pt>
 </body>
 
 </html>
