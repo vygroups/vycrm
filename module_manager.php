@@ -21,6 +21,7 @@ if (!empty($_GET['edit'])) {
 }
 
 $jsFields = [];
+$usersList = [];
 if ($editModule) {
     foreach ($editModule['blocks'] as $b) {
         foreach ($b['fields'] as $f) {
@@ -33,6 +34,19 @@ if ($editModule) {
             ];
         }
     }
+}
+
+try {
+    $usersQuery = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users ORDER BY username ASC");
+    while ($u = $usersQuery->fetch(PDO::FETCH_ASSOC)) {
+        $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+        $usersList[] = [
+            'id' => (int)$u['id'],
+            'name' => $fullName ?: $u['username']
+        ];
+    }
+} catch (Exception $e) {
+    // Fallback if table doesn't exist
 }
 ?>
 <!DOCTYPE html>
@@ -211,7 +225,8 @@ if ($editModule) {
                                                         <?php endif; ?>
                                                         <button class="mm-icon-btn"
                                                             onclick="manageRules(<?= $field['id'] ?>, <?= $editModule['id'] ?>)"
-                                                            title="Rules"><i class="fa-solid fa-code-branch"></i></button>
+                                                            title="Rules"
+                                                            <?= !empty($field['rules']) ? 'style="background: rgba(123,94,240,0.15); color: var(--primary); font-weight: bold; border: 1px solid rgba(123,94,240,0.3);"' : '' ?>><i class="fa-solid fa-code-branch"></i></button>
                                                         <button class="mm-icon-btn mm-icon-danger"
                                                             onclick="deleteField(<?= $field['id'] ?>)"><i
                                                                 class="fa-solid fa-trash"></i></button>
@@ -578,6 +593,7 @@ if ($editModule) {
         const MODULE_ID = <?= $editModule ? $editModule['id'] : 'null' ?>;
         const ALL_FIELD_TYPES = <?= json_encode($fieldTypes) ?>;
         const EDIT_MODULE_FIELDS = <?= json_encode($jsFields) ?>;
+        const ALL_USERS = <?= json_encode($usersList) ?>;
 
         function api(action, data = {}) {
             return fetch(API, {
@@ -789,13 +805,94 @@ if ($editModule) {
             let fieldOpts = rulesModuleFields.map(f => `<option value="${f.id}" ${rule.source_field_id == f.id ? 'selected' : ''}>${f.label}</option>`).join('');
             div.innerHTML = `
         <select class="form-control rule-type"><option value="conditional" ${rule.rule_type === 'conditional' ? 'selected' : ''}>Conditional</option><option value="dependency" ${rule.rule_type === 'dependency' ? 'selected' : ''}>Dependency</option></select>
-        <select class="form-control rule-source">${fieldOpts}</select>
+        <select class="form-control rule-source" onchange="onRuleSourceChange(this)">${fieldOpts}</select>
         <select class="form-control rule-op"><option value="equals" ${rule.operator === 'equals' ? 'selected' : ''}>Equals</option><option value="not_equals" ${rule.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option><option value="contains" ${rule.operator === 'contains' ? 'selected' : ''}>Contains</option><option value="not_empty" ${rule.operator === 'not_empty' ? 'selected' : ''}>Not Empty</option></select>
-        <input type="text" class="form-control rule-value" placeholder="Value" value="${rule.value || ''}">
+        <div class="rule-value-container" style="flex: 1; min-width: 100px; display: flex;"></div>
         <select class="form-control rule-action"><option value="show" ${rule.action === 'show' ? 'selected' : ''}>Show</option><option value="hide" ${rule.action === 'hide' ? 'selected' : ''}>Hide</option><option value="require" ${rule.action === 'require' ? 'selected' : ''}>Make Required</option><option value="optional" ${rule.action === 'optional' ? 'selected' : ''}>Make Optional</option></select>
         <button class="mm-icon-btn mm-icon-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
             document.getElementById('rulesList').appendChild(div);
+            
+            // Set up initial dynamic value input
+            const sourceSelect = div.querySelector('.rule-source');
+            onRuleSourceChange(sourceSelect, rule.value || '');
         }
+
+        function onRuleSourceChange(selectEl, currentValue = '') {
+            const row = selectEl.closest('.mm-rule-row');
+            if (!row) return;
+            const valContainer = row.querySelector('.rule-value-container');
+            if (!valContainer) return;
+            
+            const fieldId = selectEl.value;
+            if (!fieldId) {
+                valContainer.innerHTML = `<input type="text" class="form-control rule-value" placeholder="Value" value="${escapeHtml(currentValue)}" style="width:100%;">`;
+                return;
+            }
+            
+            const field = rulesModuleFields.find(f => f.id == fieldId);
+            if (!field) {
+                valContainer.innerHTML = `<input type="text" class="form-control rule-value" placeholder="Value" value="${escapeHtml(currentValue)}" style="width:100%;">`;
+                return;
+            }
+            
+            // Match user selection fields (Assigned to, Created By, etc.)
+            const labelLower = (field.label || '').toLowerCase().trim();
+            const isUserField = field.field_type === 'user' || 
+                                field.field_type === 'assigned_to' || 
+                                ['assignee', 'assigned to', 'created by', 'updated by'].includes(labelLower);
+            
+            if (isUserField) {
+                let userOpts = ALL_USERS.map(u => `<option value="${u.id}" ${currentValue == u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
+                valContainer.innerHTML = `
+                    <select class="form-control rule-value" style="width:100%;">
+                        <option value="">-- Choose User --</option>
+                        ${userOpts}
+                    </select>
+                `;
+            } 
+            // Match option selectors (select, dropdown, multi picker, radio)
+            else if (field.field_type === 'select' || field.field_type === 'dropdown' || field.field_type === 'multi_picker' || field.field_type === 'radio_group') {
+                const opts = field.options || [];
+                let optHtml = opts.map(o => {
+                    const optVal = o.value || o.option_value || o;
+                    const optLbl = o.label || o.option_label || optVal;
+                    return `<option value="${escapeHtml(optVal)}" ${currentValue == optVal ? 'selected' : ''}>${escapeHtml(optLbl)}</option>`;
+                }).join('');
+                valContainer.innerHTML = `
+                    <select class="form-control rule-value" style="width:100%;">
+                        <option value="">-- Choose option --</option>
+                        ${optHtml}
+                    </select>
+                `;
+            } 
+            // Match checkbox (Yes/No)
+            else if (field.field_type === 'checkbox') {
+                valContainer.innerHTML = `
+                    <select class="form-control rule-value" style="width:100%;">
+                        <option value="1" ${currentValue == '1' ? 'selected' : ''}>Yes</option>
+                        <option value="0" ${currentValue == '0' ? 'selected' : ''}>No</option>
+                    </select>
+                `;
+            } 
+            // Match date fields
+            else if (field.field_type === 'date' || field.field_type === 'datetime') {
+                valContainer.innerHTML = `<input type="date" class="form-control rule-value" value="${escapeHtml(currentValue)}" style="width:100%;">`;
+            } 
+            // Default text input fallback
+            else {
+                valContainer.innerHTML = `<input type="text" class="form-control rule-value" placeholder="Value" value="${escapeHtml(currentValue)}" style="width:100%;">`;
+            }
+        }
+        function saveRules() {
+            const fieldId = +document.getElementById('rulesFieldId').value;
+            const rows = document.querySelectorAll('#rulesList .mm-rule-row');
+            const rules = [...rows].map(r => ({
+                rule_type: r.querySelector('.rule-type').value,
+                source_field_id: +r.querySelector('.rule-source').value,
+                operator: r.querySelector('.rule-op').value,
+                value: r.querySelector('.rule-value').value,
+                action: r.querySelector('.rule-action').value,
+            }));
             api('save_field_rules', { field_id: fieldId, rules }).then(r => { if (r.success) { closeModal('rulesModal'); vyToast('Rules saved successfully!', 'success'); } else vyToast(r.error, 'error'); });
         }
 
@@ -1191,6 +1288,16 @@ if ($editModule) {
             } catch(e) {
                 vyToast('Request failed: ' + e.message, 'error');
             }
+        }
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
