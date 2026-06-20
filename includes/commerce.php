@@ -413,6 +413,23 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             INDEX idx_history_field (field_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    // 10. Saved Filters
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_saved_filters (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            module_id INT NOT NULL,
+            name VARCHAR(150) NOT NULL,
+            filter_rules TEXT NOT NULL, -- JSON formatted array of filter rules
+            is_default TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES {$prefix}users(id) ON DELETE CASCADE,
+            INDEX idx_filters_user_module (user_id, module_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
 }
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array

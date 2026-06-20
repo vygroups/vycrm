@@ -182,7 +182,7 @@ function dm_fetch_module_full(PDO $conn, string $p, int $moduleId): ?array
 /**
  * Fetch records for a module with values pivoted.
  */
-function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search = null, int $limit = 50, int $offset = 0): array
+function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search = null, int $limit = 50, int $offset = 0, ?array $filterRules = null): array
 {
     // Get list-visible fields
     $fStmt = $conn->prepare("
@@ -199,11 +199,8 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
     $mStmt->execute([$moduleId]);
     $rule = $mStmt->fetchColumn() ?: 'all';
 
-    $sql = "SELECT r.id, r.created_at, r.created_by, r.updated_at, r.updated_by FROM {$p}module_records r WHERE r.module_id = ?";
+    $baseSql = " FROM {$p}module_records r WHERE r.module_id = ?";
     $params = [$moduleId];
-
-    // ... (Visibility Logic remains same) ...
-    // [I'll keep the middle part as is in the replacement, just showing the change in SQL]
 
     // Visibility Logic
     $currentUserId = (int) ($_SESSION['user_id'] ?? 0);
@@ -255,12 +252,12 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
         }
 
         if (!empty($vConditions)) {
-            $sql .= " AND (" . implode(' OR ', $vConditions) . ")";
+            $baseSql .= " AND (" . implode(' OR ', $vConditions) . ")";
         }
     }
 
     if ($search) {
-        $sql .= " AND r.id IN (
+        $baseSql .= " AND r.id IN (
             SELECT DISTINCT rv.record_id 
             FROM {$p}module_record_values rv 
             WHERE rv.value LIKE ?
@@ -268,7 +265,95 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
         $params[] = '%' . $search . '%';
     }
 
-    $sql .= " ORDER BY r.created_at DESC LIMIT $limit OFFSET $offset";
+    // Dynamic Saved Filters
+    if ($filterRules && is_array($filterRules)) {
+        // Fetch all fields for system type mapping
+        $fStmt = $conn->prepare("SELECT id, field_type FROM {$p}module_fields WHERE module_id = ?");
+        $fStmt->execute([$moduleId]);
+        $moduleFields = $fStmt->fetchAll(PDO::FETCH_ASSOC);
+        $sysFieldTypes = [];
+        foreach ($moduleFields as $f) {
+            $sysFieldTypes[(int)$f['id']] = $f['field_type'];
+        }
+
+        foreach ($filterRules as $rule_item) {
+            $fid = $rule_item['field_id'] ?? '';
+            $op = $rule_item['operator'] ?? '=';
+            $val = $rule_item['value'] ?? '';
+
+            // Validate operator
+            $allowedOps = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE'];
+            if (!in_array($op, $allowedOps)) {
+                $op = '=';
+            }
+
+            // System fields mapping
+            $sysFields = [
+                'created_by' => 'r.created_by',
+                'created_at' => 'r.created_at',
+                'updated_by' => 'r.updated_by',
+                'updated_at' => 'r.updated_at',
+                'id' => 'r.id'
+            ];
+
+            $mappedCol = null;
+            if (array_key_exists($fid, $sysFields)) {
+                $mappedCol = $sysFields[$fid];
+            } else {
+                $numericFid = (int)$fid;
+                if ($numericFid > 0 && isset($sysFieldTypes[$numericFid])) {
+                    $type = $sysFieldTypes[$numericFid];
+                    if ($type === 'sys_created_by') $mappedCol = 'r.created_by';
+                    elseif ($type === 'sys_created_at') $mappedCol = 'r.created_at';
+                    elseif ($type === 'sys_updated_by') $mappedCol = 'r.updated_by';
+                    elseif ($type === 'sys_updated_at') $mappedCol = 'r.updated_at';
+                }
+            }
+
+            if ($mappedCol) {
+                if ($op === 'LIKE') {
+                    $baseSql .= " AND $mappedCol LIKE ?";
+                    $params[] = '%' . $val . '%';
+                } elseif ($op === 'NOT LIKE') {
+                    $baseSql .= " AND $mappedCol NOT LIKE ?";
+                    $params[] = '%' . $val . '%';
+                } else {
+                    $baseSql .= " AND $mappedCol $op ?";
+                    $params[] = $val;
+                }
+            } else {
+                // Custom field
+                $fieldId = (int)$fid;
+                if ($fieldId > 0) {
+                    if ($op === 'LIKE') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value LIKE ?)";
+                        $params[] = $fieldId;
+                        $params[] = '%' . $val . '%';
+                    } elseif ($op === 'NOT LIKE') {
+                        $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value LIKE ?)";
+                        $params[] = $fieldId;
+                        $params[] = '%' . $val . '%';
+                    } elseif ($op === '!=') {
+                        $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value = ?)";
+                        $params[] = $fieldId;
+                        $params[] = $val;
+                    } else {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value $op ?)";
+                        $params[] = $fieldId;
+                        $params[] = $val;
+                    }
+                }
+            }
+        }
+    }
+
+    // Count total matching records
+    $cStmt = $conn->prepare("SELECT COUNT(*)" . $baseSql);
+    $cStmt->execute($params);
+    $total = (int) $cStmt->fetchColumn();
+
+    // Query records
+    $sql = "SELECT r.id, r.created_at, r.created_by, r.updated_at, r.updated_by" . $baseSql . " ORDER BY r.created_at DESC LIMIT $limit OFFSET $offset";
     $rStmt = $conn->prepare($sql);
     $rStmt->execute($params);
     $records = $rStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -315,11 +400,6 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
             $rec['values'][$sysFieldMap['sys_updated_at']] = $rec['updated_at'];
     }
     unset($rec);
-
-    // Count total
-    $cStmt = $conn->prepare("SELECT COUNT(*) FROM {$p}module_records WHERE module_id = ?");
-    $cStmt->execute([$moduleId]);
-    $total = (int) $cStmt->fetchColumn();
 
     return ['fields' => $fields, 'records' => $records, 'total' => $total];
 }

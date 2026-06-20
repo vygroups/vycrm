@@ -324,7 +324,24 @@ try {
             $search = $input['search'] ?? $_GET['search'] ?? null;
             $limit = (int)($input['limit'] ?? $_GET['limit'] ?? 50);
             $offset = (int)($input['offset'] ?? $_GET['offset'] ?? 0);
-            $data = dm_fetch_records($conn, $prefix, $moduleId, $search, $limit, $offset);
+            
+            $filterRules = null;
+            $filterRulesInput = $input['filter_rules'] ?? $_GET['filter_rules'] ?? null;
+            if ($filterRulesInput) {
+                $filterRules = is_string($filterRulesInput) ? json_decode($filterRulesInput, true) : $filterRulesInput;
+            } else {
+                $filterId = (int)($input['filter_id'] ?? $_GET['filter_id'] ?? 0);
+                if ($filterId) {
+                    $fStmt = $conn->prepare("SELECT filter_rules FROM {$prefix}module_saved_filters WHERE id = ? AND user_id = ?");
+                    $fStmt->execute([$filterId, $userId]);
+                    $rulesJson = $fStmt->fetchColumn();
+                    if ($rulesJson) {
+                        $filterRules = json_decode($rulesJson, true);
+                    }
+                }
+            }
+
+            $data = dm_fetch_records($conn, $prefix, $moduleId, $search, $limit, $offset, $filterRules);
             commerce_json_response(['success' => true, 'data' => $data]);
 
         case 'get_record':
@@ -477,6 +494,78 @@ try {
             unset($row);
 
             commerce_json_response(['success' => true, 'history' => $history]);
+
+        /* ════════════════ SAVED FILTERS ACTIONS ════════════════ */
+
+        case 'save_filter':
+            $filterModuleId = (int)($input['module_id'] ?? 0);
+            $filterName = trim($input['name'] ?? '');
+            $rules = $input['filter_rules'] ?? []; // Array/object of filter rules
+            $isDefault = !empty($input['is_default']) ? 1 : 0;
+            $filterId = (int)($input['id'] ?? 0);
+
+            if (!$filterModuleId) throw new RuntimeException('Module ID is required');
+            if (empty($filterName)) throw new RuntimeException('Filter name is required');
+
+            $rulesJson = json_encode($rules);
+
+            if ($isDefault) {
+                // Remove default flag from all other filters of this user and module
+                $stmt = $conn->prepare("UPDATE {$prefix}module_saved_filters SET is_default = 0 WHERE user_id = ? AND module_id = ?");
+                $stmt->execute([$userId, $filterModuleId]);
+            }
+
+            if ($filterId > 0) {
+                // Update existing
+                $stmt = $conn->prepare("
+                    UPDATE {$prefix}module_saved_filters 
+                    SET name = ?, filter_rules = ?, is_default = ? 
+                    WHERE id = ? AND user_id = ?
+                ");
+                $stmt->execute([$filterName, $rulesJson, $isDefault, $filterId, $userId]);
+                $savedId = $filterId;
+            } else {
+                // Insert new
+                $stmt = $conn->prepare("
+                    INSERT INTO {$prefix}module_saved_filters (user_id, module_id, name, filter_rules, is_default)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$userId, $filterModuleId, $filterName, $rulesJson, $isDefault]);
+                $savedId = $conn->lastInsertId();
+            }
+
+            commerce_json_response(['success' => true, 'id' => (int)$savedId, 'message' => 'Filter saved successfully']);
+
+        case 'list_filters':
+            $filterModuleId = (int)($input['module_id'] ?? $_GET['module_id'] ?? 0);
+            if (!$filterModuleId) throw new RuntimeException('Module ID is required');
+
+            $stmt = $conn->prepare("
+                SELECT id, name, filter_rules, is_default 
+                FROM {$prefix}module_saved_filters 
+                WHERE user_id = ? AND module_id = ? 
+                ORDER BY name ASC
+            ");
+            $stmt->execute([$userId, $filterModuleId]);
+            $filters = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Decode filter rules JSON for response
+            foreach ($filters as &$f) {
+                $f['filter_rules'] = json_decode($f['filter_rules'], true) ?: [];
+                $f['is_default'] = (int)$f['is_default'];
+            }
+            unset($f);
+
+            commerce_json_response(['success' => true, 'filters' => $filters]);
+
+        case 'delete_filter':
+            $filterId = (int)($input['id'] ?? 0);
+            if (!$filterId) throw new RuntimeException('Filter ID is required');
+
+            $stmt = $conn->prepare("DELETE FROM {$prefix}module_saved_filters WHERE id = ? AND user_id = ?");
+            $stmt->execute([$filterId, $userId]);
+
+            commerce_json_response(['success' => true, 'message' => 'Filter deleted successfully']);
 
         /* ════════════════ LOOKUP: Records of another module (for API Call Picker) ════════════════ */
 
