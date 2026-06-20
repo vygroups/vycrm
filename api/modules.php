@@ -436,6 +436,14 @@ try {
                 }
 
                 $conn->commit();
+                
+                // Trigger automation workflows
+                try {
+                    dm_trigger_workflows($conn, $prefix, $moduleId, $recordId, $oldValues, $values);
+                } catch (Throwable $wfEx) {
+                    error_log("Workflow automation failed for record $recordId: " . $wfEx->getMessage());
+                }
+
                 commerce_json_response(['success' => true, 'record_id' => $recordId]);
             } catch (Throwable $e) {
                 $conn->rollBack();
@@ -447,6 +455,93 @@ try {
             if (!$id) throw new RuntimeException('Record ID required');
             $conn->prepare("DELETE FROM {$prefix}module_records WHERE id = ?")->execute([$id]);
             commerce_json_response(['success' => true]);
+
+        /* ════════════════ WORKFLOW AUTOMATION ACTIONS ════════════════ */
+        case 'list_workflows':
+            $wfModuleId = (int)($input['module_id'] ?? $_GET['module_id'] ?? 0);
+            if (!$wfModuleId) throw new RuntimeException('Module ID is required');
+            
+            $stmt = $conn->prepare("
+                SELECT w.*, f.label as trigger_field_label, rf.label as recipient_field_label 
+                FROM {$prefix}module_workflows w
+                LEFT JOIN {$prefix}module_fields f ON f.id = w.trigger_field_id
+                LEFT JOIN {$prefix}module_fields rf ON rf.id = w.recipient_field_id
+                WHERE w.module_id = ?
+                ORDER BY w.created_at DESC
+            ");
+            $stmt->execute([$wfModuleId]);
+            $workflows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            commerce_json_response(['success' => true, 'workflows' => $workflows]);
+
+        case 'save_workflow':
+            $wfId = (int)($input['id'] ?? 0);
+            $wfModuleId = (int)($input['module_id'] ?? 0);
+            $wfName = trim($input['name'] ?? '');
+            $triggerFieldId = (int)($input['trigger_field_id'] ?? 0);
+            $triggerValue = trim($input['trigger_value'] ?? '');
+            $actionType = $input['action_type'] ?? 'email';
+            $recipientFieldId = !empty($input['recipient_field_id']) ? (int)$input['recipient_field_id'] : null;
+            $recipientCustom = !empty($input['recipient_custom']) ? trim($input['recipient_custom']) : null;
+            $templateSubject = !empty($input['template_subject']) ? trim($input['template_subject']) : null;
+            $templateBody = trim($input['template_body'] ?? '');
+            $wfStatus = $input['status'] ?? 'active';
+
+            if (!$wfModuleId) throw new RuntimeException('Module ID is required');
+            if (empty($wfName)) throw new RuntimeException('Rule name is required');
+            if (!$triggerFieldId) throw new RuntimeException('Trigger field is required');
+            if (empty($wfStatus)) $wfStatus = 'active';
+
+            if ($wfId > 0) {
+                $stmt = $conn->prepare("
+                    UPDATE {$prefix}module_workflows 
+                    SET name = ?, trigger_field_id = ?, trigger_value = ?, action_type = ?, 
+                        recipient_field_id = ?, recipient_custom = ?, template_subject = ?, 
+                        template_body = ?, status = ?
+                    WHERE id = ?
+                ");
+                $stmt->execute([
+                    $wfName, $triggerFieldId, $triggerValue, $actionType,
+                    $recipientFieldId, $recipientCustom, $templateSubject,
+                    $templateBody, $wfStatus, $wfId
+                ]);
+                $savedId = $wfId;
+            } else {
+                $stmt = $conn->prepare("
+                    INSERT INTO {$prefix}module_workflows 
+                    (module_id, name, trigger_field_id, trigger_value, action_type, 
+                     recipient_field_id, recipient_custom, template_subject, template_body, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $wfModuleId, $wfName, $triggerFieldId, $triggerValue, $actionType,
+                    $recipientFieldId, $recipientCustom, $templateSubject, $templateBody, $wfStatus
+                ]);
+                $savedId = $conn->lastInsertId();
+            }
+            commerce_json_response(['success' => true, 'id' => (int)$savedId]);
+
+        case 'delete_workflow':
+            $wfId = (int)($input['id'] ?? 0);
+            if (!$wfId) throw new RuntimeException('Workflow ID required');
+            $stmt = $conn->prepare("DELETE FROM {$prefix}module_workflows WHERE id = ?");
+            $stmt->execute([$wfId]);
+            commerce_json_response(['success' => true]);
+
+        case 'list_workflow_logs':
+            $wfModuleId = (int)($input['module_id'] ?? $_GET['module_id'] ?? 0);
+            if (!$wfModuleId) throw new RuntimeException('Module ID is required');
+
+            $stmt = $conn->prepare("
+                SELECT l.*, w.name as workflow_name
+                FROM {$prefix}workflow_logs l
+                JOIN {$prefix}module_workflows w ON w.id = l.workflow_id
+                WHERE w.module_id = ?
+                ORDER BY l.sent_at DESC
+                LIMIT 100
+            ");
+            $stmt->execute([$wfModuleId]);
+            $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            commerce_json_response(['success' => true, 'logs' => $logs]);
 
         /* ════════════════════ UTILITY ════════════════════ */
 

@@ -19,6 +19,21 @@ $editModule = null;
 if (!empty($_GET['edit'])) {
     $editModule = dm_fetch_module_full($conn, $prefix, (int) $_GET['edit']);
 }
+
+$jsFields = [];
+if ($editModule) {
+    foreach ($editModule['blocks'] as $b) {
+        foreach ($b['fields'] as $f) {
+            $jsFields[] = [
+                'id' => (int)$f['id'],
+                'label' => $f['label'],
+                'field_key' => $f['field_key'],
+                'field_type' => $f['field_type'],
+                'options' => $f['options'] ?? []
+            ];
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -31,6 +46,7 @@ if (!empty($_GET['edit'])) {
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
+    <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
     <style>
         .mm-icon-picker-selected {
             display: flex;
@@ -128,7 +144,20 @@ if (!empty($_GET['edit'])) {
                             </div>
                         </div>
 
-                        <div id="blocksContainer">
+                        <!-- Sub-Navigation Tabs -->
+                        <div class="mm-tabs-wrapper" style="border-bottom:1.5px solid var(--border); margin-bottom:20px; display:flex; gap:20px;">
+                            <button id="tabBtnFields" class="tab-btn active" onclick="switchEditorTab('fields')" style="padding:10px 5px; background:none; border:none; color:var(--primary); font-size:14px; font-weight:700; cursor:pointer; position:relative; display:flex; align-items:center; gap:8px;">
+                                <i class="fa-solid fa-cubes"></i> Fields & Layout
+                                <span class="tab-indicator" style="position:absolute; bottom:-1px; left:0; width:100%; height:3px; background:var(--primary); border-radius:3px 3px 0 0;"></span>
+                            </button>
+                            <button id="tabBtnWorkflows" class="tab-btn" onclick="switchEditorTab('workflows')" style="padding:10px 5px; background:none; border:none; color:var(--text-muted); font-size:14px; font-weight:600; cursor:pointer; position:relative; display:flex; align-items:center; gap:8px;">
+                                <i class="fa-solid fa-bolt"></i> Workflow Automation
+                                <span class="tab-indicator" style="position:absolute; bottom:-1px; left:0; width:100%; height:3px; background:transparent; border-radius:3px 3px 0 0;"></span>
+                            </button>
+                        </div>
+
+                        <div id="tabContentFields">
+                            <div id="blocksContainer">
                             <?php foreach ($editModule['blocks'] as $block): ?>
                                 <div class="mm-block" data-block-id="<?= $block['id'] ?>">
                                     <div class="mm-block-header">
@@ -199,6 +228,59 @@ if (!empty($_GET['edit'])) {
                                 <p>No blocks yet. Add a block to start building your module.</p>
                             </div>
                         <?php endif; ?>
+                        </div> <!-- End of tabContentFields -->
+
+                        <!-- tabContentWorkflows -->
+                        <div id="tabContentWorkflows" style="display:none; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:var(--shadow-sm);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                                <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-main);">Automation Rules</h3>
+                                <button class="mm-btn mm-btn-primary" onclick="openWorkflowModal()" style="display:inline-flex; align-items:center; gap:6px;">
+                                    <i class="fa-solid fa-plus"></i> Add Workflow
+                                </button>
+                            </div>
+                            
+                            <div class="crm-card" style="padding:0; overflow:hidden; margin-bottom:30px; border:1px solid var(--border);">
+                                <table class="crm-table" style="margin:0; width:100%; border-collapse:collapse;">
+                                    <thead>
+                                        <tr style="background:rgba(0,0,0,0.02); border-bottom:1px solid var(--border);">
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Rule Name</th>
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Trigger Condition</th>
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Action To Take</th>
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Recipient</th>
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Status</th>
+                                            <th style="padding:12px 16px; text-align:right; font-weight:600; color:var(--text-muted); font-size:13px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="workflowsListBody">
+                                        <!-- Dynamically loaded workflows -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Execution logs history -->
+                            <div style="margin-top:40px;">
+                                <h3 style="margin:0 0 15px; font-size:16px; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                                    <i class="fa-solid fa-clock-rotate-left" style="color:var(--primary);"></i> Execution History Logs
+                                </h3>
+                                <div class="crm-card" style="padding:0; overflow:hidden; border:1px solid var(--border);">
+                                    <table class="crm-table" style="margin:0; width:100%; border-collapse:collapse;">
+                                        <thead>
+                                            <tr style="background:rgba(0,0,0,0.02); border-bottom:1px solid var(--border);">
+                                                <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Triggered At</th>
+                                                <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Workflow Rule</th>
+                                                <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Action</th>
+                                                <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Recipient</th>
+                                                <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Status</th>
+                                                <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Log Message</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="workflowLogsBody">
+                                            <!-- Dynamically loaded logs -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                 <?php else: ?>
@@ -414,10 +496,88 @@ if (!empty($_GET['edit'])) {
         </div>
     </div>
 
+    <!-- Add/Edit Workflow Modal -->
+    <div class="mm-modal-overlay" id="workflowModal">
+        <div class="mm-modal mm-modal-lg" style="background:#fff; border-radius:12px; width:700px; box-shadow:var(--shadow-lg);">
+            <div class="mm-modal-header" style="display:flex; justify-content:space-between; align-items:center; padding:20px; border-bottom:1px solid var(--border);">
+                <h3 id="workflowModalTitle" style="margin:0; font-size:18px; font-weight:700; color:var(--text-main);">Add Workflow Rule</h3>
+                <button class="mm-icon-btn" onclick="closeModal('workflowModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mm-modal-body" style="padding:20px; max-height:70vh; overflow-y:auto;">
+                <input type="hidden" id="workflowId">
+                
+                <div class="form-group" style="margin-bottom:15px; display:flex; flex-direction:column; gap:6px;">
+                    <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Rule Name *</label>
+                    <input type="text" id="workflowName" class="form-control" placeholder="e.g. Send Email to Lead on Status Change" style="width:100%; box-sizing:border-box;">
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                        <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">When Field *</label>
+                        <select id="workflowTriggerField" class="form-control" onchange="onWorkflowTriggerFieldChange()" style="width:100%;">
+                            <option value="">-- Select trigger field --</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                        <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Changes to Value *</label>
+                        <div id="workflowTriggerValueContainer">
+                            <input type="text" id="workflowTriggerValue" class="form-control" placeholder="Trigger value" style="width:100%;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                        <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Action *</label>
+                        <select id="workflowActionType" class="form-control" onchange="onWorkflowActionTypeChange()" style="width:100%;">
+                            <option value="email">Send Email</option>
+                            <option value="whatsapp">Send WhatsApp Message</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                        <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Recipient *</label>
+                        <select id="workflowRecipientField" class="form-control" onchange="onWorkflowRecipientFieldChange()" style="width:100%; margin-bottom:8px;">
+                            <option value="">-- Select Recipient Field --</option>
+                        </select>
+                        <div id="workflowRecipientCustomContainer">
+                            <input type="text" id="workflowRecipientCustom" class="form-control" placeholder="Or enter static email/phone..." style="width:100%; box-sizing:border-box;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Template Subject -->
+                <div class="form-group" id="workflowSubjectGroup" style="margin-bottom:15px; display:flex; flex-direction:column; gap:6px;">
+                    <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Email Subject *</label>
+                    <input type="text" id="workflowSubject" class="form-control" placeholder="Email subject" style="width:100%; box-sizing:border-box;">
+                </div>
+
+                <!-- Template Body -->
+                <div class="form-group" style="margin-bottom:15px; display:flex; flex-direction:column; gap:6px;">
+                    <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Message Body *</label>
+                    <textarea id="workflowBody" class="form-control" rows="6" placeholder="Message content..." style="width:100%; box-sizing:border-box; font-family:inherit;"></textarea>
+                </div>
+
+                <!-- Placeholders guide -->
+                <div style="background:rgba(123,94,240,0.06); padding:15px; border-radius:8px; font-size:12px; border:1px solid rgba(123,94,240,0.12);">
+                    <h4 style="margin:0 0 8px; font-weight:700; color:var(--primary); font-size:13px;">Template Placeholders</h4>
+                    <p style="margin:0 0 10px; color:var(--text-muted);">Click any field label to insert its tag dynamically into Subject or Body:</p>
+                    <div id="workflowPlaceholdersList" style="display:flex; flex-wrap:wrap; gap:6px;">
+                        <!-- Populate placeholders dynamically -->
+                    </div>
+                </div>
+            </div>
+            <div class="mm-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; padding:20px; border-top:1px solid var(--border);">
+                <button class="mm-btn" onclick="closeModal('workflowModal')">Cancel</button>
+                <button class="mm-btn mm-btn-primary" onclick="saveWorkflow()"><i class="fa-solid fa-check"></i> Save Workflow</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API = '/api/modules.php';
         const MODULE_ID = <?= $editModule ? $editModule['id'] : 'null' ?>;
         const ALL_FIELD_TYPES = <?= json_encode($fieldTypes) ?>;
+        const EDIT_MODULE_FIELDS = <?= json_encode($jsFields) ?>;
 
         function api(action, data = {}) {
             return fetch(API, {
@@ -437,7 +597,7 @@ if (!empty($_GET['edit'])) {
                 description: document.getElementById('newModuleDesc').value,
                 visibility_rule: document.getElementById('newModuleVisibility').value
             })
-                .then(r => { if (r.success) location.href = 'module_manager.php?edit=' + r.id; else alert(r.error); });
+                .then(r => { if (r.success) location.href = 'module_manager.php?edit=' + r.id; else vyToast(r.error, 'error'); });
         }
         function deleteModule(id, name) {
             if (!confirm('Delete module "' + name + '" and all its data?')) return;
@@ -636,17 +796,401 @@ if (!empty($_GET['edit'])) {
         <button class="mm-icon-btn mm-icon-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
             document.getElementById('rulesList').appendChild(div);
         }
-        function saveRules() {
-            const fieldId = +document.getElementById('rulesFieldId').value;
-            const rows = document.querySelectorAll('#rulesList .mm-rule-row');
-            const rules = [...rows].map(r => ({
-                rule_type: r.querySelector('.rule-type').value,
-                source_field_id: +r.querySelector('.rule-source').value,
-                operator: r.querySelector('.rule-op').value,
-                value: r.querySelector('.rule-value').value,
-                action: r.querySelector('.rule-action').value,
-            }));
-            api('save_field_rules', { field_id: fieldId, rules }).then(r => { if (r.success) { closeModal('rulesModal'); alert('Rules saved!'); } else alert(r.error); });
+            api('save_field_rules', { field_id: fieldId, rules }).then(r => { if (r.success) { closeModal('rulesModal'); vyToast('Rules saved successfully!', 'success'); } else vyToast(r.error, 'error'); });
+        }
+
+        /* ════════════════ WORKFLOW AUTOMATION ENGINE CLIENT ════════════════ */
+        let workflowsList = [];
+
+        function switchEditorTab(tab) {
+            const fieldsTab = document.getElementById('tabBtnFields');
+            const workflowsTab = document.getElementById('tabBtnWorkflows');
+            const fieldsContent = document.getElementById('tabContentFields');
+            const workflowsContent = document.getElementById('tabContentWorkflows');
+            
+            if (tab === 'fields') {
+                fieldsTab.classList.add('active');
+                fieldsTab.querySelector('.tab-indicator').style.backgroundColor = 'var(--primary)';
+                workflowsTab.classList.remove('active');
+                workflowsTab.querySelector('.tab-indicator').style.backgroundColor = 'transparent';
+                
+                fieldsContent.style.display = 'block';
+                workflowsContent.style.display = 'none';
+            } else {
+                workflowsTab.classList.add('active');
+                workflowsTab.querySelector('.tab-indicator').style.backgroundColor = 'var(--primary)';
+                fieldsTab.classList.remove('active');
+                fieldsTab.querySelector('.tab-indicator').style.backgroundColor = 'transparent';
+                
+                fieldsContent.style.display = 'none';
+                workflowsContent.style.display = 'block';
+                
+                loadWorkflows();
+                loadWorkflowLogs();
+            }
+        }
+
+        async function loadWorkflows() {
+            try {
+                const res = await fetch(`${API}?action=list_workflows&module_id=${MODULE_ID}`);
+                const data = await res.json();
+                if (data.success && data.workflows) {
+                    workflowsList = data.workflows;
+                    renderWorkflowsTable();
+                }
+            } catch(e) {
+                vyToast('Failed to load workflows: ' + e.message, 'error');
+            }
+        }
+
+        function renderWorkflowsTable() {
+            const tbody = document.getElementById('workflowsListBody');
+            if (!tbody) return;
+            
+            if (workflowsList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);">No workflow rules configured yet.</td></tr>`;
+                return;
+            }
+            
+            tbody.innerHTML = workflowsList.map(w => {
+                const triggerField = w.trigger_field_label || `Field #${w.trigger_field_id}`;
+                const condition = `If <strong>${escapeHtml(triggerField)}</strong> changes to "<strong>${escapeHtml(w.trigger_value)}</strong>"`;
+                const action = w.action_type === 'email' ? '<i class="fa-solid fa-envelope" style="color:#3b82f6;"></i> Send Email' : '<i class="fa-solid fa-message" style="color:#10b981;"></i> Send WhatsApp';
+                
+                let recipient = '';
+                if (w.recipient_field_id) {
+                    recipient = `Field: ${escapeHtml(w.recipient_field_label)}`;
+                } else if (w.recipient_custom) {
+                    recipient = `Custom: ${escapeHtml(w.recipient_custom)}`;
+                }
+                
+                const isChecked = w.status === 'active' ? 'checked' : '';
+                const toggleSwitch = `
+                    <label class="switch-toggle" style="position:relative; display:inline-block; width:40px; height:20px; vertical-align:middle; cursor:pointer;">
+                        <input type="checkbox" ${isChecked} onchange="toggleWorkflowStatus(${w.id}, this.checked)" style="opacity:0; width:0; height:0; position:absolute;">
+                        <span class="slider-round" style="position:absolute; inset:0; background-color:#ccc; transition:.4s; border-radius:34px; ${w.status === 'active' ? 'background-color:var(--primary);' : ''}"></span>
+                        <span class="slider-dot" style="position:absolute; content:''; height:14px; width:14px; left:3px; bottom:3px; background-color:white; transition:.4s; border-radius:50%; ${w.status === 'active' ? 'transform:translateX(20px);' : ''}"></span>
+                    </label>
+                `;
+                
+                return `
+                    <tr>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);"><strong>${escapeHtml(w.name)}</strong></td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${condition}</td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${action}</td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${recipient}</td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${toggleSwitch}</td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border); text-align:right;">
+                            <div style="display:inline-flex; gap:6px;">
+                                <button class="mm-icon-btn" onclick="editWorkflow(${w.id})" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+                                <button class="mm-icon-btn mm-icon-danger" onclick="deleteWorkflow(${w.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadWorkflowLogs() {
+            try {
+                const res = await fetch(`${API}?action=list_workflow_logs&module_id=${MODULE_ID}`);
+                const data = await res.json();
+                const tbody = document.getElementById('workflowLogsBody');
+                if (!tbody) return;
+                
+                if (data.success && data.logs) {
+                    if (data.logs.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted);">No execution history recorded.</td></tr>`;
+                        return;
+                    }
+                    tbody.innerHTML = data.logs.map(l => {
+                        const dateStr = formatVyDate(l.sent_at) + ' ' + formatVyTime(l.sent_at);
+                        const statusBadge = l.status === 'sent' 
+                            ? '<span class="status-badge" style="background:rgba(16,185,129,0.1); color:#10b981; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700;">Sent</span>'
+                            : '<span class="status-badge" style="background:rgba(239,68,68,0.1); color:#ef4444; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700;">Failed</span>';
+                        
+                        const action = l.action_type === 'email' ? 'Email' : 'WhatsApp';
+                        const ruleName = escapeHtml(l.workflow_name || `Rule #${l.workflow_id}`);
+                        
+                        return `
+                            <tr>
+                                <td style="padding:12px 16px; border-bottom:1px solid var(--border); white-space:nowrap;" class="text-sm text-muted">${dateStr}</td>
+                                <td style="padding:12px 16px; border-bottom:1px solid var(--border);"><strong>${ruleName}</strong></td>
+                                <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${action}</td>
+                                <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${escapeHtml(l.recipient)}</td>
+                                <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${statusBadge}</td>
+                                <td style="padding:12px 16px; border-bottom:1px solid var(--border); class="text-sm" title="${escapeHtml(l.error_message || '')}">${escapeHtml(l.error_message || 'OK')}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+            } catch(e) {
+                console.error("Failed to load workflow logs", e);
+            }
+        }
+
+        function openWorkflowModal(editData = null) {
+            document.getElementById('workflowId').value = editData ? editData.id : '';
+            document.getElementById('workflowModalTitle').textContent = editData ? 'Edit Workflow Rule' : 'Add Workflow Rule';
+            document.getElementById('workflowName').value = editData ? editData.name : '';
+            
+            const triggerSelect = document.getElementById('workflowTriggerField');
+            triggerSelect.innerHTML = '<option value="">-- Select trigger field --</option>' + 
+                EDIT_MODULE_FIELDS.map(f => `<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('');
+            
+            const recipientSelect = document.getElementById('workflowRecipientField');
+            recipientSelect.innerHTML = '<option value="">-- Select Recipient Field --</option>' + 
+                EDIT_MODULE_FIELDS.map(f => `<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('');
+            
+            triggerSelect.value = editData ? editData.trigger_field_id : '';
+            onWorkflowTriggerFieldChange(editData ? editData.trigger_value : '');
+            
+            document.getElementById('workflowActionType').value = editData ? editData.action_type : 'email';
+            onWorkflowActionTypeChange();
+            
+            recipientSelect.value = editData ? (editData.recipient_field_id || '') : '';
+            document.getElementById('workflowRecipientCustom').value = editData ? (editData.recipient_custom || '') : '';
+            onWorkflowRecipientFieldChange();
+            
+            document.getElementById('workflowSubject').value = editData ? (editData.template_subject || '') : '';
+            document.getElementById('workflowBody').value = editData ? editData.template_body : '';
+            
+            const placeholdersContainer = document.getElementById('workflowPlaceholdersList');
+            let placeholdersHtml = EDIT_MODULE_FIELDS.map(f => `
+                <span onclick="insertWorkflowPlaceholder('{${escapeHtml(f.label)}}')" style="background:#fff; border:1px solid var(--primary); color:var(--primary); font-size:11px; padding:3.5px 8px; border-radius:4px; cursor:pointer; user-select:none; font-weight:600; transition:all 0.15s; display:inline-block;" onmouseover="this.style.background='rgba(123,94,240,0.08)'" onmouseout="this.style.background='#fff'">
+                    {${escapeHtml(f.label)}}
+                </span>
+            `).join('');
+            
+            const sysPls = ['{Created By}', '{Created On}', '{Updated By}', '{Updated On}', '{Record ID}'];
+            placeholdersHtml += sysPls.map(pl => `
+                <span onclick="insertWorkflowPlaceholder('${pl}')" style="background:#fff; border:1px solid #718096; color:#4a5568; font-size:11px; padding:3.5px 8px; border-radius:4px; cursor:pointer; user-select:none; font-weight:600; transition:all 0.15s; display:inline-block;" onmouseover="this.style.background='#edf2f7'" onmouseout="this.style.background='#fff'">
+                    ${pl}
+                </span>
+            `).join('');
+            
+            placeholdersContainer.innerHTML = placeholdersHtml;
+            
+            openModal('workflowModal');
+        }
+
+        function onWorkflowTriggerFieldChange(selectedValue = '') {
+            const fieldId = document.getElementById('workflowTriggerField').value;
+            const valueContainer = document.getElementById('workflowTriggerValueContainer');
+            
+            if (!fieldId) {
+                valueContainer.innerHTML = `<input type="text" id="workflowTriggerValue" class="form-control" placeholder="Trigger value" style="width:100%;">`;
+                return;
+            }
+            
+            const field = EDIT_MODULE_FIELDS.find(f => f.id == fieldId);
+            if (!field) {
+                valueContainer.innerHTML = `<input type="text" id="workflowTriggerValue" class="form-control" placeholder="Trigger value" style="width:100%;">`;
+                return;
+            }
+            
+            if (field.field_type === 'select' || field.field_type === 'dropdown') {
+                const opts = field.options || [];
+                valueContainer.innerHTML = `
+                    <select id="workflowTriggerValue" class="form-control" style="width:100%;">
+                        <option value="">-- Choose status/option --</option>
+                        ${opts.map(o => `<option value="${o.option_value}" ${selectedValue == o.option_value ? 'selected' : ''}>${escapeHtml(o.option_label || o.option_value)}</option>`).join('')}
+                    </select>
+                `;
+            } else if (field.field_type === 'checkbox') {
+                valueContainer.innerHTML = `
+                    <select id="workflowTriggerValue" class="form-control" style="width:100%;">
+                        <option value="1" ${selectedValue == '1' ? 'selected' : ''}>Yes</option>
+                        <option value="0" ${selectedValue == '0' ? 'selected' : ''}>No</option>
+                    </select>
+                `;
+            } else {
+                valueContainer.innerHTML = `<input type="text" id="workflowTriggerValue" class="form-control" placeholder="Trigger value" value="${escapeHtml(selectedValue)}" style="width:100%;">`;
+            }
+        }
+
+        function onWorkflowActionTypeChange() {
+            const actionType = document.getElementById('workflowActionType').value;
+            const subjectGroup = document.getElementById('workflowSubjectGroup');
+            if (actionType === 'email') {
+                subjectGroup.style.display = 'flex';
+            } else {
+                subjectGroup.style.display = 'none';
+            }
+        }
+
+        function onWorkflowRecipientFieldChange() {
+            const recipientField = document.getElementById('workflowRecipientField').value;
+            const customContainer = document.getElementById('workflowRecipientCustomContainer');
+            
+            if (!recipientField) {
+                customContainer.style.display = 'block';
+            } else {
+                customContainer.style.display = 'none';
+                document.getElementById('workflowRecipientCustom').value = '';
+            }
+        }
+
+        function insertWorkflowPlaceholder(placeholder) {
+            const textarea = document.getElementById('workflowBody');
+            const inputSubject = document.getElementById('workflowSubject');
+            
+            if (document.activeElement === inputSubject) {
+                const start = inputSubject.selectionStart;
+                const end = inputSubject.selectionEnd;
+                inputSubject.value = inputSubject.value.substring(0, start) + placeholder + inputSubject.value.substring(end);
+                inputSubject.focus();
+                inputSubject.selectionStart = inputSubject.selectionEnd = start + placeholder.length;
+            } else {
+                textarea.focus();
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                textarea.value = textarea.value.substring(0, start) + placeholder + textarea.value.substring(end);
+                textarea.focus();
+                textarea.selectionStart = textarea.selectionEnd = start + placeholder.length;
+            }
+        }
+
+        async function saveWorkflow() {
+            const id = document.getElementById('workflowId').value;
+            const name = document.getElementById('workflowName').value.trim();
+            const triggerFieldId = document.getElementById('workflowTriggerField').value;
+            const triggerValueSelect = document.getElementById('workflowTriggerValue');
+            const triggerValue = triggerValueSelect ? triggerValueSelect.value.trim() : '';
+            const actionType = document.getElementById('workflowActionType').value;
+            const recipientFieldId = document.getElementById('workflowRecipientField').value;
+            const recipientCustom = document.getElementById('workflowRecipientCustom').value.trim();
+            const templateSubject = document.getElementById('workflowSubject').value.trim();
+            const templateBody = document.getElementById('workflowBody').value.trim();
+            
+            if (!name) {
+                vyToast('Rule name is required.', 'error');
+                return;
+            }
+            if (!triggerFieldId) {
+                vyToast('Trigger field is required.', 'error');
+                return;
+            }
+            if (!triggerValue) {
+                vyToast('Trigger value is required.', 'error');
+                return;
+            }
+            if (!recipientFieldId && !recipientCustom) {
+                vyToast('Please specify a recipient field or enter a custom recipient.', 'error');
+                return;
+            }
+            if (actionType === 'email' && !templateSubject) {
+                vyToast('Email subject is required.', 'error');
+                return;
+            }
+            if (!templateBody) {
+                vyToast('Message body is required.', 'error');
+                return;
+            }
+            
+            const payload = {
+                action: 'save_workflow',
+                module_id: MODULE_ID,
+                name,
+                trigger_field_id: triggerFieldId,
+                trigger_value: triggerValue,
+                action_type: actionType,
+                recipient_field_id: recipientFieldId || null,
+                recipient_custom: recipientCustom || null,
+                template_subject: templateSubject || null,
+                template_body: templateBody,
+                status: 'active'
+            };
+            
+            if (id) {
+                payload.id = id;
+            }
+            
+            try {
+                const res = await fetch(API, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast('Workflow rule saved successfully!', 'success');
+                    closeModal('workflowModal');
+                    loadWorkflows();
+                    loadWorkflowLogs();
+                } else {
+                    vyToast('Failed to save workflow: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch(e) {
+                vyToast('Request failed: ' + e.message, 'error');
+            }
+        }
+
+        async function toggleWorkflowStatus(id, active) {
+            const workflow = workflowsList.find(w => w.id == id);
+            if (!workflow) return;
+            
+            const payload = {
+                action: 'save_workflow',
+                id: workflow.id,
+                module_id: MODULE_ID,
+                name: workflow.name,
+                trigger_field_id: workflow.trigger_field_id,
+                trigger_value: workflow.trigger_value,
+                action_type: workflow.action_type,
+                recipient_field_id: workflow.recipient_field_id,
+                recipient_custom: workflow.recipient_custom,
+                template_subject: workflow.template_subject,
+                template_body: workflow.template_body,
+                status: active ? 'active' : 'inactive'
+            };
+            
+            try {
+                const res = await fetch(API, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast(`Workflow status set to ${active ? 'Active' : 'Inactive'}`, 'success');
+                    loadWorkflows();
+                } else {
+                    vyToast('Failed to change status: ' + data.error, 'error');
+                }
+            } catch(e) {
+                vyToast('Request failed: ' + e.message, 'error');
+            }
+        }
+
+        async function editWorkflow(id) {
+            const workflow = workflowsList.find(w => w.id == id);
+            if (!workflow) return;
+            openWorkflowModal(workflow);
+        }
+
+        async function deleteWorkflow(id) {
+            if (!confirm('Are you sure you want to delete this workflow rule?')) return;
+            try {
+                const res = await fetch(API, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'delete_workflow',
+                        id
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast('Workflow deleted successfully.', 'success');
+                    loadWorkflows();
+                    loadWorkflowLogs();
+                } else {
+                    vyToast('Failed to delete workflow: ' + data.error, 'error');
+                }
+            } catch(e) {
+                vyToast('Request failed: ' + e.message, 'error');
+            }
         }
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }

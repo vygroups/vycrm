@@ -695,3 +695,188 @@ function dm_get_visible_user_ids(PDO $conn, string $p, int $userId, ?int $roleId
 
     return array_unique(array_map('intval', $allowedUserIds));
 }
+
+/**
+ * Triggers workflow automation rules for a module record.
+ */
+function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId, array $oldValues, array $newValues): void
+{
+    // Fetch active workflows for this module
+    $wStmt = $conn->prepare("SELECT * FROM {$p}module_workflows WHERE module_id = ? AND status = 'active'");
+    $wStmt->execute([$moduleId]);
+    $workflows = $wStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($workflows)) {
+        return;
+    }
+
+    // Fetch all field details of this module to construct label mapping
+    $fields = dm_fetch_module_fields($conn, $p, $moduleId);
+    $fieldMap = []; // field_id => field details
+    foreach ($fields as $f) {
+        $fieldMap[(int)$f['id']] = $f;
+    }
+
+    // Fetch all current record values to replace template variables
+    $recStmt = $conn->prepare("SELECT created_at, created_by, updated_at, updated_by FROM {$p}module_records WHERE id = ?");
+    $recStmt->execute([$recordId]);
+    $recordRow = $recStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$recordRow) return;
+
+    $allCurrentValues = [];
+    $valStmt = $conn->prepare("SELECT field_id, value FROM {$p}module_record_values WHERE record_id = ?");
+    $valStmt->execute([$recordId]);
+    foreach ($valStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $allCurrentValues[(int)$row['field_id']] = $row['value'];
+    }
+
+    // Prepare system user lists for placeholder resolution
+    $usersStmt = $conn->query("SELECT id, username, first_name, last_name, email, phone FROM {$p}users");
+    $userMap = [];
+    foreach ($usersStmt->fetchAll(PDO::FETCH_ASSOC) as $u) {
+        $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+        $userMap[$u['id']] = [
+            'name' => $fullName ?: $u['username'],
+            'email' => $u['email'],
+            'phone' => $u['phone']
+        ];
+    }
+
+    foreach ($workflows as $w) {
+        $triggerFieldId = (int)$w['trigger_field_id'];
+        $triggerValue = trim($w['trigger_value']);
+
+        // Check if condition is triggered
+        $newValue = isset($newValues[$triggerFieldId]) ? trim((string)$newValues[$triggerFieldId]) : null;
+        $oldValue = isset($oldValues[$triggerFieldId]) ? trim((string)$oldValues[$triggerFieldId]) : null;
+
+        // If the record value is not set in $newValues, fall back to current record value
+        if ($newValue === null && isset($allCurrentValues[$triggerFieldId])) {
+            $newValue = trim((string)$allCurrentValues[$triggerFieldId]);
+        }
+
+        $isTriggered = false;
+        if (empty($oldValues)) {
+            // New record creation flow
+            if ($newValue !== null && $newValue === $triggerValue) {
+                $isTriggered = true;
+            }
+        } else {
+            // Update flow
+            if ($newValue !== null && $newValue === $triggerValue && $oldValue !== $newValue) {
+                $isTriggered = true;
+            }
+        }
+
+        if (!$isTriggered) {
+            continue;
+        }
+
+        // 1. Resolve Recipient
+        $recipient = '';
+        if ($w['recipient_field_id']) {
+            $recFieldId = (int)$w['recipient_field_id'];
+            $recipientValue = $allCurrentValues[$recFieldId] ?? '';
+            
+            // If the recipient field is a user type (e.g. assigned_to or created_by)
+            $fType = $fieldMap[$recFieldId]['field_type'] ?? '';
+            if (($fType === 'user' || $fType === 'assigned_to') && $recipientValue) {
+                $uid = (int)$recipientValue;
+                if ($w['action_type'] === 'email') {
+                    $recipient = $userMap[$uid]['email'] ?? '';
+                } else {
+                    $recipient = $userMap[$uid]['phone'] ?? '';
+                }
+            } else {
+                $recipient = $recipientValue;
+            }
+        }
+        
+        if (empty($recipient) && $w['recipient_custom']) {
+            $recipient = $w['recipient_custom'];
+        }
+
+        if (empty($recipient)) {
+            // Record a failure log
+            $logStmt = $conn->prepare("
+                INSERT INTO {$p}workflow_logs (workflow_id, record_id, recipient, action_type, subject, body, status, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, 'failed', 'Recipient is empty or could not be resolved')
+            ");
+            $logStmt->execute([$w['id'], $recordId, '', $w['action_type'], $w['template_subject'], $w['template_body']]);
+            continue;
+        }
+
+        // 2. Resolve Subject & Body template placeholders (e.g. {First Name} -> Anand)
+        $subject = $w['template_subject'] ?? '';
+        $body = $w['template_body'];
+
+        // Replace custom field placeholders
+        foreach ($fields as $f) {
+            $val = $allCurrentValues[(int)$f['id']] ?? '';
+            
+            // Format duration/checkbox/user fields nicely in templates
+            if ($f['field_type'] === 'checkbox') {
+                $val = $val ? 'Yes' : 'No';
+            } elseif ($f['field_type'] === 'user' || $f['field_type'] === 'assigned_to') {
+                $val = $userMap[(int)$val]['name'] ?? "User #$val";
+            }
+            
+            $placeholder = '{' . $f['label'] . '}';
+            $subject = str_ireplace($placeholder, $val, $subject);
+            $body = str_ireplace($placeholder, $val, $body);
+        }
+
+        // Replace system placeholder values
+        $createdByName = $userMap[(int)$recordRow['created_by']]['name'] ?? '';
+        $updatedByName = $userMap[(int)$recordRow['updated_by']]['name'] ?? '';
+        
+        $sysPlaceholders = [
+            '{Created By}' => $createdByName,
+            '{Created On}' => $recordRow['created_at'],
+            '{Updated By}' => $updatedByName,
+            '{Updated On}' => $recordRow['updated_at'],
+            '{Record ID}' => $recordId
+        ];
+        foreach ($sysPlaceholders as $pl => $val) {
+            $subject = str_ireplace($pl, $val, $subject);
+            $body = str_ireplace($pl, $val, $body);
+        }
+
+        // 3. Dispatch Action
+        $status = 'sent';
+        $errorMsg = null;
+
+        if ($w['action_type'] === 'email') {
+            $headers = "MIME-Version: 1.0\r\n";
+            $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+            $headers .= "From: VY-AI CRM Automation <no-reply@vygroups.com>\r\n";
+            
+            // Send email
+            $mailSent = @mail($recipient, $subject, nl2br($body), $headers);
+            if (!$mailSent) {
+                $status = 'failed';
+                $errorMsg = 'PHP mail() dispatch returned false';
+            }
+        } else {
+            // WhatsApp Simulated Dispatch
+            $status = 'sent';
+            $errorMsg = 'WhatsApp simulated dispatch: message stored in database logs';
+        }
+
+        // 4. Log execution
+        $logStmt = $conn->prepare("
+            INSERT INTO {$p}workflow_logs (workflow_id, record_id, recipient, action_type, subject, body, status, error_message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $logStmt->execute([
+            $w['id'],
+            $recordId,
+            $recipient,
+            $w['action_type'],
+            $subject,
+            $body,
+            $status,
+            $errorMsg
+        ]);
+    }
+}

@@ -430,6 +430,48 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             INDEX idx_filters_user_module (user_id, module_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    // 11. Workflow Automation Rules
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_workflows (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            module_id INT NOT NULL,
+            name VARCHAR(150) NOT NULL,
+            trigger_field_id INT NOT NULL,
+            trigger_value VARCHAR(255) NOT NULL,
+            action_type ENUM('email', 'whatsapp') NOT NULL,
+            recipient_field_id INT DEFAULT NULL,
+            recipient_custom VARCHAR(255) DEFAULT NULL,
+            template_subject VARCHAR(255) DEFAULT NULL,
+            template_body TEXT NOT NULL,
+            status ENUM('active', 'inactive') DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE,
+            FOREIGN KEY (trigger_field_id) REFERENCES {$prefix}module_fields(id) ON DELETE CASCADE,
+            INDEX idx_workflows_module (module_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // 12. Workflow Logs
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}workflow_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            workflow_id INT NOT NULL,
+            record_id INT NOT NULL,
+            recipient VARCHAR(255) NOT NULL,
+            action_type ENUM('email', 'whatsapp') NOT NULL,
+            subject VARCHAR(255) DEFAULT NULL,
+            body TEXT NOT NULL,
+            status ENUM('sent', 'failed') DEFAULT 'sent',
+            error_message TEXT DEFAULT NULL,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (workflow_id) REFERENCES {$prefix}module_workflows(id) ON DELETE CASCADE,
+            FOREIGN KEY (record_id) REFERENCES {$prefix}module_records(id) ON DELETE CASCADE,
+            INDEX idx_workflow_logs_workflow (workflow_id),
+            INDEX idx_workflow_logs_record (record_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
 }
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array
