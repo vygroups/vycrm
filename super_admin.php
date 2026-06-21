@@ -7,7 +7,7 @@ $db = Database::getMasterConn();
 $prefix = Database::getMasterPrefix();
 $message = "";
 
-// Handle Form Submission
+// Handle Form Submissio
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
 
     if ($_POST['action'] == 'add_company') {
