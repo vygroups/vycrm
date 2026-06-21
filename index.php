@@ -3,7 +3,7 @@
 require_once 'config/database.php';
 session_start();
 
-$companySlug = $_GET['company'] ?? '';
+$companySlug = $_GET['company'] ?? $_COOKIE['vy_company_slug'] ?? '';
 
 // Redirect to dashboard if already logged in for this company
 if (isset($_SESSION['token']) && isset($_SESSION['tenant_slug']) && time() < $_SESSION['expiry']) {
@@ -16,6 +16,7 @@ if (isset($_SESSION['token']) && isset($_SESSION['tenant_slug']) && time() < $_S
 $companyName = "Vy CRM";
 $companyLogo = "/images/logo.png";
 $v = time();
+$company = null;
 
 if ($companySlug) {
     try {
@@ -28,6 +29,12 @@ if ($companySlug) {
         if ($company) {
             $companyName = htmlspecialchars($company['name']);
             if ($company['logo']) $companyLogo = '/' . htmlspecialchars($company['logo']);
+            // Set/Renew persistent branding cookie for 10 years
+            setcookie('vy_company_slug', $companySlug, time() + 315360000, '/');
+        } else {
+            // Invalid company, delete the cookie
+            setcookie('vy_company_slug', '', time() - 3600, '/');
+            $companySlug = '';
         }
     } catch (Exception $e) {}
 }
@@ -35,6 +42,20 @@ if ($companySlug) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+        // 1. Save valid company slug to localStorage
+        <?php if (!empty($companySlug) && $company): ?>
+            localStorage.setItem('vy_company_slug', <?= json_encode($companySlug) ?>);
+        <?php endif; ?>
+
+        // 2. If no company context is loaded, attempt redirect from localStorage
+        <?php if (empty($companySlug)): ?>
+            const cachedSlug = localStorage.getItem('vy_company_slug');
+            if (cachedSlug) {
+                window.location.href = '/' + cachedSlug;
+            }
+        <?php endif; ?>
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Login - <?= $companyName ?></title>

@@ -60,6 +60,7 @@ $smtpEnc = dm_get_system_setting($conn, $prefix, 'smtp_encryption', 'none');
 
 $whatsappApiUrl = dm_get_system_setting($conn, $prefix, 'whatsapp_api_url', '');
 $whatsappToken = dm_get_system_setting($conn, $prefix, 'whatsapp_access_token', '');
+$sessionExpiryHours = (int)dm_get_system_setting($conn, $prefix, 'session_expiry_hours', 8);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gst = $_POST['gstin'] ?? '';
@@ -141,6 +142,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     dm_set_system_setting($conn, $prefix, 'whatsapp_api_url', $whatsapp_api_url);
     dm_set_system_setting($conn, $prefix, 'whatsapp_access_token', $whatsapp_access_token);
+
+    $session_expiry_hours = (int)($_POST['session_expiry_hours'] ?? 8);
+    if ($session_expiry_hours <= 0) $session_expiry_hours = 8;
+    dm_set_system_setting($conn, $prefix, 'session_expiry_hours', $session_expiry_hours);
 
     header("Location: profile.php?success=1");
     exit;
@@ -500,11 +505,10 @@ if (!empty($profile['signature_path'])) {
                             </div>
                         </div>
 
-                        <!-- Notification & Gateway Integration Credentials -->
+                        <!-- Integration Gateways -->
                         <div class="settings-card">
                             <div class="card-header">
-                                <div class="card-title"><i class="fa-solid fa-gears"></i> Notification & Integration
-                                    Gateways</div>
+                                <div class="card-title"><i class="fa-solid fa-gears"></i> Integration Gateways</div>
                             </div>
                             <div class="card-body">
                                 <div class="grid-layout">
@@ -574,6 +578,20 @@ if (!empty($profile['signature_path'])) {
                                                 placeholder="EAABwz... (Permanent Access Token)"><?= htmlspecialchars($whatsappToken) ?></textarea>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Security & Session Settings -->
+                        <div class="settings-card">
+                            <div class="card-header">
+                                <div class="card-title"><i class="fa-solid fa-shield-halved"></i> Security & Session Settings</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group" style="max-width: 400px;">
+                                    <label class="form-label">Auto Logout Timeout (Hours)</label>
+                                    <input type="number" name="session_expiry_hours" class="form-control" min="1" max="720" value="<?= htmlspecialchars($sessionExpiryHours) ?>">
+                                    <span style="font-size:11px; color:var(--text-muted); display:block; margin-top:4px;">Configure how many hours a user remains logged in before automatically logging out.</span>
                                 </div>
                             </div>
                         </div>

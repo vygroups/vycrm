@@ -437,8 +437,10 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             id INT AUTO_INCREMENT PRIMARY KEY,
             module_id INT NOT NULL,
             name VARCHAR(150) NOT NULL,
-            trigger_field_id INT NOT NULL,
-            trigger_value VARCHAR(255) NOT NULL,
+            trigger_event ENUM('create', 'edit', 'create_or_edit') DEFAULT 'create_or_edit',
+            condition_type ENUM('always', 'field_value', 'field_changed') DEFAULT 'field_value',
+            trigger_field_id INT DEFAULT NULL,
+            trigger_value VARCHAR(255) DEFAULT NULL,
             action_type ENUM('email', 'whatsapp', 'push') NOT NULL,
             recipient_field_id INT DEFAULT NULL,
             recipient_custom VARCHAR(255) DEFAULT NULL,
@@ -473,6 +475,10 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
+    try { $conn->exec("ALTER TABLE {$prefix}module_workflows MODIFY COLUMN trigger_field_id INT NULL"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}module_workflows MODIFY COLUMN trigger_value VARCHAR(255) NULL"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}module_workflows ADD COLUMN trigger_event ENUM('create', 'edit', 'create_or_edit') DEFAULT 'create_or_edit'"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}module_workflows ADD COLUMN condition_type ENUM('always', 'field_value', 'field_changed') DEFAULT 'field_value'"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}module_workflows MODIFY COLUMN action_type ENUM('email', 'whatsapp', 'push') NOT NULL"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}workflow_logs MODIFY COLUMN action_type ENUM('email', 'whatsapp', 'push') NOT NULL"); } catch (Throwable $e) {}
 }

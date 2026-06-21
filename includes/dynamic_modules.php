@@ -739,6 +739,39 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
         $allCurrentValues[(int)$row['field_id']] = $row['value'];
     }
 
+    // Inject system fields into $allCurrentValues and potentially $newValues/$oldValues
+    foreach ($fields as $f) {
+        $fid = (int)$f['id'];
+        $fType = $f['field_type'];
+        if ($fType === 'sys_created_by') {
+            $allCurrentValues[$fid] = $recordRow['created_by'];
+            if (empty($oldValues)) {
+                $newValues[$fid] = $recordRow['created_by'];
+            } else {
+                $oldValues[$fid] = $recordRow['created_by'];
+                $newValues[$fid] = $recordRow['created_by'];
+            }
+        } elseif ($fType === 'sys_created_at') {
+            $allCurrentValues[$fid] = $recordRow['created_at'];
+            if (empty($oldValues)) {
+                $newValues[$fid] = $recordRow['created_at'];
+            } else {
+                $oldValues[$fid] = $recordRow['created_at'];
+                $newValues[$fid] = $recordRow['created_at'];
+            }
+        } elseif ($fType === 'sys_updated_by') {
+            $allCurrentValues[$fid] = $recordRow['updated_by'];
+            if (!empty($oldValues)) {
+                $newValues[$fid] = $recordRow['updated_by'];
+            }
+        } elseif ($fType === 'sys_updated_at') {
+            $allCurrentValues[$fid] = $recordRow['updated_at'];
+            if (!empty($oldValues)) {
+                $newValues[$fid] = $recordRow['updated_at'];
+            }
+        }
+    }
+
     // Prepare system user lists for placeholder resolution
     $usersStmt = $conn->query("SELECT id, username, first_name, last_name, email FROM {$p}users");
     $userMap = [];
@@ -752,28 +785,56 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
     }
 
     foreach ($workflows as $w) {
-        $triggerFieldId = (int)$w['trigger_field_id'];
-        $triggerValue = trim($w['trigger_value']);
+        $triggerEvent = $w['trigger_event'] ?? 'create_or_edit';
+        $condType = $w['condition_type'] ?? 'field_value';
+        $triggerFieldId = $w['trigger_field_id'] ? (int)$w['trigger_field_id'] : null;
+        $triggerValue = $w['trigger_value'] !== null ? trim($w['trigger_value']) : '';
 
-        // Check if condition is triggered
-        $newValue = isset($newValues[$triggerFieldId]) ? trim((string)$newValues[$triggerFieldId]) : null;
-        $oldValue = isset($oldValues[$triggerFieldId]) ? trim((string)$oldValues[$triggerFieldId]) : null;
-
-        // If the record value is not set in $newValues, fall back to current record value
-        if ($newValue === null && isset($allCurrentValues[$triggerFieldId])) {
-            $newValue = trim((string)$allCurrentValues[$triggerFieldId]);
-        }
-
-        $isTriggered = false;
-        if (empty($oldValues)) {
-            // New record creation flow
-            if ($newValue !== null && $newValue === $triggerValue) {
-                $isTriggered = true;
+        // 1. Check trigger event matches
+        $isCreate = empty($oldValues);
+        if ($isCreate) {
+            if ($triggerEvent === 'edit') {
+                continue; // Trigger event is edit, but this is a creation
             }
         } else {
-            // Update flow
-            if ($newValue !== null && $newValue === $triggerValue && $oldValue !== $newValue) {
-                $isTriggered = true;
+            if ($triggerEvent === 'create') {
+                continue; // Trigger event is create, but this is an update
+            }
+        }
+
+        // 2. Check condition type
+        $isTriggered = false;
+        if ($condType === 'always') {
+            $isTriggered = true;
+        } elseif ($condType === 'field_value' && $triggerFieldId !== null) {
+            $newValue = isset($newValues[$triggerFieldId]) ? trim((string)$newValues[$triggerFieldId]) : null;
+            $oldValue = isset($oldValues[$triggerFieldId]) ? trim((string)$oldValues[$triggerFieldId]) : null;
+
+            if ($newValue === null && isset($allCurrentValues[$triggerFieldId])) {
+                $newValue = trim((string)$allCurrentValues[$triggerFieldId]);
+            }
+
+            if ($isCreate) {
+                if ($newValue !== null && $newValue === $triggerValue) {
+                    $isTriggered = true;
+                }
+            } else {
+                if ($newValue !== null && $newValue === $triggerValue && $oldValue !== $newValue) {
+                    $isTriggered = true;
+                }
+            }
+        } elseif ($condType === 'field_changed' && $triggerFieldId !== null) {
+            $newValue = isset($newValues[$triggerFieldId]) ? trim((string)$newValues[$triggerFieldId]) : null;
+            $oldValue = isset($oldValues[$triggerFieldId]) ? trim((string)$oldValues[$triggerFieldId]) : null;
+
+            if ($isCreate) {
+                if ($newValue !== null && $newValue !== '') {
+                    $isTriggered = true;
+                }
+            } else {
+                if ($newValue !== null && $oldValue !== $newValue) {
+                    $isTriggered = true;
+                }
             }
         }
 
@@ -789,7 +850,7 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
             
             // If the recipient field is a user type (e.g. assigned_to or created_by)
             $fType = $fieldMap[$recFieldId]['field_type'] ?? '';
-            if (($fType === 'user' || $fType === 'assigned_to') && $recipientValue) {
+            if (($fType === 'user' || $fType === 'assigned_to' || $fType === 'sys_created_by' || $fType === 'sys_updated_by') && $recipientValue) {
                 $uid = (int)$recipientValue;
                 if ($w['action_type'] === 'email') {
                     $recipient = $userMap[$uid]['email'] ?? '';
@@ -828,7 +889,7 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
             // Format duration/checkbox/user fields nicely in templates
             if ($f['field_type'] === 'checkbox') {
                 $val = $val ? 'Yes' : 'No';
-            } elseif ($f['field_type'] === 'user' || $f['field_type'] === 'assigned_to') {
+            } elseif ($f['field_type'] === 'user' || $f['field_type'] === 'assigned_to' || $f['field_type'] === 'sys_created_by' || $f['field_type'] === 'sys_updated_by') {
                 $val = $userMap[(int)$val]['name'] ?? "User #$val";
             }
             

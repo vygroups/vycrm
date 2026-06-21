@@ -477,8 +477,20 @@ try {
             $wfId = (int)($input['id'] ?? 0);
             $wfModuleId = (int)($input['module_id'] ?? 0);
             $wfName = trim($input['name'] ?? '');
-            $triggerFieldId = (int)($input['trigger_field_id'] ?? 0);
-            $triggerValue = trim($input['trigger_value'] ?? '');
+            
+            $triggerEvent = $input['trigger_event'] ?? 'create_or_edit';
+            if (!in_array($triggerEvent, ['create', 'edit', 'create_or_edit'])) {
+                $triggerEvent = 'create_or_edit';
+            }
+            
+            $conditionType = $input['condition_type'] ?? 'field_value';
+            if (!in_array($conditionType, ['always', 'field_value', 'field_changed'])) {
+                $conditionType = 'field_value';
+            }
+            
+            $triggerFieldId = ($conditionType !== 'always' && !empty($input['trigger_field_id'])) ? (int)$input['trigger_field_id'] : null;
+            $triggerValue = ($conditionType === 'field_value' && isset($input['trigger_value'])) ? trim((string)$input['trigger_value']) : null;
+            
             $actionType = $input['action_type'] ?? 'email';
             $recipientFieldId = !empty($input['recipient_field_id']) ? (int)$input['recipient_field_id'] : null;
             $recipientCustom = !empty($input['recipient_custom']) ? trim($input['recipient_custom']) : null;
@@ -488,19 +500,20 @@ try {
 
             if (!$wfModuleId) throw new RuntimeException('Module ID is required');
             if (empty($wfName)) throw new RuntimeException('Rule name is required');
-            if (!$triggerFieldId) throw new RuntimeException('Trigger field is required');
             if (empty($wfStatus)) $wfStatus = 'active';
 
             if ($wfId > 0) {
                 $stmt = $conn->prepare("
                     UPDATE {$prefix}module_workflows 
-                    SET name = ?, trigger_field_id = ?, trigger_value = ?, action_type = ?, 
+                    SET name = ?, trigger_event = ?, condition_type = ?, 
+                        trigger_field_id = ?, trigger_value = ?, action_type = ?, 
                         recipient_field_id = ?, recipient_custom = ?, template_subject = ?, 
                         template_body = ?, status = ?
                     WHERE id = ?
                 ");
                 $stmt->execute([
-                    $wfName, $triggerFieldId, $triggerValue, $actionType,
+                    $wfName, $triggerEvent, $conditionType,
+                    $triggerFieldId, $triggerValue, $actionType,
                     $recipientFieldId, $recipientCustom, $templateSubject,
                     $templateBody, $wfStatus, $wfId
                 ]);
@@ -508,12 +521,14 @@ try {
             } else {
                 $stmt = $conn->prepare("
                     INSERT INTO {$prefix}module_workflows 
-                    (module_id, name, trigger_field_id, trigger_value, action_type, 
+                    (module_id, name, trigger_event, condition_type, 
+                     trigger_field_id, trigger_value, action_type, 
                      recipient_field_id, recipient_custom, template_subject, template_body, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([
-                    $wfModuleId, $wfName, $triggerFieldId, $triggerValue, $actionType,
+                    $wfModuleId, $wfName, $triggerEvent, $conditionType,
+                    $triggerFieldId, $triggerValue, $actionType,
                     $recipientFieldId, $recipientCustom, $templateSubject, $templateBody, $wfStatus
                 ]);
                 $savedId = $conn->lastInsertId();

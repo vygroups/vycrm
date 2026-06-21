@@ -30,7 +30,8 @@ if ($editModule) {
                 'label' => $f['label'],
                 'field_key' => $f['field_key'],
                 'field_type' => $f['field_type'],
-                'options' => $f['options'] ?? []
+                'options' => $f['options'] ?? [],
+                'config' => isset($f['config']) ? (is_array($f['config']) ? $f['config'] : json_decode($f['config'], true)) : null
             ];
         }
     }
@@ -533,12 +534,31 @@ try {
 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
                     <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                        <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Execute Workflow *</label>
+                        <select id="workflowTriggerEvent" class="form-control" style="width:100%;">
+                            <option value="create_or_edit">When Record is Created or Edited</option>
+                            <option value="create">When Record is Created Only</option>
+                            <option value="edit">When Record is Edited Only</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                        <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Trigger Condition *</label>
+                        <select id="workflowConditionType" class="form-control" onchange="onWorkflowConditionTypeChange()" style="width:100%;">
+                            <option value="field_value">Specific Field Matches Value</option>
+                            <option value="field_changed">Specific Field is Changed</option>
+                            <option value="always">Always (No Condition)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div class="form-group" id="workflowFieldGroup" style="display:flex; flex-direction:column; gap:6px;">
                         <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">When Field *</label>
                         <select id="workflowTriggerField" class="form-control" onchange="onWorkflowTriggerFieldChange()" style="width:100%;">
                             <option value="">-- Select trigger field --</option>
                         </select>
                     </div>
-                    <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                    <div class="form-group" id="workflowValueGroup" style="display:flex; flex-direction:column; gap:6px;">
                         <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Changes to Value *</label>
                         <div id="workflowTriggerValueContainer">
                             <input type="text" id="workflowTriggerValue" class="form-control" placeholder="Trigger value" style="width:100%;">
@@ -600,6 +620,9 @@ try {
         const ALL_FIELD_TYPES = <?= json_encode($fieldTypes) ?>;
         const EDIT_MODULE_FIELDS = <?= json_encode($jsFields) ?>;
         const ALL_USERS = <?= json_encode($usersList) ?>;
+        const ALL_COUNTRIES = <?= json_encode(dm_get_countries()) ?>;
+        const ALL_STATES = <?= json_encode(dm_get_states()) ?>;
+        const ALL_DISTRICTS = <?= json_encode(dm_get_districts()) ?>;
 
 
         function api(action, data = {}) {
@@ -825,7 +848,144 @@ try {
             onRuleSourceChange(sourceSelect, rule.value || '');
         }
 
-        function onRuleSourceChange(selectEl, currentValue = '') {
+        async function createDynamicInputField(field, value = '', isRule = false) {
+            const fType = field.field_type;
+            const labelLower = (field.label || '').toLowerCase().trim();
+            const idAttr = isRule ? '' : 'id="workflowTriggerValue"';
+            const classAttr = isRule ? 'class="form-control rule-value"' : 'class="form-control"';
+            const styleAttr = 'style="width:100%;"';
+            
+            const isUserField = fType === 'user' || 
+                                fType === 'assigned_to' || 
+                                fType === 'sys_created_by' || 
+                                fType === 'sys_updated_by' || 
+                                ['assignee', 'assigned to', 'created by', 'updated by'].includes(labelLower);
+
+            const isDateField = fType === 'date';
+            const isDatetimeField = fType === 'datetime' || fType === 'datetime-local' || fType === 'sys_created_at' || fType === 'sys_updated_at';
+            const isTimeField = fType === 'time';
+            
+            const isOptionField = fType === 'select' || fType === 'dropdown' || fType === 'multi_picker' || fType === 'radio_group';
+            
+            if (isOptionField) {
+                const opts = field.options || [];
+                let parsedOpts = [];
+                if (typeof opts === 'string') {
+                    try { parsedOpts = JSON.parse(opts); } catch(e) {}
+                } else if (Array.isArray(opts)) {
+                    parsedOpts = opts;
+                }
+                const optHtml = parsedOpts.map(o => {
+                    const optVal = (o && typeof o === 'object') ? (o.value || o.option_value || '') : o;
+                    const optLbl = (o && typeof o === 'object') ? (o.label || o.option_label || optVal) : o;
+                    return `<option value="${escapeHtml(optVal)}" ${value == optVal ? 'selected' : ''}>${escapeHtml(optLbl)}</option>`;
+                }).join('');
+                
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose option --</option>
+                        ${optHtml}
+                    </select>
+                `;
+            } else if (fType === 'checkbox') {
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="1" ${value == '1' ? 'selected' : ''}>Yes</option>
+                        <option value="0" ${value == '0' ? 'selected' : ''}>No</option>
+                    </select>
+                `;
+            } else if (isUserField) {
+                const userOpts = ALL_USERS.map(u => `<option value="${u.id}" ${value == u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose User --</option>
+                        ${userOpts}
+                    </select>
+                `;
+            } else if (isDateField) {
+                return `<input type="date" ${idAttr} ${classAttr} ${styleAttr} value="${escapeHtml(value)}">`;
+            } else if (isDatetimeField) {
+                let val = value || '';
+                if (val.includes(' ')) {
+                    val = val.replace(' ', 'T');
+                }
+                return `<input type="datetime-local" ${idAttr} ${classAttr} ${styleAttr} value="${escapeHtml(val)}">`;
+            } else if (isTimeField) {
+                return `<input type="time" ${idAttr} ${classAttr} ${styleAttr} value="${escapeHtml(value)}">`;
+            } else if (fType === 'country') {
+                const countryOpts = Object.entries(ALL_COUNTRIES || {}).map(([code, name]) => 
+                    `<option value="${escapeHtml(code)}" ${value == code ? 'selected' : ''}>${escapeHtml(name)}</option>`
+                ).join('');
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose Country --</option>
+                        ${countryOpts}
+                    </select>
+                `;
+            } else if (fType === 'state') {
+                let stateHtml = '';
+                for (const [countryCode, statesObj] of Object.entries(ALL_STATES || {})) {
+                    const countryName = ALL_COUNTRIES[countryCode] || countryCode;
+                    stateHtml += `<optgroup label="${escapeHtml(countryName)}">`;
+                    for (const [stateCode, stateName] of Object.entries(statesObj || {})) {
+                        stateHtml += `<option value="${escapeHtml(stateCode)}" ${value == stateCode ? 'selected' : ''}>${escapeHtml(stateName)}</option>`;
+                    }
+                    stateHtml += `</optgroup>`;
+                }
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose State --</option>
+                        ${stateHtml}
+                    </select>
+                `;
+            } else if (fType === 'district') {
+                let districtHtml = '';
+                for (const [stateCode, districtsObj] of Object.entries(ALL_DISTRICTS || {})) {
+                    let stateName = stateCode;
+                    for (const [cCode, statesObj] of Object.entries(ALL_STATES || {})) {
+                        if (statesObj[stateCode]) {
+                            stateName = statesObj[stateCode];
+                            break;
+                        }
+                    }
+                    districtHtml += `<optgroup label="${escapeHtml(stateName)}">`;
+                    for (const [distCode, distName] of Object.entries(districtsObj || {})) {
+                        districtHtml += `<option value="${escapeHtml(distCode)}" ${value == distCode ? 'selected' : ''}>${escapeHtml(distName)}</option>`;
+                    }
+                    districtHtml += `</optgroup>`;
+                }
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose District --</option>
+                        ${districtHtml}
+                    </select>
+                `;
+            } else if (fType === 'api_call_picker') {
+                const linkedModId = field.config ? field.config.linked_module_id : 0;
+                if (linkedModId) {
+                    try {
+                        const res = await fetch(`${API}?action=lookup_records&target_module_id=${linkedModId}`);
+                        const rData = await res.json();
+                        if (rData.success && rData.records) {
+                            const recOpts = rData.records.map(rec => `<option value="${rec.id}" ${value == rec.id ? 'selected' : ''}>${escapeHtml(rec.display_value)} (ID: ${rec.id})</option>`).join('');
+                            return `
+                                <select ${idAttr} ${classAttr} ${styleAttr}>
+                                    <option value="">-- Choose Record --</option>
+                                    ${recOpts}
+                                </select>
+                            `;
+                        }
+                    } catch(e) {}
+                }
+                return `<input type="text" ${idAttr} ${classAttr} ${styleAttr} placeholder="Trigger value (ID)" value="${escapeHtml(value)}">`;
+            } else if (fType === 'number' || fType === 'decimal' || fType === 'currency') {
+                return `<input type="number" step="any" ${idAttr} ${classAttr} ${styleAttr} placeholder="Value" value="${escapeHtml(value)}">`;
+            } else {
+                return `<input type="text" ${idAttr} ${classAttr} ${styleAttr} placeholder="Value" value="${escapeHtml(value)}">`;
+            }
+        }
+
+        async function onRuleSourceChange(selectEl, currentValue = '') {
             const row = selectEl.closest('.mm-rule-row');
             if (!row) return;
             const valContainer = row.querySelector('.rule-value-container');
@@ -843,53 +1003,7 @@ try {
                 return;
             }
             
-            // Match user selection fields (Assigned to, Created By, etc.)
-            const labelLower = (field.label || '').toLowerCase().trim();
-            const isUserField = field.field_type === 'user' || 
-                                field.field_type === 'assigned_to' || 
-                                ['assignee', 'assigned to', 'created by', 'updated by'].includes(labelLower);
-            
-            if (isUserField) {
-                let userOpts = ALL_USERS.map(u => `<option value="${u.id}" ${currentValue == u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
-                valContainer.innerHTML = `
-                    <select class="form-control rule-value" style="width:100%;">
-                        <option value="">-- Choose User --</option>
-                        ${userOpts}
-                    </select>
-                `;
-            } 
-            // Match option selectors (select, dropdown, multi picker, radio)
-            else if (field.field_type === 'select' || field.field_type === 'dropdown' || field.field_type === 'multi_picker' || field.field_type === 'radio_group') {
-                const opts = field.options || [];
-                let optHtml = opts.map(o => {
-                    const optVal = o.value || o.option_value || o;
-                    const optLbl = o.label || o.option_label || optVal;
-                    return `<option value="${escapeHtml(optVal)}" ${currentValue == optVal ? 'selected' : ''}>${escapeHtml(optLbl)}</option>`;
-                }).join('');
-                valContainer.innerHTML = `
-                    <select class="form-control rule-value" style="width:100%;">
-                        <option value="">-- Choose option --</option>
-                        ${optHtml}
-                    </select>
-                `;
-            } 
-            // Match checkbox (Yes/No)
-            else if (field.field_type === 'checkbox') {
-                valContainer.innerHTML = `
-                    <select class="form-control rule-value" style="width:100%;">
-                        <option value="1" ${currentValue == '1' ? 'selected' : ''}>Yes</option>
-                        <option value="0" ${currentValue == '0' ? 'selected' : ''}>No</option>
-                    </select>
-                `;
-            } 
-            // Match date fields
-            else if (field.field_type === 'date' || field.field_type === 'datetime') {
-                valContainer.innerHTML = `<input type="date" class="form-control rule-value" value="${escapeHtml(currentValue)}" style="width:100%;">`;
-            } 
-            // Default text input fallback
-            else {
-                valContainer.innerHTML = `<input type="text" class="form-control rule-value" placeholder="Value" value="${escapeHtml(currentValue)}" style="width:100%;">`;
-            }
+            valContainer.innerHTML = await createDynamicInputField(field, currentValue, true);
         }
         function saveRules() {
             const fieldId = +document.getElementById('rulesFieldId').value;
@@ -960,8 +1074,28 @@ try {
             }
             
             tbody.innerHTML = workflowsList.map(w => {
-                const triggerField = w.trigger_field_label || `Field #${w.trigger_field_id}`;
-                const condition = `If <strong>${escapeHtml(triggerField)}</strong> changes to "<strong>${escapeHtml(w.trigger_value)}</strong>"`;
+                const triggerEvent = w.trigger_event || 'create_or_edit';
+                const condType = w.condition_type || 'field_value';
+                
+                let eventText = '';
+                if (triggerEvent === 'create') {
+                    eventText = 'On creation';
+                } else if (triggerEvent === 'edit') {
+                    eventText = 'On update';
+                } else {
+                    eventText = 'On creation/update';
+                }
+
+                let condition = '';
+                if (condType === 'always') {
+                    condition = `${eventText}: <em>Always trigger</em>`;
+                } else if (condType === 'field_changed') {
+                    const triggerField = w.trigger_field_label || `Field #${w.trigger_field_id}`;
+                    condition = `${eventText}: If <strong>${escapeHtml(triggerField)}</strong> is changed`;
+                } else {
+                    const triggerField = w.trigger_field_label || `Field #${w.trigger_field_id}`;
+                    condition = `${eventText}: If <strong>${escapeHtml(triggerField)}</strong> matches "<strong>${escapeHtml(w.trigger_value || '')}</strong>"`;
+                }
                 let action = '';
                 if (w.action_type === 'email') {
                     action = '<i class="fa-solid fa-envelope" style="color:#3b82f6;"></i> Send Email';
@@ -1055,6 +1189,11 @@ try {
             document.getElementById('workflowModalTitle').textContent = editData ? 'Edit Workflow Rule' : 'Add Workflow Rule';
             document.getElementById('workflowName').value = editData ? editData.name : '';
             
+            // Set trigger event and condition type
+            document.getElementById('workflowTriggerEvent').value = editData ? (editData.trigger_event || 'create_or_edit') : 'create_or_edit';
+            document.getElementById('workflowConditionType').value = editData ? (editData.condition_type || 'field_value') : 'field_value';
+            onWorkflowConditionTypeChange();
+
             const triggerSelect = document.getElementById('workflowTriggerField');
             triggerSelect.innerHTML = '<option value="">-- Select trigger field --</option>' + 
                 EDIT_MODULE_FIELDS.map(f => `<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('');
@@ -1063,8 +1202,8 @@ try {
             recipientSelect.innerHTML = '<option value="">-- Select Recipient Field --</option>' + 
                 EDIT_MODULE_FIELDS.map(f => `<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('');
             
-            triggerSelect.value = editData ? editData.trigger_field_id : '';
-            onWorkflowTriggerFieldChange(editData ? editData.trigger_value : '');
+            triggerSelect.value = editData ? (editData.trigger_field_id || '') : '';
+            onWorkflowTriggerFieldChange(editData ? (editData.trigger_value || '') : '');
             
             document.getElementById('workflowActionType').value = editData ? editData.action_type : 'email';
             onWorkflowActionTypeChange();
@@ -1095,7 +1234,24 @@ try {
             openModal('workflowModal');
         }
 
-        function onWorkflowTriggerFieldChange(selectedValue = '') {
+        function onWorkflowConditionTypeChange() {
+            const condType = document.getElementById('workflowConditionType').value;
+            const fieldGroup = document.getElementById('workflowFieldGroup');
+            const valueGroup = document.getElementById('workflowValueGroup');
+            
+            if (condType === 'always') {
+                fieldGroup.style.display = 'none';
+                valueGroup.style.display = 'none';
+            } else if (condType === 'field_changed') {
+                fieldGroup.style.display = 'block';
+                valueGroup.style.display = 'none';
+            } else {
+                fieldGroup.style.display = 'block';
+                valueGroup.style.display = 'block';
+            }
+        }
+
+        async function onWorkflowTriggerFieldChange(selectedValue = '') {
             const fieldId = document.getElementById('workflowTriggerField').value;
             const valueContainer = document.getElementById('workflowTriggerValueContainer');
             
@@ -1109,25 +1265,8 @@ try {
                 valueContainer.innerHTML = `<input type="text" id="workflowTriggerValue" class="form-control" placeholder="Trigger value" style="width:100%;">`;
                 return;
             }
-            
-            if (field.field_type === 'select' || field.field_type === 'dropdown') {
-                const opts = field.options || [];
-                valueContainer.innerHTML = `
-                    <select id="workflowTriggerValue" class="form-control" style="width:100%;">
-                        <option value="">-- Choose status/option --</option>
-                        ${opts.map(o => `<option value="${o.option_value}" ${selectedValue == o.option_value ? 'selected' : ''}>${escapeHtml(o.option_label || o.option_value)}</option>`).join('')}
-                    </select>
-                `;
-            } else if (field.field_type === 'checkbox') {
-                valueContainer.innerHTML = `
-                    <select id="workflowTriggerValue" class="form-control" style="width:100%;">
-                        <option value="1" ${selectedValue == '1' ? 'selected' : ''}>Yes</option>
-                        <option value="0" ${selectedValue == '0' ? 'selected' : ''}>No</option>
-                    </select>
-                `;
-            } else {
-                valueContainer.innerHTML = `<input type="text" id="workflowTriggerValue" class="form-control" placeholder="Trigger value" value="${escapeHtml(selectedValue)}" style="width:100%;">`;
-            }
+
+            valueContainer.innerHTML = await createDynamicInputField(field, selectedValue, false);
         }
 
         function onWorkflowActionTypeChange() {
@@ -1175,6 +1314,8 @@ try {
         async function saveWorkflow() {
             const id = document.getElementById('workflowId').value;
             const name = document.getElementById('workflowName').value.trim();
+            const triggerEvent = document.getElementById('workflowTriggerEvent').value;
+            const conditionType = document.getElementById('workflowConditionType').value;
             const triggerFieldId = document.getElementById('workflowTriggerField').value;
             const triggerValueSelect = document.getElementById('workflowTriggerValue');
             const triggerValue = triggerValueSelect ? triggerValueSelect.value.trim() : '';
@@ -1188,11 +1329,11 @@ try {
                 vyToast('Rule name is required.', 'error');
                 return;
             }
-            if (!triggerFieldId) {
+            if (conditionType !== 'always' && !triggerFieldId) {
                 vyToast('Trigger field is required.', 'error');
                 return;
             }
-            if (!triggerValue) {
+            if (conditionType === 'field_value' && !triggerValue) {
                 vyToast('Trigger value is required.', 'error');
                 return;
             }
@@ -1213,8 +1354,10 @@ try {
                 action: 'save_workflow',
                 module_id: MODULE_ID,
                 name,
-                trigger_field_id: triggerFieldId,
-                trigger_value: triggerValue,
+                trigger_event: triggerEvent,
+                condition_type: conditionType,
+                trigger_field_id: conditionType !== 'always' ? triggerFieldId : null,
+                trigger_value: conditionType === 'field_value' ? triggerValue : null,
                 action_type: actionType,
                 recipient_field_id: recipientFieldId || null,
                 recipient_custom: recipientCustom || null,

@@ -2,6 +2,7 @@
 // api/login.php - Tenant-Aware Secure Login
 require_once '../config/database.php';
 require_once '../includes/api_auth.php';
+require_once '../includes/dynamic_modules.php';
 session_start();
 
 header('Content-Type: application/json');
@@ -61,7 +62,10 @@ try {
         $_SESSION['tenant_slug'] = $companySlug;
         $_SESSION['tenant_db'] = $company['db_name'];
         $_SESSION['tenant_prefix'] = $tenantPrefix;
-        $_SESSION['expiry'] = time() + (8 * 3600); // 8 Hours
+        setcookie('vy_company_slug', $companySlug, time() + 315360000, '/');
+        $expiryHours = (int)dm_get_system_setting($tenantConn, $tenantPrefix, 'session_expiry_hours', 8);
+        if ($expiryHours <= 0) $expiryHours = 8;
+        $_SESSION['expiry'] = time() + ($expiryHours * 3600);
         $apiToken = api_issue_token($user, $companySlug, $company['db_name'], $tenantPrefix);
         
         echo json_encode([
