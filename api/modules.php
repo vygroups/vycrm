@@ -366,7 +366,9 @@ try {
                     $conn->prepare("UPDATE {$prefix}module_records SET updated_at = NOW(), updated_by = ? WHERE id = ?")->execute([$userId, $recordId]);
                 } else {
                     // Create new
-                    $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by) VALUES (?, ?)")->execute([$moduleId, $userId]);
+                    $convModId = !empty($input['converted_from_module_id']) ? (int)$input['converted_from_module_id'] : (!empty($_POST['converted_from_module_id']) ? (int)$_POST['converted_from_module_id'] : null);
+                    $convRecId = !empty($input['converted_from_record_id']) ? (int)$input['converted_from_record_id'] : (!empty($_POST['converted_from_record_id']) ? (int)$_POST['converted_from_record_id'] : null);
+                    $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by, converted_from_module_id, converted_from_record_id) VALUES (?, ?, ?, ?)")->execute([$moduleId, $userId, $convModId, $convRecId]);
                     $recordId = (int)$conn->lastInsertId();
                 }
 
@@ -540,6 +542,60 @@ try {
             if (!$wfId) throw new RuntimeException('Workflow ID required');
             $stmt = $conn->prepare("DELETE FROM {$prefix}module_workflows WHERE id = ?");
             $stmt->execute([$wfId]);
+            commerce_json_response(['success' => true]);
+
+        case 'list_conversion_rules':
+            $srcModuleId = (int)($input['source_module_id'] ?? $_GET['source_module_id'] ?? 0);
+            if (!$srcModuleId) throw new RuntimeException('Source module ID required');
+            $stmt = $conn->prepare("
+                SELECT c.*, m.name as target_module_name 
+                FROM {$prefix}module_conversion_rules c
+                JOIN {$prefix}modules m ON m.id = c.target_module_id
+                WHERE c.source_module_id = ?
+                ORDER BY c.created_at DESC
+            ");
+            $stmt->execute([$srcModuleId]);
+            $rules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            commerce_json_response(['success' => true, 'rules' => $rules]);
+
+        case 'save_conversion_rule':
+            $id = (int)($input['id'] ?? 0);
+            $srcModuleId = (int)($input['source_module_id'] ?? 0);
+            $targetModuleId = (int)($input['target_module_id'] ?? 0);
+            $buttonLabel = trim($input['button_label'] ?? '');
+            $mappings = $input['field_mappings'] ?? [];
+            $status = $input['status'] ?? 'active';
+
+            if (!$srcModuleId) throw new RuntimeException('Source module ID required');
+            if (!$targetModuleId) throw new RuntimeException('Target module ID required');
+            if (empty($buttonLabel)) throw new RuntimeException('Button label is required');
+
+            $mappingsJson = json_encode($mappings);
+
+            if ($id > 0) {
+                $stmt = $conn->prepare("
+                    UPDATE {$prefix}module_conversion_rules 
+                    SET target_module_id = ?, button_label = ?, field_mappings = ?, status = ?
+                    WHERE id = ? AND source_module_id = ?
+                ");
+                $stmt->execute([$targetModuleId, $buttonLabel, $mappingsJson, $status, $id, $srcModuleId]);
+                $savedId = $id;
+            } else {
+                $stmt = $conn->prepare("
+                    INSERT INTO {$prefix}module_conversion_rules 
+                    (source_module_id, target_module_id, button_label, field_mappings, status)
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([$srcModuleId, $targetModuleId, $buttonLabel, $mappingsJson, $status]);
+                $savedId = $conn->lastInsertId();
+            }
+            commerce_json_response(['success' => true, 'id' => (int)$savedId]);
+
+        case 'delete_conversion_rule':
+            $id = (int)($input['id'] ?? 0);
+            if (!$id) throw new RuntimeException('Rule ID required');
+            $stmt = $conn->prepare("DELETE FROM {$prefix}module_conversion_rules WHERE id = ?");
+            $stmt->execute([$id]);
             commerce_json_response(['success' => true]);
 
         case 'list_workflow_logs':

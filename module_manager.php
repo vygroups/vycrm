@@ -170,6 +170,10 @@ try {
                                 <i class="fa-solid fa-bolt"></i> Workflow Automation
                                 <span class="tab-indicator" style="position:absolute; bottom:-1px; left:0; width:100%; height:3px; background:transparent; border-radius:3px 3px 0 0;"></span>
                             </button>
+                            <button id="tabBtnConversion" class="tab-btn" onclick="switchEditorTab('conversion')" style="padding:10px 5px; background:none; border:none; color:var(--text-muted); font-size:14px; font-weight:600; cursor:pointer; position:relative; display:flex; align-items:center; gap:8px;">
+                                <i class="fa-solid fa-arrows-spin"></i> Record Conversion
+                                <span class="tab-indicator" style="position:absolute; bottom:-1px; left:0; width:100%; height:3px; background:transparent; border-radius:3px 3px 0 0;"></span>
+                            </button>
                         </div>
 
                         <div id="tabContentFields">
@@ -298,6 +302,33 @@ try {
                                         </tbody>
                                     </table>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- tabContentConversion -->
+                        <div id="tabContentConversion" style="display:none; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:var(--shadow-sm);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                                <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-main);">Record Conversion Rules</h3>
+                                <button class="mm-btn mm-btn-primary" onclick="openConversionModal()" style="display:inline-flex; align-items:center; gap:6px;">
+                                    <i class="fa-solid fa-plus"></i> Add Conversion Rule
+                                </button>
+                            </div>
+                            
+                            <div class="crm-card" style="padding:0; overflow:hidden; border:1px solid var(--border);">
+                                <table class="crm-table" style="margin:0; width:100%; border-collapse:collapse;">
+                                    <thead>
+                                        <tr style="background:rgba(0,0,0,0.02); border-bottom:1px solid var(--border);">
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Target Module</th>
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Button Label</th>
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Mapped Fields</th>
+                                            <th style="padding:12px 16px; text-align:left; font-weight:600; color:var(--text-muted); font-size:13px;">Status</th>
+                                            <th style="padding:12px 16px; text-align:right; font-weight:600; color:var(--text-muted); font-size:13px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="conversionListBody">
+                                        <!-- Dynamically loaded rules -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -610,6 +641,50 @@ try {
             <div class="mm-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; padding:20px; border-top:1px solid var(--border);">
                 <button class="mm-btn" onclick="closeModal('workflowModal')">Cancel</button>
                 <button class="mm-btn mm-btn-primary" onclick="saveWorkflow()"><i class="fa-solid fa-check"></i> Save Workflow</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Conversion Rule Modal -->
+    <div class="mm-modal-overlay" id="conversionModal">
+        <div class="mm-modal mm-modal-lg" style="background:#fff; border-radius:12px; width:700px; box-shadow:var(--shadow-lg);">
+            <div class="mm-modal-header" style="display:flex; justify-content:space-between; align-items:center; padding:20px; border-bottom:1px solid var(--border);">
+                <h3 id="conversionModalTitle" style="margin:0; font-size:18px; font-weight:700; color:var(--text-main);">Add Conversion Rule</h3>
+                <button class="mm-icon-btn" onclick="closeModal('conversionModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mm-modal-body" style="padding:20px; max-height:70vh; overflow-y:auto;">
+                <input type="hidden" id="conversionRuleId">
+                
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                        <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Target Module *</label>
+                        <select id="conversionTargetModule" class="form-control" onchange="onConversionTargetModuleChange()" style="width:100%;">
+                            <option value="">-- Choose Target Module --</option>
+                            <?php foreach ($allModules as $m): if ($editModule && $m['id'] == $editModule['id']) continue; ?>
+                                <option value="<?= $m['id'] ?>"><?= htmlspecialchars($m['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                        <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Button Label *</label>
+                        <input type="text" id="conversionButtonLabel" class="form-control" placeholder="e.g. Convert to Lead" style="width:100%; box-sizing:border-box;">
+                    </div>
+                </div>
+
+                <div style="margin-top:20px; margin-bottom:15px;">
+                    <h4 style="margin:0 0 10px; font-size:14px; font-weight:700; color:var(--text-main);">Field Mappings</h4>
+                    <p style="margin:0 0 15px; font-size:12px; color:var(--text-muted);">Map the fields of the Target Module to corresponding source fields in the current module:</p>
+                    <div id="conversionMappingsContainer" style="display:flex; flex-direction:column; gap:10px;">
+                        <!-- Populate mapping rows dynamically -->
+                        <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px; border:1px dashed var(--border); border-radius:8px;">
+                            Please choose a Target Module first.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mm-modal-footer" style="display:flex; justify-content:flex-end; gap:10px; padding:20px; border-top:1px solid var(--border);">
+                <button class="mm-btn" onclick="closeModal('conversionModal')">Cancel</button>
+                <button class="mm-btn mm-btn-primary" onclick="saveConversionRule()"><i class="fa-solid fa-check"></i> Save Rule</button>
             </div>
         </div>
     </div>
@@ -1024,28 +1099,38 @@ try {
         function switchEditorTab(tab) {
             const fieldsTab = document.getElementById('tabBtnFields');
             const workflowsTab = document.getElementById('tabBtnWorkflows');
+            const conversionTab = document.getElementById('tabBtnConversion');
+            
             const fieldsContent = document.getElementById('tabContentFields');
             const workflowsContent = document.getElementById('tabContentWorkflows');
+            const conversionContent = document.getElementById('tabContentConversion');
+            
+            // Remove active classes
+            [fieldsTab, workflowsTab, conversionTab].forEach(t => {
+                if (t) {
+                    t.classList.remove('active');
+                    t.querySelector('.tab-indicator').style.backgroundColor = 'transparent';
+                }
+            });
+            [fieldsContent, workflowsContent, conversionContent].forEach(c => {
+                if (c) c.style.display = 'none';
+            });
             
             if (tab === 'fields') {
                 fieldsTab.classList.add('active');
                 fieldsTab.querySelector('.tab-indicator').style.backgroundColor = 'var(--primary)';
-                workflowsTab.classList.remove('active');
-                workflowsTab.querySelector('.tab-indicator').style.backgroundColor = 'transparent';
-                
                 fieldsContent.style.display = 'block';
-                workflowsContent.style.display = 'none';
-            } else {
+            } else if (tab === 'workflows') {
                 workflowsTab.classList.add('active');
                 workflowsTab.querySelector('.tab-indicator').style.backgroundColor = 'var(--primary)';
-                fieldsTab.classList.remove('active');
-                fieldsTab.querySelector('.tab-indicator').style.backgroundColor = 'transparent';
-                
-                fieldsContent.style.display = 'none';
                 workflowsContent.style.display = 'block';
-                
                 loadWorkflows();
                 loadWorkflowLogs();
+            } else if (tab === 'conversion') {
+                conversionTab.classList.add('active');
+                conversionTab.querySelector('.tab-indicator').style.backgroundColor = 'var(--primary)';
+                conversionContent.style.display = 'block';
+                loadConversionRules();
             }
         }
 
@@ -1454,6 +1539,260 @@ try {
                 }
             } catch(e) {
                 vyToast('Request failed: ' + e.message, 'error');
+            }
+        }
+
+        let conversionRulesList = [];
+        async function loadConversionRules() {
+            try {
+                const res = await fetch(`${API}?action=list_conversion_rules&source_module_id=${MODULE_ID}`);
+                const data = await res.json();
+                if (data.success && data.rules) {
+                    conversionRulesList = data.rules;
+                    renderConversionTable();
+                }
+            } catch (e) {
+                vyToast('Failed to load conversion rules: ' + e.message, 'error');
+            }
+        }
+        
+        function renderConversionTable() {
+            const tbody = document.getElementById('conversionListBody');
+            if (!tbody) return;
+            
+            if (conversionRulesList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">No conversion rules configured yet.</td></tr>`;
+                return;
+            }
+            
+            tbody.innerHTML = conversionRulesList.map(r => {
+                let mappings = {};
+                try { mappings = JSON.parse(r.field_mappings || '{}'); } catch(e) {}
+                const mapCount = Object.keys(mappings).length;
+                
+                const isChecked = r.status === 'active' ? 'checked' : '';
+                const toggleSwitch = `
+                    <label class="switch-toggle" style="position:relative; display:inline-block; width:40px; height:20px; vertical-align:middle; cursor:pointer;">
+                        <input type="checkbox" ${isChecked} onchange="toggleConversionStatus(${r.id}, this.checked)" style="opacity:0; width:0; height:0; position:absolute;">
+                        <span class="slider-round" style="position:absolute; inset:0; background-color:#ccc; transition:.4s; border-radius:34px; ${r.status === 'active' ? 'background-color:var(--primary);' : ''}"></span>
+                        <span class="slider-dot" style="position:absolute; content:''; height:14px; width:14px; left:3px; bottom:3px; background-color:white; transition:.4s; border-radius:50%; ${r.status === 'active' ? 'transform:translateX(20px);' : ''}"></span>
+                    </label>
+                `;
+                
+                return `
+                    <tr>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);"><strong>${escapeHtml(r.target_module_name)}</strong></td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${escapeHtml(r.button_label)}</td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);"><span class="mm-badge">${mapCount} field mappings</span></td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${toggleSwitch}</td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border); text-align:right;">
+                            <div style="display:inline-flex; gap:6px;">
+                                <button class="mm-icon-btn" onclick="editConversionRule(${r.id})" title="Edit"><i class="fa-solid fa-pencil"></i></button>
+                                <button class="mm-icon-btn mm-icon-danger" onclick="deleteConversionRule(${r.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function toggleConversionStatus(id, active) {
+            const rule = conversionRulesList.find(r => r.id == id);
+            if (!rule) return;
+            
+            let mappings = {};
+            try { mappings = JSON.parse(rule.field_mappings || '{}'); } catch(e) {}
+            
+            const payload = {
+                action: 'save_conversion_rule',
+                id: rule.id,
+                source_module_id: MODULE_ID,
+                target_module_id: rule.target_module_id,
+                button_label: rule.button_label,
+                field_mappings: mappings,
+                status: active ? 'active' : 'inactive'
+            };
+            
+            try {
+                const res = await api('save_conversion_rule', payload);
+                if (res.success) {
+                    vyToast(`Rule status set to ${active ? 'Active' : 'Inactive'}`, 'success');
+                    loadConversionRules();
+                } else {
+                    vyToast('Failed to change status: ' + res.error, 'error');
+                }
+            } catch (e) {
+                vyToast('Request failed: ' + e.message, 'error');
+            }
+        }
+
+        function openConversionModal(editData = null) {
+            document.getElementById('conversionRuleId').value = editData ? editData.id : '';
+            document.getElementById('conversionModalTitle').textContent = editData ? 'Edit Conversion Rule' : 'Add Conversion Rule';
+            document.getElementById('conversionTargetModule').value = editData ? editData.target_module_id : '';
+            document.getElementById('conversionButtonLabel').value = editData ? editData.button_label : '';
+            
+            document.getElementById('conversionTargetModule').disabled = !!editData;
+            
+            if (editData) {
+                let mappings = {};
+                try { mappings = JSON.parse(editData.field_mappings || '{}'); } catch(e) {}
+                onConversionTargetModuleChange(mappings);
+            } else {
+                document.getElementById('conversionMappingsContainer').innerHTML = `
+                    <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px; border:1px dashed var(--border); border-radius:8px;">
+                        Please choose a Target Module first.
+                    </div>
+                `;
+            }
+            openModal('conversionModal');
+        }
+
+        let targetModuleFields = [];
+        async function onConversionTargetModuleChange(prefilledMappings = null) {
+            const targetModuleId = document.getElementById('conversionTargetModule').value;
+            const container = document.getElementById('conversionMappingsContainer');
+            
+            if (!targetModuleId) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px; border:1px dashed var(--border); border-radius:8px;">
+                        Please choose a Target Module first.
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;">Loading target fields...</div>`;
+            
+            try {
+                const res = await api('get', { id: parseInt(targetModuleId) });
+                if (res.success && res.module) {
+                    targetModuleFields = [];
+                    (res.module.blocks || []).forEach(b => {
+                        (b.fields || []).forEach(f => {
+                            targetModuleFields.push(f);
+                        });
+                    });
+                    
+                    if (targetModuleFields.length === 0) {
+                        container.innerHTML = `
+                            <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px; border:1px dashed var(--border); border-radius:8px;">
+                                Target module has no fields configured.
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    let html = `
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; font-weight:bold; font-size:12px; color:var(--text-muted); border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:8px;">
+                            <div>TARGET FIELD</div>
+                            <div>SOURCE FIELD (FROM THIS MODULE)</div>
+                        </div>
+                    `;
+                    
+                    targetModuleFields.forEach(tf => {
+                        const prefilledSourceId = prefilledMappings ? prefilledMappings[tf.id] : '';
+                        html += `
+                            <div class="conversion-mapping-row" data-target-field-id="${tf.id}" style="display:grid; grid-template-columns:1fr 1fr; gap:15px; align-items:center;">
+                                <div style="font-weight:600; font-size:13px; color:var(--text-main);">${escapeHtml(tf.label)} <span style="font-size:11px; color:var(--text-muted); font-weight:normal;">(${escapeHtml(tf.field_type)})</span></div>
+                                <div>
+                                    <select class="form-control mapping-source-field" style="width:100%;">
+                                        <option value="">-- Do Not Map --</option>
+                                        ${EDIT_MODULE_FIELDS.map(sf => {
+                                            const isSelected = prefilledSourceId == sf.id ? 'selected' : '';
+                                            return `<option value="${sf.id}" ${isSelected}>${escapeHtml(sf.label)} (${escapeHtml(sf.field_type)})</option>`;
+                                        }).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--danger); font-size:13px;">Error: ${escapeHtml(res.error || 'Failed to load module fields')}</div>`;
+                }
+            } catch (e) {
+                container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--danger); font-size:13px;">Error: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        async function saveConversionRule() {
+            const id = document.getElementById('conversionRuleId').value;
+            const targetModuleId = document.getElementById('conversionTargetModule').value;
+            const buttonLabel = document.getElementById('conversionButtonLabel').value.trim();
+            
+            if (!targetModuleId) {
+                vyToast('Target Module is required.', 'error');
+                return;
+            }
+            if (!buttonLabel) {
+                vyToast('Button label is required.', 'error');
+                return;
+            }
+            
+            const mappings = {};
+            const rows = document.querySelectorAll('#conversionMappingsContainer .conversion-mapping-row');
+            let hasMapping = false;
+            rows.forEach(r => {
+                const targetFid = r.getAttribute('data-target-field-id');
+                const sourceFid = r.querySelector('.mapping-source-field').value;
+                if (sourceFid) {
+                    mappings[targetFid] = parseInt(sourceFid);
+                    hasMapping = true;
+                }
+            });
+            
+            if (!hasMapping) {
+                if (!confirm('You have not mapped any fields. The target record will be created empty. Proceed?')) {
+                    return;
+                }
+            }
+            
+            const payload = {
+                action: 'save_conversion_rule',
+                source_module_id: MODULE_ID,
+                target_module_id: parseInt(targetModuleId),
+                button_label: buttonLabel,
+                field_mappings: mappings,
+                status: 'active'
+            };
+            if (id) {
+                payload.id = parseInt(id);
+            }
+            
+            try {
+                const res = await api('save_conversion_rule', payload);
+                if (res.success) {
+                    vyToast('Conversion rule saved successfully!', 'success');
+                    closeModal('conversionModal');
+                    loadConversionRules();
+                } else {
+                    vyToast('Failed to save rule: ' + res.error, 'error');
+                }
+            } catch (e) {
+                vyToast('Error: ' + e.message, 'error');
+            }
+        }
+
+        function editConversionRule(id) {
+            const rule = conversionRulesList.find(r => r.id == id);
+            if (!rule) return;
+            openConversionModal(rule);
+        }
+
+        async function deleteConversionRule(id) {
+            if (!confirm('Are you sure you want to delete this conversion rule?')) return;
+            try {
+                const res = await api('delete_conversion_rule', { id });
+                if (res.success) {
+                    vyToast('Conversion rule deleted successfully.', 'success');
+                    loadConversionRules();
+                } else {
+                    vyToast('Failed to delete rule: ' + res.error, 'error');
+                }
+            } catch (e) {
+                vyToast('Error: ' + e.message, 'error');
             }
         }
 

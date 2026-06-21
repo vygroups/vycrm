@@ -39,6 +39,31 @@ $countries = dm_get_countries();
 $states = dm_get_states();
 $allModules = dm_fetch_active_modules($conn, $prefix);
 
+$convertFromModuleId = (int)($_GET['convert_from_module'] ?? 0);
+$convertFromRecordId = (int)($_GET['convert_from_record'] ?? 0);
+$convertRuleId = (int)($_GET['convert_rule'] ?? 0);
+
+$prefilledValues = [];
+if ($convertFromModuleId && $convertFromRecordId && $convertRuleId) {
+    // Fetch conversion rule
+    $ruleStmt = $conn->prepare("SELECT * FROM {$prefix}module_conversion_rules WHERE id = ? AND source_module_id = ? AND target_module_id = ?");
+    $ruleStmt->execute([$convertRuleId, $convertFromModuleId, $moduleId]);
+    $rule = $ruleStmt->fetch(PDO::FETCH_ASSOC);
+    if ($rule) {
+        $mappings = json_decode($rule['field_mappings'], true) ?: [];
+        
+        // Fetch source record values
+        $srcRecord = dm_fetch_record($conn, $prefix, $convertFromRecordId);
+        if ($srcRecord) {
+            foreach ($mappings as $targetFieldId => $sourceFieldId) {
+                if (isset($srcRecord['values'][$sourceFieldId])) {
+                    $prefilledValues[$targetFieldId] = $srcRecord['values'][$sourceFieldId];
+                }
+            }
+        }
+    }
+}
+
 // Fetch field change counts if editing an existing record
 $fieldChangeCounts = [];
 $fullRecordHistory = [];
@@ -117,13 +142,73 @@ foreach ($module['blocks'] as $block) {
             <div class="breadcrumb"><?= htmlspecialchars($module['name']) ?> / <span class="current"><?= $isViewOnly ? 'View Record' : ($isEdit ? 'Edit Record' : 'New Record') ?></span></div>
             <div class="topbar-right">
                 <a href="module_view.php?module=<?= $moduleId ?>" class="mm-btn"><i class="fa-solid fa-arrow-left"></i> Back</a>
-                <?php if(!$isViewOnly): ?>
-                <button class="btn-primary" style="width:auto;padding:12px 24px;" onclick="saveRecord()"><i class="fa-solid fa-check"></i> Save</button>
+                <?php if($isViewOnly): ?>
+                    <!-- Conversion actions -->
+                    <?php
+                    $convStmt = $conn->prepare("
+                        SELECT c.*, tm.name as target_module_name 
+                        FROM {$prefix}module_conversion_rules c 
+                        JOIN {$prefix}modules tm ON tm.id = c.target_module_id 
+                        WHERE c.source_module_id = ? AND c.status = 'active'
+                    ");
+                    $convStmt->execute([$moduleId]);
+                    $convRules = $convStmt->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($convRules as $rule):
+                    ?>
+                        <a href="module_record.php?module=<?= $rule['target_module_id'] ?>&convert_from_module=<?= $moduleId ?>&convert_from_record=<?= $recordId ?>&convert_rule=<?= $rule['id'] ?>" class="btn-primary" style="width:auto;padding:12px 24px;background:var(--primary);color:white;text-decoration:none;display:inline-flex;align-items:center;gap:8px;">
+                            <i class="fa-solid fa-arrows-spin"></i> <?= htmlspecialchars($rule['button_label']) ?>
+                        </a>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <button class="btn-primary" style="width:auto;padding:12px 24px;" onclick="saveRecord()"><i class="fa-solid fa-check"></i> Save</button>
                 <?php endif; ?>
             </div>
         </header>
         <div class="content-scroll">
             <div class="mr-form-container">
+                <?php if ($isViewOnly): ?>
+                    <!-- Prefilled conversion alert -->
+                    <?php if (!empty($record['converted_from_module_id']) && !empty($record['converted_from_record_id'])): 
+                        $srcMod = dm_fetch_module_full($conn, $prefix, $record['converted_from_module_id']);
+                        if ($srcMod):
+                    ?>
+                        <div style="background:rgba(123,94,240,0.06); border:1px solid rgba(123,94,240,0.12); border-radius:12px; padding:12px 20px; margin-bottom:20px; font-weight:600; font-size:13px; display:flex; align-items:center; gap:8px; box-shadow:var(--shadow-sm);">
+                            <i class="fa-solid fa-arrows-spin" style="color:var(--primary);"></i>
+                            <span style="color:var(--text);">Converted from <?= htmlspecialchars($srcMod['name']) ?>:</span>
+                            <a href="module_record.php?module=<?= $srcMod['id'] ?>&record=<?= $record['converted_from_record_id'] ?>&view=1" style="color:var(--primary); text-decoration:none;">Record #<?= $record['converted_from_record_id'] ?></a>
+                        </div>
+                    <?php endif; endif; ?>
+
+                    <!-- Outgoing conversion alerts -->
+                    <?php
+                    $destStmt = $conn->prepare("
+                        SELECT r.id, r.module_id, m.name as module_name 
+                        FROM {$prefix}module_records r 
+                        JOIN {$prefix}modules m ON m.id = r.module_id 
+                        WHERE r.converted_from_module_id = ? AND r.converted_from_record_id = ?
+                    ");
+                    $destStmt->execute([$moduleId, $recordId]);
+                    $destRecords = $destStmt->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($destRecords as $dest):
+                    ?>
+                        <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.12); border-radius:12px; padding:12px 20px; margin-bottom:20px; font-weight:600; font-size:13px; display:flex; align-items:center; gap:8px; box-shadow:var(--shadow-sm);">
+                            <i class="fa-solid fa-check-circle" style="color:#10b981;"></i>
+                            <span style="color:var(--text);">Converted to <?= htmlspecialchars($dest['module_name']) ?>:</span>
+                            <a href="module_record.php?module=<?= $dest['module_id'] ?>&record=<?= $dest['id'] ?>&view=1" style="color:#10b981; text-decoration:none;">Record #<?= $dest['id'] ?></a>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+
+                <?php if ($convertFromModuleId && $convertFromRecordId && $convertRuleId): 
+                    $srcMod = dm_fetch_module_full($conn, $prefix, $convertFromModuleId);
+                    if ($srcMod):
+                ?>
+                    <div style="background:rgba(123,94,240,0.08); border:1px solid rgba(123,94,240,0.2); border-radius:12px; padding:14px 20px; margin-bottom:20px; font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px; box-shadow:var(--shadow-sm);">
+                        <i class="fa-solid fa-info-circle" style="color:var(--primary); font-size:16px;"></i>
+                        <span style="color:var(--text-main);">New Record pre-filled from converted <?= htmlspecialchars($srcMod['name']) ?>:</span>
+                        <a href="module_record.php?module=<?= $convertFromModuleId ?>&record=<?= $convertFromRecordId ?>&view=1" target="_blank" style="color:var(--primary); text-decoration:underline;">Record #<?= $convertFromRecordId ?> <i class="fa-solid fa-up-right-from-square" style="font-size:10px;"></i></a>
+                    </div>
+                <?php endif; endif; ?>
                 <?php foreach ($module['blocks'] as $block): ?>
                 <div class="mr-block">
                     <div class="mr-block-header"><i class="fa-solid fa-layer-group"></i> <?= htmlspecialchars($block['name']) ?></div>
@@ -134,7 +219,7 @@ foreach ($module['blocks'] as $block) {
                                 continue;
                             }
                             $fid = $field['id'];
-                            $val = $record['values'][$fid] ?? ($field['default_value'] ?? '');
+                            $val = $record['values'][$fid] ?? ($prefilledValues[$fid] ?? ($field['default_value'] ?? ''));
                             $fullWidth = in_array($field['field_type'], ['textarea', 'attachment', 'name']);
                             $req = $field['is_required'] ? '<span class="required-star">*</span>' : '';
                         ?>
@@ -571,6 +656,14 @@ function saveRecord() {
     formData.append('module_id', MODULE_ID);
     formData.append('record_id', RECORD_ID || 0);
     formData.append('values', JSON.stringify(values));
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const convModule = urlParams.get('convert_from_module');
+    const convRecord = urlParams.get('convert_from_record');
+    if (convModule && convRecord) {
+        formData.append('converted_from_module_id', convModule);
+        formData.append('converted_from_record_id', convRecord);
+    }
 
     // Append attachments
     document.querySelectorAll('.dm-attachment input[type="file"]').forEach(input => {

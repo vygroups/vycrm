@@ -481,6 +481,25 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
     try { $conn->exec("ALTER TABLE {$prefix}module_workflows ADD COLUMN condition_type ENUM('always', 'field_value', 'field_changed') DEFAULT 'field_value'"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}module_workflows MODIFY COLUMN action_type ENUM('email', 'whatsapp', 'push') NOT NULL"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}workflow_logs MODIFY COLUMN action_type ENUM('email', 'whatsapp', 'push') NOT NULL"); } catch (Throwable $e) {}
+
+    // 13. Record Conversion Rules & Trace Links
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}module_conversion_rules (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            source_module_id INT NOT NULL,
+            target_module_id INT NOT NULL,
+            button_label VARCHAR(255) NOT NULL,
+            field_mappings TEXT NOT NULL,
+            status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (source_module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE,
+            FOREIGN KEY (target_module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE,
+            INDEX idx_conv_rules_source (source_module_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    try { $conn->exec("ALTER TABLE {$prefix}module_records ADD COLUMN converted_from_module_id INT DEFAULT NULL AFTER updated_by"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}module_records ADD COLUMN converted_from_record_id INT DEFAULT NULL AFTER converted_from_module_id"); } catch (Throwable $e) {}
 }
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array
