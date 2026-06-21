@@ -37,7 +37,7 @@ require_once 'includes/brand.php';
             align-items: center;
             justify-content: center;
             gap: 15px;
-            user-select: none;
+            mai user-select: none;
         }
 
         .action-btn:hover {
@@ -252,9 +252,11 @@ require_once 'includes/brand.php';
                 </div>
 
                 <div class="table-panel" style="padding:20px;">
-                    <div class="tabs-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-bottom: 20px;">
+                    <div class="tabs-header"
+                        style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-bottom: 20px;">
                         <div style="display:flex; gap:10px;">
-                            <button class="tab-btn active" onclick="switchTab(event,'history')">ATTENDANCE HISTORY</button>
+                            <button class="tab-btn active" onclick="switchTab(event,'history')">ATTENDANCE
+                                HISTORY</button>
                             <button class="tab-btn" onclick="switchTab(event,'leaves')">LEAVE REQUESTS</button>
                             <button class="tab-btn" onclick="switchTab(event,'permissions')">PERMISSIONS</button>
                         </div>
@@ -263,11 +265,11 @@ require_once 'includes/brand.php';
                         $dbName = $_SESSION['tenant_db'];
                         $prefix = $_SESSION['tenant_prefix'];
                         $conn = Database::getTenantConn($dbName);
-                        
+
                         $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
                         $isAdmin = !empty($_SESSION['is_admin']);
-                        $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$_SESSION['user_id'], isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : null, $rule, $isAdmin);
-                        
+                        $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int) $_SESSION['user_id'], isset($_SESSION['role_id']) ? (int) $_SESSION['role_id'] : null, $rule, $isAdmin);
+
                         $showMemberFilter = ($allowedUserIds === null || count($allowedUserIds) > 1);
                         if ($showMemberFilter):
                             $users = [];
@@ -279,14 +281,19 @@ require_once 'includes/brand.php';
                                     $userStmt = $conn->query("SELECT id, username FROM {$prefix}users ORDER BY username ASC");
                                 }
                                 $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
-                            } catch (Exception $e) {}
-                        ?>
+                            } catch (Exception $e) {
+                            }
+                            ?>
                             <div style="display:flex; align-items:center; gap:8px;">
-                                <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">VIEWING TEAM MEMBER:</span>
-                                <select class="form-control" id="memberFilter" onchange="filterMember(this.value)" style="width:180px; padding:4px 10px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; cursor:pointer; height:32px; box-sizing:border-box;">
+                                <span
+                                    style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">VIEWING
+                                    TEAM MEMBER:</span>
+                                <select class="form-control" id="memberFilter" onchange="filterMember(this.value)"
+                                    style="width:180px; padding:4px 10px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; cursor:pointer; height:32px; box-sizing:border-box;">
                                     <option value="all">All Team Members</option>
                                     <?php foreach ($users as $u): ?>
-                                        <option value="<?= $u['id'] ?>" <?= $u['id'] == $_SESSION['user_id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['username']) ?></option>
+                                        <option value="<?= $u['id'] ?>" <?= $u['id'] == $_SESSION['user_id'] ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($u['username']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -483,7 +490,8 @@ require_once 'includes/brand.php';
         <div class="modal-content" style="max-width:500px;">
             <div class="flex justify-between items-center mb-4">
                 <h3 style="margin:0;">Detailed History</h3>
-                <button class="btn-icon" style="background:none;border:none;cursor:pointer;font-size:20px;" onclick="closeModal('attendanceHistoryModal')"><i class="fa-solid fa-xmark"></i></button>
+                <button class="btn-icon" style="background:none;border:none;cursor:pointer;font-size:20px;"
+                    onclick="closeModal('attendanceHistoryModal')"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div id="historyModalBody" style="font-size:14px;">
                 <!-- dynamic -->
@@ -507,7 +515,7 @@ require_once 'includes/brand.php';
 
         const PUNCH_KEY = 'vycrm_punch_start';
         const BREAK_KEY = 'vycrm_break_start';
-        let selectedUserId = <?= (int)$_SESSION['user_id'] ?>;
+        let selectedUserId = <?= (int) $_SESSION['user_id'] ?>;
 
         function escapeHtml(str) {
             if (!str) return '';
@@ -521,7 +529,7 @@ require_once 'includes/brand.php';
 
         function filterMember(uid) {
             selectedUserId = uid === 'all' ? 'all' : parseInt(uid, 10);
-            
+
             const activeTabBtn = document.querySelector('.tab-btn.active');
             if (activeTabBtn) {
                 const onclickText = activeTabBtn.getAttribute('onclick') || '';
@@ -633,10 +641,10 @@ require_once 'includes/brand.php';
             const data = await res.json();
             const tbody = document.getElementById('attendanceHistoryBody');
             const headerRow = document.getElementById('historyHeaderRow');
-            
+
             const isAll = (selectedUserId === 'all');
             if (headerRow) {
-                headerRow.innerHTML = isAll 
+                headerRow.innerHTML = isAll
                     ? `<th>User</th><th>Date</th><th>First Punch In</th><th>Last Punch Out</th><th>Total Hours</th><th>Total Break Hours</th><th>Status</th><th>Action</th>`
                     : `<th>Date</th><th>First Punch In</th><th>Last Punch Out</th><th>Total Hours</th><th>Total Break Hours</th><th>Status</th><th>Action</th>`;
             }
@@ -683,20 +691,20 @@ require_once 'includes/brand.php';
                         <p><strong>Total Break Hours:</strong> ${at.total_break_hours || '-'}</p>
                         <hr style="margin:15px 0; border:0; border-top:1px solid var(--border);">
                         <h4 style="margin-bottom:10px;">Break History</h4>`;
-            
+
             const breaks = at.break_history ? JSON.parse(at.break_history) : [];
             if (breaks.length > 0) {
                 html += `<ul style="list-style:none; padding:0; margin:0;">`;
                 breaks.forEach((b, i) => {
                     html += `<li style="padding:8px 0; border-bottom:1px solid #f1f1f1;">
-                        <strong>Break ${i+1}:</strong> ${formatVyTime(b.start)} - ${formatVyTime(b.end)}
+                        <strong>Break ${i + 1}:</strong> ${formatVyTime(b.start)} - ${formatVyTime(b.end)}
                     </li>`;
                 });
                 html += `</ul>`;
             } else {
                 html += `<p style="color:var(--text-muted); margin-top:10px;">No breaks recorded.</p>`;
             }
-            
+
             document.getElementById('historyModalBody').innerHTML = html;
             openModal('attendanceHistoryModal');
         }
@@ -707,7 +715,7 @@ require_once 'includes/brand.php';
             const tbody = document.getElementById('leaveHistoryBody');
             const headerRow = document.getElementById('leavesHeaderRow');
             const leavesTitle = document.getElementById('leavesTitle');
-            
+
             const isAll = (selectedUserId === 'all');
             if (leavesTitle) {
                 leavesTitle.textContent = isAll ? "Team Leave Applications" : "My Leave Applications";
@@ -740,7 +748,7 @@ require_once 'includes/brand.php';
             const tbody = document.getElementById('permissionHistoryBody');
             const headerRow = document.getElementById('permissionsHeaderRow');
             const permissionsTitle = document.getElementById('permissionsTitle');
-            
+
             const isAll = (selectedUserId === 'all');
             if (permissionsTitle) {
                 permissionsTitle.textContent = isAll ? "Team Permission Requests" : "My Permission Requests";

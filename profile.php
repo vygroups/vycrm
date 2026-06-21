@@ -21,12 +21,20 @@ $profile = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$profile) {
     $profile = [
         'business_name' => $companyData['name'] ?? '',
-        'gstin' => '', 'phone' => '', 'email' => '',
-        'address' => '', 'business_type' => '', 'business_category' => '',
+        'gstin' => '',
+        'phone' => '',
+        'email' => '',
+        'address' => '',
+        'business_type' => '',
+        'business_category' => '',
         'logo_path' => $companyData['logo'] ?? '',
         'signature_path' => '',
-        'bank_name' => '', 'account_no' => '', 'ifsc_code' => '', 'terms' => '',
-        'country' => 'IN', 'currency_symbol' => '₹'
+        'bank_name' => '',
+        'account_no' => '',
+        'ifsc_code' => '',
+        'terms' => '',
+        'country' => 'IN',
+        'currency_symbol' => '₹'
     ];
 } else {
     if (empty($profile['country'])) {
@@ -150,6 +158,7 @@ if (!empty($profile['signature_path'])) {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -159,252 +168,439 @@ if (!empty($profile['signature_path'])) {
     <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
-        .profile-container { max-width: 1100px; margin: 0 auto; padding: 30px; }
-        .settings-card { background: var(--surface); border-radius: 24px; box-shadow: var(--shadow-lg); overflow: hidden; border: 1px solid var(--border); margin-bottom: 28px; }
-        .card-header { padding: 24px 30px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 20px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
-        .card-title i { color: var(--primary); }
-        .card-body { padding: 32px 40px; }
-        .grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-        .section-title { font-size: 15px; font-weight: 700; color: var(--primary); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
-        .form-group { margin-bottom: 18px; }
-        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
-        .form-control { width: 100%; padding: 12px 16px; border-radius: 12px; border: 1.5px solid var(--border); background: #fff; font-size: 14px; transition: all 0.2s; }
-        .form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(123, 94, 240, 0.1); outline: none; }
-        .form-control.readonly { background: #f3f4f6; color: #6b7280; cursor: not-allowed; }
-        .upload-area { border: 2px dashed var(--border); border-radius: 18px; padding: 24px; text-align: center; background: #fcfcfd; cursor: pointer; transition: all 0.2s; position: relative; }
-        .upload-area:hover { border-color: var(--primary); background: #f8f7ff; }
-        .upload-area input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-        .logo-preview { max-height: 80px; max-width: 200px; border-radius: 12px; margin-bottom: 10px; }
-        .sig-preview { max-height: 60px; max-width: 160px; border-radius: 8px; margin-bottom: 10px; }
-        .success-alert { background: rgba(123,94,240,.1); color: #5b3cc4; padding: 16px 20px; border-radius: 12px; margin-bottom: 24px; font-weight: 600; display: none; border-left: 4px solid var(--primary); }
-        .readonly-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
-        @media (max-width: 900px) { .grid-layout { grid-template-columns: 1fr; } }
+        .profile-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+
+        .settings-card {
+            background: var(--surface);
+            border-radius: 24px;
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            border: 1px solid var(--border);
+            margin-bottom: 28px;
+        }
+
+        .card-header {
+            padding: 24px 30px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-title i {
+            color: var(--primary);
+        }
+
+        .card-body {
+            padding: 32px 40px;
+        }
+
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1.5px solid var(--border);
+            background: #fff;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(123, 94, 240, 0.1);
+            outline: none;
+        }
+
+        .form-control.readonly {
+            background: #f3f4f6;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 18px;
+            padding: 24px;
+            text-align: center;
+            background: #fcfcfd;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary);
+            background: #f8f7ff;
+        }
+
+        .upload-area input[type=file] {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .logo-preview {
+            max-height: 80px;
+            max-width: 200px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+        }
+
+        .sig-preview {
+            max-height: 60px;
+            max-width: 160px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .success-alert {
+            background: rgba(123, 94, 240, .1);
+            color: #5b3cc4;
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            font-weight: 600;
+            display: none;
+            border-left: 4px solid var(--primary);
+        }
+
+        .readonly-hint {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        @media (max-width: 900px) {
+            .grid-layout {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
+
 <body>
-<div class="app-wrapper">
-    <?php include 'includes/sidebar.php'; ?>
-    <main class="main-content">
-        <header class="topbar">
-            <div class="breadcrumb">Settings / <span class="current">Business Profile</span></div>
-            <div class="topbar-right">
-                 <button form="profileForm" class="btn-primary" style="width: auto; padding: 12px 24px;"><i class="fa-solid fa-check"></i> SAVE CHANGES</button>
-            </div>
-        </header>
-        <div class="content-scroll">
-            <div class="profile-container">
-                <?php if(isset($_GET['success'])): ?>
-                    <div class="success-alert" style="display: block;"><i class="fa-solid fa-circle-check"></i> Settings updated successfully!</div>
-                <?php endif; ?>
+    <div class="app-wrapper">
+        <?php include 'includes/sidebar.php'; ?>
+        <main class="main-content">
+            <header class="topbar">
+                <div class="breadcrumb">Settings / <span class="current">Business Profile</span></div>
+                <div class="topbar-right">
+                    <button form="profileForm" class="btn-primary" style="width: auto; padding: 12px 24px;"><i
+                            class="fa-solid fa-check"></i> SAVE CHANGES</button>
+                </div>
+            </header>
+            <div class="content-scroll">
+                <div class="profile-container">
+                    <?php if (isset($_GET['success'])): ?>
+                        <div class="success-alert" style="display: block;"><i class="fa-solid fa-circle-check"></i> Settings
+                            updated successfully!</div>
+                    <?php endif; ?>
 
-                <form id="profileForm" method="POST" enctype="multipart/form-data">
-                    <!-- Business Details Card -->
-                    <div class="settings-card">
-                        <div class="card-header">
-                            <div class="card-title"><i class="fa-solid fa-building"></i> Business Identity</div>
-                        </div>
-                        <div class="card-body">
-                            <div class="grid-layout">
-                                <div>
-                                    <div class="form-group">
-                                        <label class="form-label">Business Name</label>
-                                        <input type="text" class="form-control readonly" value="<?= htmlspecialchars($profile['business_name'] ?? ($companyData['name'] ?? '')) ?>" readonly>
-                                        <div class="readonly-hint"><i class="fa-solid fa-lock"></i> Managed by Super Admin</div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">GSTIN</label>
-                                        <input type="text" name="gstin" class="form-control" placeholder="22AAAAA0000A1Z5" value="<?= htmlspecialchars($profile['gstin'] ?? '') ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Business Phone</label>
-                                        <input type="text" name="phone" class="form-control" placeholder="+91 00000 00000" value="<?= htmlspecialchars($profile['phone'] ?? '') ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Business Email</label>
-                                        <input type="email" name="email" class="form-control" placeholder="contact@business.com" value="<?= htmlspecialchars($profile['email'] ?? '') ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Business Address</label>
-                                        <textarea name="address" class="form-control" rows="3" placeholder="Full registered address..."><?= htmlspecialchars($profile['address'] ?? '') ?></textarea>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Country</label>
-                                        <select name="country" class="form-control">
-                                            <option value="">Select Country...</option>
-                                            <?php foreach (dm_get_countries() as $code => $cname): ?>
-                                                <option value="<?= $code ?>" <?= ($profile['country'] ?? 'IN') == $code ? 'selected' : '' ?>><?= htmlspecialchars($cname) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Currency Symbol</label>
-                                        <input type="text" name="currency_symbol" class="form-control" placeholder="e.g. ₹, $, £" value="<?= htmlspecialchars($profile['currency_symbol'] ?? '₹') ?>">
-                                    </div>
-                                </div>
-                                <div>
-                                    <div class="form-group">
-                                        <label class="form-label">Company Logo</label>
-                                        <div class="upload-area" id="logoUploadArea">
-                                            <?php if ($displayLogo): ?>
-                                                <img src="<?= htmlspecialchars($displayLogo) ?>?v=<?= $v ?>" class="logo-preview" id="logoPreview" alt="Logo"><br>
-                                                <span class="text-muted text-sm">Click to change logo</span>
-                                            <?php else: ?>
-                                                <i class="fa-solid fa-image" style="font-size:32px;color:var(--text-muted);margin-bottom:10px;display:block;"></i>
-                                                <img src="" class="logo-preview" id="logoPreview" alt="" style="display:none;"><br>
-                                                <span class="text-muted" id="logoHint">Click to upload logo (PNG/JPG)</span>
-                                            <?php endif; ?>
-                                            <input type="file" name="logo" accept="image/*" onchange="previewFile(this, 'logoPreview', 'logoHint')">
+                    <form id="profileForm" method="POST" enctype="multipart/form-data">
+                        <!-- Business Details Card -->
+                        <div class="settings-card">
+                            <div class="card-header">
+                                <div class="card-title"><i class="fa-solid fa-building"></i> Business Identity</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="grid-layout">
+                                    <div>
+                                        <div class="form-group">
+                                            <label class="form-label">Business Name</label>
+                                            <input type="text" class="form-control readonly"
+                                                value="<?= htmlspecialchars($profile['business_name'] ?? ($companyData['name'] ?? '')) ?>"
+                                                readonly>
+                                            <div class="readonly-hint"><i class="fa-solid fa-lock"></i> Managed by Super
+                                                Admin</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">GSTIN</label>
+                                            <input type="text" name="gstin" class="form-control"
+                                                placeholder="22AAAAA0000A1Z5"
+                                                value="<?= htmlspecialchars($profile['gstin'] ?? '') ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Business Phone</label>
+                                            <input type="text" name="phone" class="form-control"
+                                                placeholder="+91 00000 00000"
+                                                value="<?= htmlspecialchars($profile['phone'] ?? '') ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Business Email</label>
+                                            <input type="email" name="email" class="form-control"
+                                                placeholder="contact@business.com"
+                                                value="<?= htmlspecialchars($profile['email'] ?? '') ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Business Address</label>
+                                            <textarea name="address" class="form-control" rows="3"
+                                                placeholder="Full registered address..."><?= htmlspecialchars($profile['address'] ?? '') ?></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Country</label>
+                                            <select name="country" class="form-control">
+                                                <option value="">Select Country...</option>
+                                                <?php foreach (dm_get_countries() as $code => $cname): ?>
+                                                    <option value="<?= $code ?>" <?= ($profile['country'] ?? 'IN') == $code ? 'selected' : '' ?>><?= htmlspecialchars($cname) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Currency Symbol</label>
+                                            <input type="text" name="currency_symbol" class="form-control"
+                                                placeholder="e.g. ₹, $, £"
+                                                value="<?= htmlspecialchars($profile['currency_symbol'] ?? '₹') ?>">
                                         </div>
                                     </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Business Type</label>
-                                        <select name="business_type" class="form-control">
-                                            <option value="">Select Type</option>
-                                            <?php foreach(['Retail','Wholesale','Service','Manufacturing','Hospital','Pharmacy'] as $t): ?>
-                                                <option value="<?= $t ?>" <?= ($profile['business_type'] ?? '') == $t ? 'selected' : '' ?>><?= $t ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Business Category</label>
-                                        <select name="business_category" class="form-control">
-                                            <option value="">Select Category</option>
-                                            <?php foreach(['Electronics','Pharmacy','FMCG','Automobile','Textile','Agriculture','IT Services','Others'] as $c): ?>
-                                                <option value="<?= $c ?>" <?= ($profile['business_category'] ?? '') == $c ? 'selected' : '' ?>><?= $c ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Bank & Signature Card -->
-                    <div class="settings-card">
-                        <div class="card-header">
-                            <div class="card-title"><i class="fa-solid fa-landmark"></i> Bank Details & Signature</div>
-                        </div>
-                        <div class="card-body">
-                            <div class="grid-layout">
-                                <div>
-                                    <div class="section-title"><i class="fa-solid fa-building-columns"></i> Bank Information</div>
-                                    <div class="form-group">
-                                        <label class="form-label">Bank Name</label>
-                                        <input type="text" name="bank_name" class="form-control" placeholder="e.g. State Bank of India" value="<?= htmlspecialchars($profile['bank_name'] ?? '') ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Account Number</label>
-                                        <input type="text" name="account_no" class="form-control" placeholder="e.g. 120028422420" value="<?= htmlspecialchars($profile['account_no'] ?? '') ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">IFSC Code</label>
-                                        <input type="text" name="ifsc_code" class="form-control" placeholder="e.g. SBIN0007440" value="<?= htmlspecialchars($profile['ifsc_code'] ?? '') ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Default Terms & Conditions</label>
-                                        <textarea name="terms" class="form-control" rows="3" placeholder="e.g. Thanks for doing business with us!"><?= htmlspecialchars($profile['terms'] ?? '') ?></textarea>
-                                    </div>
-                                </div>
-                                <div>
-                                    <div class="section-title"><i class="fa-solid fa-signature"></i> Authorized Signature</div>
-                                    <div class="form-group">
-                                        <div class="upload-area">
-                                            <?php if ($displaySig): ?>
-                                                <img src="<?= htmlspecialchars($displaySig) ?>?v=<?= $v ?>" class="sig-preview" id="sigPreview" alt="Signature"><br>
-                                                <span class="text-muted text-sm">Click to change signature</span>
-                                            <?php else: ?>
-                                                <i class="fa-solid fa-signature" style="font-size:32px;color:var(--text-muted);margin-bottom:12px;display:block;"></i>
-                                                <img src="" class="sig-preview" id="sigPreview" alt="" style="display:none;"><br>
-                                                <span class="text-muted" id="sigHint">Click to upload signature (PNG/JPG)</span>
-                                            <?php endif; ?>
-                                            <input type="file" name="signature" accept="image/*" onchange="previewFile(this, 'sigPreview', 'sigHint')">
+                                    <div>
+                                        <div class="form-group">
+                                            <label class="form-label">Company Logo</label>
+                                            <div class="upload-area" id="logoUploadArea">
+                                                <?php if ($displayLogo): ?>
+                                                    <img src="<?= htmlspecialchars($displayLogo) ?>?v=<?= $v ?>"
+                                                        class="logo-preview" id="logoPreview" alt="Logo"><br>
+                                                    <span class="text-muted text-sm">Click to change logo</span>
+                                                <?php else: ?>
+                                                    <i class="fa-solid fa-image"
+                                                        style="font-size:32px;color:var(--text-muted);margin-bottom:10px;display:block;"></i>
+                                                    <img src="" class="logo-preview" id="logoPreview" alt=""
+                                                        style="display:none;"><br>
+                                                    <span class="text-muted" id="logoHint">Click to upload logo
+                                                        (PNG/JPG)</span>
+                                                <?php endif; ?>
+                                                <input type="file" name="logo" accept="image/*"
+                                                    onchange="previewFile(this, 'logoPreview', 'logoHint')">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Business Type</label>
+                                            <select name="business_type" class="form-control">
+                                                <option value="">Select Type</option>
+                                                <?php foreach (['Retail', 'Wholesale', 'Service', 'Manufacturing', 'Hospital', 'Pharmacy'] as $t): ?>
+                                                    <option value="<?= $t ?>" <?= ($profile['business_type'] ?? '') == $t ? 'selected' : '' ?>><?= $t ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Business Category</label>
+                                            <select name="business_category" class="form-control">
+                                                <option value="">Select Category</option>
+                                                <?php foreach (['Electronics', 'Pharmacy', 'FMCG', 'Automobile', 'Textile', 'Agriculture', 'IT Services', 'Others'] as $c): ?>
+                                                    <option value="<?= $c ?>" <?= ($profile['business_category'] ?? '') == $c ? 'selected' : '' ?>><?= $c ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Notification & Gateway Integration Credentials -->
-                    <div class="settings-card">
-                        <div class="card-header">
-                            <div class="card-title"><i class="fa-solid fa-gears"></i> Notification & Integration Gateways</div>
-                        </div>
-                        <div class="card-body">
-                            <div class="grid-layout">
-                                <div>
-                                    <div class="section-title"><i class="fa-solid fa-envelope"></i> SMTP Email Server Settings</div>
-                                    <div class="form-group">
-                                        <label class="form-label">SMTP Host</label>
-                                        <input type="text" name="smtp_host" class="form-control" placeholder="e.g. smtp.gmail.com" value="<?= htmlspecialchars($smtpHost) ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">SMTP Port</label>
-                                        <input type="number" name="smtp_port" class="form-control" placeholder="e.g. 587" value="<?= htmlspecialchars($smtpPort) ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">SMTP Username</label>
-                                        <input type="text" name="smtp_user" class="form-control" placeholder="e.g. you@gmail.com" value="<?= htmlspecialchars($smtpUser) ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">SMTP Password</label>
-                                        <input type="password" name="smtp_pass" class="form-control" placeholder="SMTP Password" value="<?= htmlspecialchars($smtpPass) ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">From Email Address</label>
-                                        <input type="email" name="smtp_from_email" class="form-control" placeholder="e.g. alerts@yourcompany.com" value="<?= htmlspecialchars($smtpFromEmail) ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">From Name</label>
-                                        <input type="text" name="smtp_from_name" class="form-control" placeholder="e.g. Alert System" value="<?= htmlspecialchars($smtpFromName) ?>">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">Encryption Type</label>
-                                        <select name="smtp_encryption" class="form-control">
-                                            <option value="none" <?= $smtpEnc === 'none' ? 'selected' : '' ?>>None</option>
-                                            <option value="ssl" <?= $smtpEnc === 'ssl' ? 'selected' : '' ?>>SSL</option>
-                                            <option value="tls" <?= $smtpEnc === 'tls' ? 'selected' : '' ?>>TLS / STARTTLS</option>
-                                        </select>
-                                    </div>
+                        <!-- Bank & Signature Card -->
+                        <div class="settings-card">
+                            <div class="card-header">
+                                <div class="card-title"><i class="fa-solid fa-landmark"></i> Bank Details & Signature
                                 </div>
-                                <div>
-                                    <div class="section-title"><i class="fa-brands fa-whatsapp"></i> WhatsApp Cloud API Settings</div>
-                                    <div class="form-group">
-                                        <label class="form-label">API Endpoint URL</label>
-                                        <input type="url" name="whatsapp_api_url" class="form-control" placeholder="https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages" value="<?= htmlspecialchars($whatsappApiUrl) ?>">
+                            </div>
+                            <div class="card-body">
+                                <div class="grid-layout">
+                                    <div>
+                                        <div class="section-title"><i class="fa-solid fa-building-columns"></i> Bank
+                                            Information</div>
+                                        <div class="form-group">
+                                            <label class="form-label">Bank Name</label>
+                                            <input type="text" name="bank_name" class="form-control"
+                                                placeholder="e.g. State Bank of India"
+                                                value="<?= htmlspecialchars($profile['bank_name'] ?? '') ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Account Number</label>
+                                            <input type="text" name="account_no" class="form-control"
+                                                placeholder="e.g. 120028422420"
+                                                value="<?= htmlspecialchars($profile['account_no'] ?? '') ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">IFSC Code</label>
+                                            <input type="text" name="ifsc_code" class="form-control"
+                                                placeholder="e.g. SBIN0007440"
+                                                value="<?= htmlspecialchars($profile['ifsc_code'] ?? '') ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Default Terms & Conditions</label>
+                                            <textarea name="terms" class="form-control" rows="3"
+                                                placeholder="e.g. Thanks for doing business with us!"><?= htmlspecialchars($profile['terms'] ?? '') ?></textarea>
+                                        </div>
                                     </div>
-                                    <div class="form-group">
-                                        <label class="form-label">System Access Token (Bearer)</label>
-                                        <textarea name="whatsapp_access_token" class="form-control" rows="5" placeholder="EAABwz... (Permanent Access Token)"><?= htmlspecialchars($whatsappToken) ?></textarea>
+                                    <div>
+                                        <div class="section-title"><i class="fa-solid fa-signature"></i> Authorized
+                                            Signature</div>
+                                        <div class="form-group">
+                                            <div class="upload-area">
+                                                <?php if ($displaySig): ?>
+                                                    <img src="<?= htmlspecialchars($displaySig) ?>?v=<?= $v ?>"
+                                                        class="sig-preview" id="sigPreview" alt="Signature"><br>
+                                                    <span class="text-muted text-sm">Click to change signature</span>
+                                                <?php else: ?>
+                                                    <i class="fa-solid fa-signature"
+                                                        style="font-size:32px;color:var(--text-muted);margin-bottom:12px;display:block;"></i>
+                                                    <img src="" class="sig-preview" id="sigPreview" alt=""
+                                                        style="display:none;"><br>
+                                                    <span class="text-muted" id="sigHint">Click to upload signature
+                                                        (PNG/JPG)</span>
+                                                <?php endif; ?>
+                                                <input type="file" name="signature" accept="image/*"
+                                                    onchange="previewFile(this, 'sigPreview', 'sigHint')">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </form>
+
+                        <!-- Notification & Gateway Integration Credentials -->
+                        <div class="settings-card">
+                            <div class="card-header">
+                                <div class="card-title"><i class="fa-solid fa-gears"></i> Notification & Integration
+                                    Gateways</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="grid-layout">
+                                    <div>
+                                        <div class="section-title"><i class="fa-solid fa-envelope"></i> SMTP Email
+                                            Server Settings</div>
+                                        <div class="form-group">
+                                            <label class="form-label">SMTP Host</label>
+                                            <input type="text" name="smtp_host" class="form-control"
+                                                placeholder="e.g. smtp.gmail.com"
+                                                value="<?= htmlspecialchars($smtpHost) ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">SMTP Port</label>
+                                            <input type="number" name="smtp_port" class="form-control"
+                                                placeholder="e.g. 456 (or 587)"
+                                                value="<?= htmlspecialchars($smtpPort) ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">SMTP Username</label>
+                                            <input type="text" name="smtp_user" class="form-control"
+                                                placeholder="e.g. you@gmail.com"
+                                                value="<?= htmlspecialchars($smtpUser) ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">SMTP Password</label>
+                                            <input type="password" name="smtp_pass" class="form-control"
+                                                placeholder="SMTP Password" value="<?= htmlspecialchars($smtpPass) ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">From Email Address</label>
+                                            <input type="email" name="smtp_from_email" class="form-control"
+                                                placeholder="e.g. alerts@yourcompany.com"
+                                                value="<?= htmlspecialchars($smtpFromEmail) ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">From Name</label>
+                                            <input type="text" name="smtp_from_name" class="form-control"
+                                                placeholder="e.g. Alert System"
+                                                value="<?= htmlspecialchars($smtpFromName) ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Encryption Type(SSL (if using Port 465) or TLS (if
+                                                using Port 587))</label>
+                                            <select name="smtp_encryption" class="form-control">
+                                                <option value="none" <?= $smtpEnc === 'none' ? 'selected' : '' ?>>None
+                                                </option>
+                                                <option value="ssl" <?= $smtpEnc === 'ssl' ? 'selected' : '' ?>>SSL
+                                                </option>
+                                                <option value="tls" <?= $smtpEnc === 'tls' ? 'selected' : '' ?>>TLS /
+                                                    STARTTLS</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="section-title"><i class="fa-brands fa-whatsapp"></i> WhatsApp Cloud
+                                            API Settings</div>
+                                        <div class="form-group">
+                                            <label class="form-label">API Endpoint URL</label>
+                                            <input type="url" name="whatsapp_api_url" class="form-control"
+                                                placeholder="https://graph.facebook.com/v17.0/YOUR_PHONE_NUMBER_ID/messages"
+                                                value="<?= htmlspecialchars($whatsappApiUrl) ?>">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">System Access Token (Bearer)</label>
+                                            <textarea name="whatsapp_access_token" class="form-control" rows="5"
+                                                placeholder="EAABwz... (Permanent Access Token)"><?= htmlspecialchars($whatsappToken) ?></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
             </div>
-        </div>
-    </main>
-</div>
-<script>
-    function toggleSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        sidebar.classList.toggle('sidebar-collapsed');
-    }
-    function previewFile(input, previewId, hintId) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = document.getElementById(previewId);
-                img.src = e.target.result;
-                img.style.display = 'inline-block';
-                const hint = document.getElementById(hintId);
-                if (hint) hint.textContent = 'New file selected — click Save';
-            };
-            reader.readAsDataURL(input.files[0]);
+        </main>
+    </div>
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('sidebar-collapsed');
         }
-    }
-</script>
+        function previewFile(input, previewId, hintId) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const img = document.getElementById(previewId);
+                    img.src = e.target.result;
+                    img.style.display = 'inline-block';
+                    const hint = document.getElementById(hintId);
+                    if (hint) hint.textContent = 'New file selected — click Save';
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+    </script>
 </body>
+
 </html>
