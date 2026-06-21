@@ -9,6 +9,7 @@ $moduleConfig = vycrm_module_config();
 $_sidebarDynModules = [];
 $_sidebarAttendanceEnabled = false;
 $_sidebarBillingEnabled = false;
+$_sidebarCampaignsEnabled = false;
 
 try {
     $_sidebarConn = Database::getTenantConn($_SESSION['tenant_db']);
@@ -17,6 +18,7 @@ try {
         $_sidebarDynModules = dm_fetch_active_modules($_sidebarConn, $_SESSION['tenant_prefix']);
         $_sidebarAttendanceEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'attendance_enabled', '1') === '1';
         $_sidebarBillingEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'billing_enabled', '1') === '1';
+        $_sidebarCampaignsEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'campaigns_enabled', '1') === '1';
     }
 } catch (Throwable $e) {
 }
@@ -103,6 +105,23 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
             <a href="products.php"
                 class="nav-item <?= ($currentFile === 'products.php' || $currentFile === 'product_create.php') ? 'active' : '' ?>">
                 <i class="fa-solid fa-boxes-stacked"></i><span class="nav-text">Products/Service</span>
+            </a>
+        </div>
+        <?php endif; ?>
+
+        <!-- Campaigns -->
+        <?php if ($_sidebarCampaignsEnabled): ?>
+        <div class="sidebar-section" onclick="toggleSidebarGroup('group-camp')">
+            <span>CAMPAIGNS</span> <i class="fa-solid fa-chevron-down toggle-caret"></i>
+        </div>
+        <div class="sidebar-group" id="group-camp">
+            <a href="campaigns.php"
+                class="nav-item <?= ($currentFile === 'campaigns.php') ? 'active' : '' ?>">
+                <i class="fa-solid fa-bullhorn"></i><span class="nav-text">Campaigns</span>
+            </a>
+            <a href="campaign_templates.php"
+                class="nav-item <?= ($currentFile === 'campaign_templates.php') ? 'active' : '' ?>">
+                <i class="fa-solid fa-envelope-open-text"></i><span class="nav-text">Templates</span>
             </a>
         </div>
         <?php endif; ?>

@@ -69,7 +69,9 @@ def main():
         ftp.login(USER, PASS)
         ftp.cwd(REMOTE_PATH)
         
-        upload_dir(ftp, ".", ".")
+        # Determine local directory to upload (only sync PHP web files)
+        local_dir = "web" if os.path.exists("web") and os.path.isdir("web") else "."
+        upload_dir(ftp, local_dir, ".")
         
         ftp.quit()
         print("Deployment successful!")

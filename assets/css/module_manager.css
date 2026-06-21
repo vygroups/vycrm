@@ -104,3 +104,69 @@
     .mm-editor-header { flex-direction: column; align-items: flex-start; }
     .mm-rule-row { flex-direction: column; }
 }
+
+.mm-field-drag-handle {
+    color: var(--text-muted);
+    cursor: grab;
+    margin-right: 12px;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.mm-field-drag-handle:hover {
+    color: var(--primary);
+}
+
+.mm-field-drag-handle:active {
+    cursor: grabbing;
+}
+
+.mm-field-row.sortable-ghost {
+    opacity: 0.4;
+    background: rgba(123, 94, 240, 0.1) !important;
+    border: 1px dashed var(--primary);
+}
+
+.mm-field-row.sortable-chosen {
+    background: rgba(123, 94, 240, 0.05);
+}
+
+/* System Module Toggle Pills */
+.sys-toggle-pill {
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    background: #d1d5db;
+    border-radius: 11px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.25s ease;
+    flex-shrink: 0;
+}
+.sys-toggle-pill::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.25s ease;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.sys-toggle-pill.active {
+    background: var(--primary);
+}
+.sys-toggle-pill.active::after {
+    transform: translateX(18px);
+}
+.sys-toggle:checked + .sys-toggle-pill {
+    background: var(--primary);
+}
+.sys-toggle:checked + .sys-toggle-pill::after {
+    transform: translateX(18px);
+}

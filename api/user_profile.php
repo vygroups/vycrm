@@ -38,8 +38,9 @@ try {
         $ext = explode('/', $type)[1] ?? 'png';
         if (in_array($ext, ['jpeg', 'jpg', 'png', 'gif', 'webp'])) {
             $slug = upload_normalize_company_slug($_SESSION['tenant_slug']);
-            $basename = 'user_' . $user_id . '_' . time();
+            $basename = 'user_' . $user_id;
             $rel_dir = upload_company_asset_dir($slug, 'profiles');
+            upload_clean_existing_files('../' . $rel_dir, $basename);
             upload_ensure_dir('../' . $rel_dir);
             $dest = $rel_dir . $basename . '.' . $ext;
 

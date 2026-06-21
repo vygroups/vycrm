@@ -4,11 +4,16 @@ require_once 'includes/commerce.php';
 require_once 'includes/brand.php';
 require_once 'includes/dynamic_modules.php';
 
+$v = time();
+
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
 $prefix = $context['prefix'];
 dm_ensure_tables($conn, $prefix);
 commerce_ensure_tables($conn, $prefix);
+
+$defaultRecordsPerPage = (int)dm_get_system_setting($conn, $prefix, 'records_per_page', 25);
+if ($defaultRecordsPerPage <= 0 || $defaultRecordsPerPage > 1000) $defaultRecordsPerPage = 25;
 
 $moduleId = (int)($_GET['module'] ?? 0);
 if (!$moduleId) { header('Location: module_manager.php'); exit; }
@@ -357,6 +362,31 @@ if (!$hasUpdatedAt) {
                             </tbody>
                         </table>
                     </div>
+                    
+                    <!-- Pagination Controls -->
+                    <div class="pagination-panel" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-top: 1.5px solid var(--border); flex-wrap: wrap; gap: 15px;">
+                        <div class="pagination-info" style="font-size: 13px; color: var(--text-muted); font-weight: 500;">
+                            Showing <span id="paginationStart" style="font-weight: 700; color: var(--text-dark);">0</span> to <span id="paginationEnd" style="font-weight: 700; color: var(--text-dark);">0</span> of <span id="paginationTotal" style="font-weight: 700; color: var(--text-dark);">0</span> entries
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <div class="pagination-page-size" style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); font-weight: 500;">
+                                Show 
+                                <select id="paginationLimit" onchange="onPageSizeChange()" style="border: 1.5px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 13px; font-weight: 600; outline: none; background: #fff; cursor: pointer; color: var(--text-dark);">
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                    <option value="300">300</option>
+                                    <option value="500">500</option>
+                                </select>
+                                entries
+                            </div>
+                            <div class="pagination-buttons" id="paginationButtons" style="display: flex; gap: 4px;">
+                                <!-- Dynamic pagination buttons -->
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -385,6 +415,17 @@ const USER_ID = <?= (int)($_SESSION['user_id'] ?? 0) ?>;
 const MODULE_ID = <?= $moduleId ?>;
 const STORAGE_KEY = `vycrm_col_vis_${USER_ID}_${MODULE_ID}`;
 const ORDER_KEY = `vycrm_col_order_${USER_ID}_${MODULE_ID}`;
+
+function toggleColumnSelector(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('columnSelectorDropdown');
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+}
+
+// Pagination state variables
+const DEFAULT_PAGE_LIMIT = <?= $defaultRecordsPerPage ?>;
+let currentPage = 1;
+let currentPageLimit = DEFAULT_PAGE_LIMIT;
 
 // Saved Filters and Dynamic Rules logic
 const COMPANY_USERS = <?= json_encode($usersList) ?>;
@@ -782,16 +823,48 @@ async function deleteActiveFilter() {
     }
 }
 
-async function fetchAndRenderRecords(filterRules = null, filterId = 0) {
+async function fetchAndRenderRecords(filterRules = null, filterId = 0, page = 1) {
+    currentPage = page;
     const searchInput = document.getElementById('recordSearchInput');
     const searchVal = searchInput ? searchInput.value.trim() : '';
+    
+    const limitSelect = document.getElementById('paginationLimit');
+    if (limitSelect) {
+        const val = parseInt(currentPageLimit);
+        let optionExists = false;
+        for (let i = 0; i < limitSelect.options.length; i++) {
+            if (parseInt(limitSelect.options[i].value) === val) {
+                optionExists = true;
+                break;
+            }
+        }
+        if (!optionExists) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val;
+            let inserted = false;
+            for (let i = 0; i < limitSelect.options.length; i++) {
+                if (parseInt(limitSelect.options[i].value) > val) {
+                    limitSelect.add(opt, i);
+                    inserted = true;
+                    break;
+                }
+            }
+            if (!inserted) {
+                limitSelect.add(opt);
+            }
+        }
+        limitSelect.value = val;
+    }
+    
+    const offset = (currentPage - 1) * currentPageLimit;
     
     const payload = {
         action: 'list_records',
         module_id: MODULE_ID,
         search: searchVal || null,
-        limit: 50,
-        offset: 0
+        limit: currentPageLimit,
+        offset: offset
     };
     
     if (filterRules && filterRules.length > 0) {
@@ -816,6 +889,19 @@ async function fetchAndRenderRecords(filterRules = null, filterId = 0) {
             if (countLabel) {
                 countLabel.textContent = `${total} record${total !== 1 ? 's' : ''}`;
             }
+            
+            // Update pagination stats UI
+            const start = total === 0 ? 0 : offset + 1;
+            const end = Math.min(offset + currentPageLimit, total);
+            
+            const pStart = document.getElementById('paginationStart');
+            const pEnd = document.getElementById('paginationEnd');
+            const pTotal = document.getElementById('paginationTotal');
+            if (pStart) pStart.textContent = start;
+            if (pEnd) pEnd.textContent = end;
+            if (pTotal) pTotal.textContent = total;
+            
+            renderPaginationButtons(total, currentPageLimit, currentPage);
             
             const filtersBtn = document.getElementById('btnFiltersToggle');
             const clearBtn = document.getElementById('btnFiltersClear');
@@ -849,6 +935,72 @@ async function fetchAndRenderRecords(filterRules = null, filterId = 0) {
     } catch(e) {
         vyToast('Failed to fetch records: ' + e.message, 'error');
     }
+}
+
+function onPageSizeChange() {
+    const sizeSelect = document.getElementById('paginationLimit');
+    if (!sizeSelect) return;
+    currentPageLimit = parseInt(sizeSelect.value);
+    currentPage = 1;
+    fetchAndRenderRecords(activeFilterRules, activeFilterId, 1);
+}
+
+function goToPage(page) {
+    currentPage = page;
+    fetchAndRenderRecords(activeFilterRules, activeFilterId, page);
+}
+
+function renderPaginationButtons(total, limit, currentPage) {
+    const container = document.getElementById('paginationButtons');
+    if (!container) return;
+    container.innerHTML = '';
+    
+    const totalPages = Math.ceil(total / limit);
+    if (totalPages <= 1) {
+        return;
+    }
+    
+    const addButton = (page, label, active = false, disabled = false) => {
+        const btn = document.createElement('button');
+        btn.className = active ? 'mm-btn mm-btn-sm' : 'mm-btn mm-btn-sm mm-btn-outline';
+        btn.style.cssText = `
+            border-radius: 8px;
+            font-size: 13px;
+            padding: 4px 10px;
+            min-width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            ${active ? 'background: var(--primary); color: #fff;' : 'background: #fff; border: 1.5px solid var(--border); color: var(--text-dark);'}
+            ${disabled ? 'opacity: 0.5; cursor: not-allowed;' : 'cursor: pointer;'}
+        `;
+        btn.textContent = label;
+        if (!disabled) {
+            btn.onclick = () => goToPage(page);
+        }
+        container.appendChild(btn);
+    };
+    
+    // Prev Button
+    addButton(currentPage - 1, 'Prev', false, currentPage === 1);
+    
+    // Page Numbers
+    const range = 2;
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - range && i <= currentPage + range)) {
+            addButton(i, i, i === currentPage);
+        } else if (i === currentPage - range - 1 || i === currentPage + range + 1) {
+            const dots = document.createElement('span');
+            dots.textContent = '...';
+            dots.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--text-muted); font-weight: 600;';
+            container.appendChild(dots);
+        }
+    }
+    
+    // Next Button
+    addButton(currentPage + 1, 'Next', false, currentPage === totalPages);
 }
 
 function renderRecordsTable(fields, records) {
@@ -976,7 +1128,7 @@ document.addEventListener('click', function(event) {
 function applyColumnVisibility() {
     let hiddenCols = [];
     try {
-        hiddenCols = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        hiddenCols = (JSON.parse(localStorage.getItem(STORAGE_KEY)) || []).map(String);
     } catch(e) {}
     
     document.querySelectorAll('.col-toggle-checkbox').forEach(cb => {
@@ -985,9 +1137,9 @@ function applyColumnVisibility() {
         let isVisible = true;
         
         if (fieldId) {
-            isVisible = !hiddenCols.includes(fieldId);
+            isVisible = !hiddenCols.includes(String(fieldId));
         } else if (column) {
-            isVisible = !hiddenCols.includes(column);
+            isVisible = !hiddenCols.includes(String(column));
         }
         
         cb.checked = isVisible;
@@ -1008,6 +1160,9 @@ function applyColumnVisibility() {
 function applyColumnOrder(orderList) {
     if (!orderList || orderList.length === 0) return;
     
+    // Normalize order keys to strings
+    const strOrderList = orderList.map(String);
+    
     const rows = document.querySelectorAll('.crm-table tr');
     
     rows.forEach(row => {
@@ -1021,10 +1176,10 @@ function applyColumnOrder(orderList) {
         const sortableCells = cells.filter(c => c.dataset.fieldId || c.dataset.column);
         
         sortableCells.sort((a, b) => {
-            const keyA = a.dataset.fieldId || a.dataset.column;
-            const keyB = b.dataset.fieldId || b.dataset.column;
-            let indexA = orderList.indexOf(keyA);
-            let indexB = orderList.indexOf(keyB);
+            const keyA = String(a.dataset.fieldId || a.dataset.column || '');
+            const keyB = String(b.dataset.fieldId || b.dataset.column || '');
+            let indexA = strOrderList.indexOf(keyA);
+            let indexB = strOrderList.indexOf(keyB);
             
             if (indexA === -1) indexA = 999;
             if (indexB === -1) indexB = 999;
@@ -1032,13 +1187,11 @@ function applyColumnOrder(orderList) {
             return indexA - indexB;
         });
         
-        row.innerHTML = '';
+        // Re-append nodes in the sorted order (moves existing nodes safely)
         if (firstCell) row.appendChild(firstCell);
-        
         sortableCells.forEach(cell => {
             row.appendChild(cell);
         });
-        
         const finalCell = headerCell || actionCell;
         if (finalCell) row.appendChild(finalCell);
     });
@@ -1047,7 +1200,7 @@ function applyColumnOrder(orderList) {
 function saveColumnOrder() {
     const container = document.getElementById('columnListContainer');
     const items = Array.from(container.querySelectorAll('.col-item'));
-    const orderList = items.map(item => item.dataset.key);
+    const orderList = items.map(item => String(item.dataset.key || ''));
     
     localStorage.setItem(ORDER_KEY, JSON.stringify(orderList));
     applyColumnOrder(orderList);
@@ -1151,11 +1304,11 @@ document.querySelectorAll('.col-toggle-checkbox').forEach(cb => {
     cb.addEventListener('change', function() {
         const fieldId = this.dataset.fieldId;
         const column = this.dataset.column;
-        const key = fieldId || column;
+        const key = String(fieldId || column);
         
         let hiddenCols = [];
         try {
-            hiddenCols = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            hiddenCols = (JSON.parse(localStorage.getItem(STORAGE_KEY)) || []).map(String);
         } catch(e) {}
         
         if (this.checked) {

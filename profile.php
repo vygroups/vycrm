@@ -5,6 +5,8 @@ require_once 'includes/brand.php';
 require_once 'includes/upload_paths.php';
 require_once 'includes/dynamic_modules.php';
 
+$v = time();
+
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
 $prefix = $context['prefix'];
@@ -61,6 +63,8 @@ $smtpEnc = dm_get_system_setting($conn, $prefix, 'smtp_encryption', 'none');
 $whatsappApiUrl = dm_get_system_setting($conn, $prefix, 'whatsapp_api_url', '');
 $whatsappToken = dm_get_system_setting($conn, $prefix, 'whatsapp_access_token', '');
 $sessionExpiryHours = (int)dm_get_system_setting($conn, $prefix, 'session_expiry_hours', 8);
+$recordsPerPage = (int)dm_get_system_setting($conn, $prefix, 'records_per_page', 25);
+if ($recordsPerPage <= 0 || $recordsPerPage > 1000) $recordsPerPage = 25;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gst = $_POST['gstin'] ?? '';
@@ -147,14 +151,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($session_expiry_hours <= 0) $session_expiry_hours = 8;
     dm_set_system_setting($conn, $prefix, 'session_expiry_hours', $session_expiry_hours);
 
+    $records_per_page = (int)($_POST['records_per_page'] ?? 25);
+    if ($records_per_page <= 0 || $records_per_page > 1000) $records_per_page = 25;
+    dm_set_system_setting($conn, $prefix, 'records_per_page', $records_per_page);
+
     header("Location: profile.php?success=1");
     exit;
 }
 
-// Resolve display paths for logo and signature
+// Resolve display paths for logo and signature with prioritized extension fallbacks
 $displayLogo = '';
-if (!empty($profile['logo_path'])) {
-    $displayLogo = '/' . ltrim($profile['logo_path'], '/');
+$rawLogoPath = !empty($profile['logo_path']) ? ltrim($profile['logo_path'], '/') : '';
+if ($rawLogoPath && (file_exists(__DIR__ . '/' . $rawLogoPath) || file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $rawLogoPath))) {
+    $displayLogo = '/' . $rawLogoPath;
+} elseif (!empty($slug)) {
+    $ext = $rawLogoPath ? strtolower(pathinfo($rawLogoPath, PATHINFO_EXTENSION)) : '';
+    $fallbackExts = ($ext === 'png') ? ['png', 'jpeg', 'jpg'] : ['jpeg', 'jpg', 'png'];
+    foreach ($fallbackExts as $fe) {
+        $fb = "assets/uploads/logos/{$slug}_logo.{$fe}";
+        if (file_exists(__DIR__ . '/' . $fb) || file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $fb)) {
+            $displayLogo = '/' . $fb;
+            break;
+        }
+    }
+}
+if (empty($displayLogo)) {
+    $displayLogo = '/images/logo.png';
 }
 $displaySig = '';
 if (!empty($profile['signature_path'])) {
@@ -595,12 +617,48 @@ if (!empty($profile['signature_path'])) {
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Pagination & View Settings -->
+                        <div class="settings-card">
+                            <div class="card-header">
+                                <div class="card-title"><i class="fa-solid fa-list-ol"></i> Pagination & View Settings</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group" style="max-width: 400px;">
+                                    <label class="form-label">Default Records Per Page</label>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <select id="records_per_page_select" class="form-control" onchange="toggleCustomRecordsInput(this.value)" style="flex: 1.5;">
+                                            <option value="10" <?= $recordsPerPage === 10 ? 'selected' : '' ?>>10 records per page</option>
+                                            <option value="25" <?= $recordsPerPage === 25 ? 'selected' : '' ?>>25 records per page</option>
+                                            <option value="50" <?= $recordsPerPage === 50 ? 'selected' : '' ?>>50 records per page</option>
+                                            <option value="100" <?= $recordsPerPage === 100 ? 'selected' : '' ?>>100 records per page</option>
+                                            <option value="200" <?= $recordsPerPage === 200 ? 'selected' : '' ?>>200 records per page</option>
+                                            <option value="300" <?= $recordsPerPage === 300 ? 'selected' : '' ?>>300 records per page</option>
+                                            <option value="500" <?= $recordsPerPage === 500 ? 'selected' : '' ?>>500 records per page</option>
+                                            <option value="custom" <?= !in_array($recordsPerPage, [10, 25, 50, 100, 200, 300, 500]) ? 'selected' : '' ?>>Custom number...</option>
+                                        </select>
+                                        <input type="number" id="records_per_page_custom" name="records_per_page" class="form-control" min="1" max="1000" value="<?= htmlspecialchars($recordsPerPage) ?>" style="display: <?= !in_array($recordsPerPage, [10, 25, 50, 100, 200, 300, 500]) ? 'block' : 'none' ?>; flex: 1; height: 50px;" placeholder="Digits">
+                                    </div>
+                                    <span style="font-size:11px; color:var(--text-muted); display:block; margin-top:8px;">Select a default option or choose "Custom number..." to enter manually.</span>
+                                </div>
+                            </div>
+                        </div>
                     </form>
                 </div>
             </div>
         </main>
     </div>
     <script>
+        function toggleCustomRecordsInput(val) {
+            const customInput = document.getElementById('records_per_page_custom');
+            if (val === 'custom') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+                customInput.value = val;
+            }
+        }
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             sidebar.classList.toggle('sidebar-collapsed');

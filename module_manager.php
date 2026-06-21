@@ -63,6 +63,7 @@ try {
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
     <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
         .mm-icon-picker-selected {
             display: flex;
@@ -204,6 +205,7 @@ try {
                                             <?php foreach ($block['fields'] as $field): ?>
                                                 <div class="mm-field-row" data-field-id="<?= $field['id'] ?>">
                                                     <div class="mm-field-info">
+                                                        <i class="fa-solid fa-grip-vertical mm-field-drag-handle"></i>
                                                         <i
                                                             class="<?= htmlspecialchars($fieldTypes[$field['field_type']]['icon'] ?? 'fa-solid fa-font') ?> mm-field-icon"></i>
                                                         <div>
@@ -335,58 +337,114 @@ try {
 
                 <?php else: ?>
                     <!-- ═══════════ MODULE LIST VIEW ═══════════ -->
-                    <div class="mm-system-settings"
-                        style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 40px; box-shadow: var(--shadow-sm);">
-                        <div style="flex: 1;">
-                            <h4 style="margin: 0 0 4px; font-size: 15px; font-weight: 600; color: var(--text);">System
-                                Modules</h4>
-                            <p style="margin: 0; font-size: 13px; color: var(--text-muted);">Enable or disable core CRM
-                                functionality.</p>
+                    <!-- ═══════════ SYSTEM MODULES ═══════════ -->
+                    <div class="mm-system-settings" style="margin-bottom: 28px;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, var(--primary), #a78bfa); border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                <i class="fa-solid fa-shield-halved" style="color: #fff; font-size: 18px;"></i>
+                            </div>
+                            <div>
+                                <h4 style="margin: 0 0 2px; font-size: 16px; font-weight: 700; color: var(--text);">System Modules</h4>
+                                <p style="margin: 0; font-size: 13px; color: var(--text-muted);">Enable or disable core CRM functionality per role.</p>
+                            </div>
                         </div>
                         <?php
                         $attendanceEnabled = dm_get_system_setting($conn, $prefix, 'attendance_enabled', '1') === '1';
                         $billingEnabled = dm_get_system_setting($conn, $prefix, 'billing_enabled', '1') === '1';
+                        $campaignsEnabled = dm_get_system_setting($conn, $prefix, 'campaigns_enabled', '1') === '1';
                         $attendanceVisibility = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
                         $billingVisibility = dm_get_system_setting($conn, $prefix, 'billing_visibility', 'all');
+                        $campaignsVisibility = dm_get_system_setting($conn, $prefix, 'campaigns_visibility', 'all');
                         ?>
-                        <div style="display: flex; gap: 30px; flex-wrap: wrap;">
-                            <div
-                                style="display: flex; align-items: center; gap: 12px; padding-right: 30px; border-right: 1px solid var(--border); flex-wrap: wrap;">
-                                <i class="fa-solid fa-calendar-check"
-                                    style="color: var(--primary); font-size: 18px;"></i>
-                                <span style="font-weight: 500; font-size: 14px;">Attendance & Operations</span>
-                                <div class="form-check form-switch" style="margin-left: 8px;">
-                                    <input class="form-check-input" type="checkbox"
-                                        style="cursor: pointer; width: 40px; height: 20px;"
-                                        <?= $attendanceEnabled ? 'checked' : '' ?>
-                                        onchange="toggleSystemModule('attendance_enabled', this.checked)">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+
+                            <!-- Attendance Card -->
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 14px;">
+                                    <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #6366f1, #818cf8); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-calendar-check" style="color: #fff; font-size: 20px;"></i>
+                                    </div>
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                                            <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Attendance & Ops</h5>
+                                            <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
+                                                <input type="checkbox" class="sys-toggle" <?= $attendanceEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('attendance_enabled', this.checked)" style="display:none;">
+                                                <span class="sys-toggle-pill <?= $attendanceEnabled ? 'active' : '' ?>"></span>
+                                            </label>
+                                        </div>
+                                        <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">Track clock-ins, leave requests, and HR operations.</p>
+                                        <div>
+                                            <label style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;">Visibility</label>
+                                            <select class="form-control" onchange="updateSystemVisibility('attendance_visibility', this.value)" style="width: 100%; font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 34px; box-sizing: border-box;">
+                                                <option value="all" <?= $attendanceVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
+                                                <option value="owner" <?= $attendanceVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
+                                                <option value="role_down" <?= $attendanceVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
+                                                <option value="role_equal_down" <?= $attendanceVisibility === 'role_equal_down' ? 'selected' : '' ?>>Equal &amp; Lower</option>
+                                                <option value="role_up" <?= $attendanceVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
-                                <select class="form-control" onchange="updateSystemVisibility('attendance_visibility', this.value)" style="width: 135px; font-size: 12px; margin-left: 8px; padding: 4px 8px; border-radius: 8px; border: 1.5px solid var(--border); background: #fff; cursor: pointer; height: 32px; box-sizing: border-box;">
-                                    <option value="all" <?= $attendanceVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
-                                    <option value="owner" <?= $attendanceVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
-                                    <option value="role_down" <?= $attendanceVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
-                                    <option value="role_equal_down" <?= $attendanceVisibility === 'role_equal_down' ? 'selected' : '' ?>>Equal & Lower</option>
-                                    <option value="role_up" <?= $attendanceVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
-                                </select>
                             </div>
 
-                            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                                <i class="fa-solid fa-file-invoice-dollar" style="color: var(--primary); font-size: 18px;"></i>
-                                <span style="font-weight: 500; font-size: 14px;">Billing & Transactions</span>
-                                <div class="form-check form-switch" style="margin-left: 8px;">
-                                    <input class="form-check-input" type="checkbox"
-                                        style="cursor: pointer; width: 40px; height: 20px;"
-                                        <?= $billingEnabled ? 'checked' : '' ?>
-                                        onchange="toggleSystemModule('billing_enabled', this.checked)">
+                            <!-- Billing Card -->
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 14px;">
+                                    <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #0ea5e9, #38bdf8); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-file-invoice-dollar" style="color: #fff; font-size: 20px;"></i>
+                                    </div>
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                                            <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Billing & Transactions</h5>
+                                            <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
+                                                <input type="checkbox" class="sys-toggle" <?= $billingEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('billing_enabled', this.checked)" style="display:none;">
+                                                <span class="sys-toggle-pill <?= $billingEnabled ? 'active' : '' ?>"></span>
+                                            </label>
+                                        </div>
+                                        <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">Invoices, purchases, vendors, and expense tracking.</p>
+                                        <div>
+                                            <label style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;">Visibility</label>
+                                            <select class="form-control" onchange="updateSystemVisibility('billing_visibility', this.value)" style="width: 100%; font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 34px; box-sizing: border-box;">
+                                                <option value="all" <?= $billingVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
+                                                <option value="owner" <?= $billingVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
+                                                <option value="role_down" <?= $billingVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
+                                                <option value="role_equal_down" <?= $billingVisibility === 'role_equal_down' ? 'selected' : '' ?>>Equal &amp; Lower</option>
+                                                <option value="role_up" <?= $billingVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
-                                <select class="form-control" onchange="updateSystemVisibility('billing_visibility', this.value)" style="width: 135px; font-size: 12px; margin-left: 8px; padding: 4px 8px; border-radius: 8px; border: 1.5px solid var(--border); background: #fff; cursor: pointer; height: 32px; box-sizing: border-box;">
-                                    <option value="all" <?= $billingVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
-                                    <option value="owner" <?= $billingVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
-                                    <option value="role_down" <?= $billingVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
-                                    <option value="role_equal_down" <?= $billingVisibility === 'role_equal_down' ? 'selected' : '' ?>>Equal & Lower</option>
-                                    <option value="role_up" <?= $billingVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
-                                </select>
                             </div>
+
+                            <!-- Campaigns Card -->
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 14px;">
+                                    <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #10b981, #34d399); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-bullhorn" style="color: #fff; font-size: 20px;"></i>
+                                    </div>
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                                            <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Bulk Campaigns</h5>
+                                            <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
+                                                <input type="checkbox" class="sys-toggle" <?= $campaignsEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('campaigns_enabled', this.checked)" style="display:none;">
+                                                <span class="sys-toggle-pill <?= $campaignsEnabled ? 'active' : '' ?>"></span>
+                                            </label>
+                                        </div>
+                                        <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">Bulk email & WhatsApp campaigns with scheduling.</p>
+                                        <div>
+                                            <label style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;">Visibility</label>
+                                            <select class="form-control" onchange="updateSystemVisibility('campaigns_visibility', this.value)" style="width: 100%; font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 34px; box-sizing: border-box;">
+                                                <option value="all" <?= $campaignsVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
+                                                <option value="owner" <?= $campaignsVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
+                                                <option value="role_down" <?= $campaignsVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
+                                                <option value="role_equal_down" <?= $campaignsVisibility === 'role_equal_down' ? 'selected' : '' ?>>Equal &amp; Lower</option>
+                                                <option value="role_up" <?= $campaignsVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
 
@@ -756,6 +814,21 @@ try {
             });
         }
 
+        // Wire the custom toggle pills to their hidden checkboxes
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.sys-toggle-pill').forEach(function(pill) {
+                pill.addEventListener('click', function() {
+                    const checkbox = this.parentElement.querySelector('.sys-toggle');
+                    if (checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                        checkbox.dispatchEvent(new Event('change'));
+                        // Visual update (optimistic)
+                        this.classList.toggle('active', checkbox.checked);
+                    }
+                });
+            });
+        });
+
         // Icon Picker Setup
         const ICONS = [
             'fa-solid fa-cube', 'fa-solid fa-cubes', 'fa-solid fa-box', 'fa-solid fa-boxes-stacked',
@@ -797,7 +870,74 @@ try {
             });
         }
 
-        document.addEventListener('DOMContentLoaded', initIconPicker);
+        function initFieldDragging() {
+            const lists = document.querySelectorAll('.mm-fields-list');
+            lists.forEach(list => {
+                const blockId = list.id.replace('fields-', '');
+                list.setAttribute('data-block-id', blockId);
+                
+                new Sortable(list, {
+                    group: 'fields',
+                    handle: '.mm-field-drag-handle',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    chosenClass: 'sortable-chosen',
+                    onEnd: function(evt) {
+                        saveFieldOrder();
+                    }
+                });
+            });
+        }
+
+        function saveFieldOrder() {
+            const orders = [];
+            const lists = document.querySelectorAll('.mm-fields-list');
+            lists.forEach(list => {
+                const blockId = parseInt(list.getAttribute('data-block-id'));
+                const rows = list.querySelectorAll('.mm-field-row');
+                
+                // Show/hide empty fields placeholder if list gets empty
+                const emptyPlaceholder = list.querySelector('.mm-empty-fields');
+                if (rows.length === 0) {
+                    if (!emptyPlaceholder) {
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'mm-empty-fields';
+                        placeholder.textContent = 'No fields yet. Click "Add Field" to start.';
+                        list.appendChild(placeholder);
+                    }
+                } else {
+                    if (emptyPlaceholder) {
+                        emptyPlaceholder.remove();
+                    }
+                }
+                
+                rows.forEach((row, index) => {
+                    const fieldId = parseInt(row.getAttribute('data-field-id'));
+                    orders.push({
+                        id: fieldId,
+                        sort_order: index + 1,
+                        block_id: blockId
+                    });
+                });
+            });
+            
+            api('reorder_fields', { orders })
+                .then(r => {
+                    if (r.success) {
+                        vyToast('Fields reordered successfully!', 'success');
+                    } else {
+                        vyToast(r.error || 'Failed to reorder fields', 'error');
+                    }
+                })
+                .catch(e => {
+                    vyToast('Error reordering fields: ' + e.message, 'error');
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initIconPicker();
+            initFieldDragging();
+        });
         function addBlock() {
             const name = prompt('Block Name:', 'New Block');
             if (!name) return;

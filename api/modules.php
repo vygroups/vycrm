@@ -267,9 +267,10 @@ try {
         case 'reorder_fields':
             $orders = $input['orders'] ?? [];
             if (!is_array($orders)) throw new RuntimeException('Invalid orders');
-            $stmt = $conn->prepare("UPDATE {$prefix}module_fields SET sort_order = ? WHERE id = ?");
+            $stmt = $conn->prepare("UPDATE {$prefix}module_fields SET sort_order = ?, block_id = COALESCE(?, block_id) WHERE id = ?");
             foreach ($orders as $o) {
-                $stmt->execute([(int)$o['sort_order'], (int)$o['id']]);
+                $blockId = isset($o['block_id']) ? (int)$o['block_id'] : null;
+                $stmt->execute([(int)$o['sort_order'], $blockId, (int)$o['id']]);
             }
             commerce_json_response(['success' => true]);
 

@@ -297,7 +297,7 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
-    $conn->exec("INSERT IGNORE INTO {$prefix}system_settings (setting_key, setting_value) VALUES ('attendance_enabled', '1'), ('billing_enabled', '1')");
+    $conn->exec("INSERT IGNORE INTO {$prefix}system_settings (setting_key, setting_value) VALUES ('attendance_enabled', '1'), ('billing_enabled', '1'), ('campaigns_enabled', '1')");
 
     // 3. Blocks (sections within a module form)
     $conn->exec("
@@ -500,6 +500,59 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
 
     try { $conn->exec("ALTER TABLE {$prefix}module_records ADD COLUMN converted_from_module_id INT DEFAULT NULL AFTER updated_by"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}module_records ADD COLUMN converted_from_record_id INT DEFAULT NULL AFTER converted_from_module_id"); } catch (Throwable $e) {}
+
+    // 14. Campaign Templates
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}campaign_templates (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(150) NOT NULL,
+            type ENUM('email', 'whatsapp') NOT NULL,
+            subject VARCHAR(255) DEFAULT NULL,
+            body TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // 15. Campaigns
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}campaigns (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(150) NOT NULL,
+            type ENUM('email', 'whatsapp') NOT NULL,
+            template_id INT DEFAULT NULL,
+            scheduled_at DATETIME DEFAULT NULL,
+            send_delay INT DEFAULT 0,
+            status ENUM('draft', 'scheduled', 'sending', 'completed', 'failed') DEFAULT 'draft',
+            created_by INT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (template_id) REFERENCES {$prefix}campaign_templates(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    try { $conn->exec("ALTER TABLE {$prefix}campaigns MODIFY COLUMN status ENUM('draft', 'scheduled', 'sending', 'completed', 'failed') DEFAULT 'draft'"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}campaigns ADD COLUMN scheduled_at DATETIME DEFAULT NULL AFTER template_id"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}campaigns ADD COLUMN send_delay INT DEFAULT 0 AFTER scheduled_at"); } catch (Throwable $e) {}
+
+    // 16. Campaign Recipients
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}campaign_recipients (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            campaign_id INT NOT NULL,
+            first_name VARCHAR(100) DEFAULT NULL,
+            last_name VARCHAR(100) DEFAULT NULL,
+            email VARCHAR(150) DEFAULT NULL,
+            phone VARCHAR(30) DEFAULT NULL,
+            company_name VARCHAR(150) DEFAULT NULL,
+            designation VARCHAR(100) DEFAULT NULL,
+            status ENUM('pending', 'sent', 'failed') DEFAULT 'pending',
+            sent_at DATETIME DEFAULT NULL,
+            error_message TEXT DEFAULT NULL,
+            FOREIGN KEY (campaign_id) REFERENCES {$prefix}campaigns(id) ON DELETE CASCADE,
+            INDEX idx_recipient_campaign (campaign_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
 }
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array
