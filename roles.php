@@ -16,14 +16,16 @@ require_once 'includes/brand.php';
         
         /* The Tree Structure */
         .tree { position: relative; }
-        .tree ul { position: relative; padding-left: 60px; display: flex; flex-direction: column; gap: 24px; transition: all 0.5s; margin: 0; }
-        .tree li { position: relative; list-style-type: none; display: flex; align-items: center; padding: 10px 0; }
+        .tree ul { position: relative; padding-left: 40px; margin-left: 40px; display: flex; flex-direction: column; transition: all 0.5s; margin-top: 0; margin-bottom: 0; list-style-type: none; }
+        .tree ul::before { content: ''; position: absolute; left: -40px; top: 50%; width: 40px; border-bottom: 2px solid #cbd5e1; }
+        .tree li { position: relative; display: flex; align-items: center; padding: 16px 0; }
 
         /* Connectors */
-        .tree li::before { content: ''; position: absolute; left: 0; top: 0; width: 60px; height: 50%; border-left: 2px solid #cbd5e1; border-bottom: 2px solid #cbd5e1; border-bottom-left-radius: 12px; }
-        .tree li::after { content: ''; position: absolute; left: 0; top: 50%; width: 60px; height: 50%; border-left: 2px solid #cbd5e1; }
-        .tree li:last-child::after { display: none; }
-        .tree li:only-child::before { border-radius: 0; height: 0; border-bottom: 2px solid #cbd5e1; top: 50%; width: 60px; border-bottom-left-radius: 0; }
+        .tree li::before { content: ''; position: absolute; left: -40px; top: 50%; width: 40px; border-bottom: 2px solid #cbd5e1; }
+        .tree li::after { content: ''; position: absolute; left: -40px; top: 0; bottom: 0; border-left: 2px solid #cbd5e1; }
+        .tree li:first-child::after { top: 50%; }
+        .tree li:last-child::after { bottom: 50%; }
+        .tree li:only-child::after { display: none; }
 
         /* The Node Card */
         .role-card { background: white; border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px 24px; min-width: 240px; display: flex; align-items: center; gap: 16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.02); position: relative; z-index: 10; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
