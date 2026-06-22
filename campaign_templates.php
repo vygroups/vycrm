@@ -234,22 +234,41 @@ $v = time();
         }
 
         async function saveTemplate() {
+            // Reset previous validation styles
+            document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+            document.getElementById('templateName').style.border = '';
+            document.getElementById('templateBody').style.border = '';
+            document.getElementById('templateSubject').style.border = '';
+            
+            const nameEl = document.getElementById('templateName');
+            const bodyEl = document.getElementById('templateBody');
+            const subEl = document.getElementById('templateSubject');
+            
             const id = parseInt(document.getElementById('templateId').value);
-            const name = document.getElementById('templateName').value.trim();
+            const name = nameEl.value.trim();
             const type = document.getElementById('templateType').value;
-            const subject = document.getElementById('templateSubject').value.trim();
-            const body = document.getElementById('templateBody').value.trim();
+            const subject = subEl.value.trim();
+            const body = bodyEl.value.trim();
 
             if (!name) {
                 vyToast('Template name is required.', 'error');
+                nameEl.classList.add('is-invalid');
+                nameEl.style.border = '1px solid #ef4444';
+                nameEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
             if (type === 'email' && !subject) {
                 vyToast('Email subject is required.', 'error');
+                subEl.classList.add('is-invalid');
+                subEl.style.border = '1px solid #ef4444';
+                subEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
             if (!body) {
                 vyToast('Message body is required.', 'error');
+                bodyEl.classList.add('is-invalid');
+                bodyEl.style.border = '1px solid #ef4444';
+                bodyEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
 

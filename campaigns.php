@@ -500,25 +500,43 @@ $v = time();
         }
 
         async function createCampaign() {
-            const name = document.getElementById('campaignName').value.trim();
+            // Reset previous validation styles
+            document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+            
+            const nameEl = document.getElementById('campaignName');
+            const templateEl = document.getElementById('campaignTemplateSelect');
+            const scheduledAtEl = document.getElementById('campaignScheduledAt');
+            
+            const name = nameEl.value.trim();
             const type = document.getElementById('campaignType').value;
-            const template_id = document.getElementById('campaignTemplateSelect').value;
+            const template_id = templateEl.value;
             const send_mode = document.getElementById('campaignSendMode').value;
             const send_delay = parseInt(document.getElementById('campaignSendDelay').value) || 0;
-            const scheduled_at = document.getElementById('campaignScheduledAt').value;
+            const scheduled_at = scheduledAtEl.value;
 
             if (!name) {
                 vyToast('Campaign name is required.', 'error');
+                nameEl.classList.add('is-invalid');
+                nameEl.style.border = '1px solid #ef4444';
+                nameEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
-            }
+            } else { nameEl.style.border = ''; }
+            
             if (!template_id) {
                 vyToast('Template selection is required.', 'error');
+                templateEl.classList.add('is-invalid');
+                templateEl.style.border = '1px solid #ef4444';
+                templateEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
-            }
+            } else { templateEl.style.border = ''; }
+            
             if (send_mode === 'schedule' && !scheduled_at) {
                 vyToast('Schedule date and time is required.', 'error');
+                scheduledAtEl.classList.add('is-invalid');
+                scheduledAtEl.style.border = '1px solid #ef4444';
+                scheduledAtEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
-            }
+            } else { scheduledAtEl.style.border = ''; }
 
             try {
                 const res = await fetch(API, {
