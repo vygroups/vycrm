@@ -55,7 +55,7 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
         <?php endif; ?>
 
         <!-- HR / Attendance -->
-        <?php if ($_sidebarAttendanceEnabled): ?>
+        <div id="sidebar-module-attendance" style="<?= $_sidebarAttendanceEnabled ? '' : 'display:none;' ?>">
         <div class="sidebar-section" onclick="toggleSidebarGroup('group-hr')">
             <span>ATTENDANCE</span>
             <i class="fa-solid fa-chevron-down toggle-caret"></i>
@@ -74,10 +74,10 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
                 <i class="fa-solid fa-clipboard-check"></i><span class="nav-text">Approvals</span>
             </a>
         </div>
-        <?php endif; ?>
+        </div>
 
         <!-- Billing / Invoice -->
-        <?php if ($_sidebarBillingEnabled): ?>
+        <div id="sidebar-module-billing" style="<?= $_sidebarBillingEnabled ? '' : 'display:none;' ?>">
         <div class="sidebar-section" onclick="toggleSidebarGroup('group-bill')">
             <span>INVOICES</span> <i
                 class="fa-solid fa-chevron-down toggle-caret"></i>
@@ -107,10 +107,10 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
                 <i class="fa-solid fa-boxes-stacked"></i><span class="nav-text">Products/Service</span>
             </a>
         </div>
-        <?php endif; ?>
+        </div>
 
         <!-- Campaigns -->
-        <?php if ($_sidebarCampaignsEnabled): ?>
+        <div id="sidebar-module-campaigns" style="<?= $_sidebarCampaignsEnabled ? '' : 'display:none;' ?>">
         <div class="sidebar-section" onclick="toggleSidebarGroup('group-camp')">
             <span>CAMPAIGNS</span> <i class="fa-solid fa-chevron-down toggle-caret"></i>
         </div>
@@ -124,7 +124,7 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
                 <i class="fa-solid fa-envelope-open-text"></i><span class="nav-text">Templates</span>
             </a>
         </div>
-        <?php endif; ?>
+        </div>
 
         <!-- Settings -->
         <?php if (!empty($_SESSION['is_admin'])): ?>

@@ -123,16 +123,16 @@ try {
             dm_set_system_setting($conn, $prefix, $key, $value);
             commerce_json_response(['success' => true]);
 
+        case 'toggle_module_status':
+            $id = (int)($input['id'] ?? 0);
+            $status = ($input['status'] ?? 'active') === 'active' ? 'active' : 'inactive';
+            if (!$id) throw new RuntimeException('Module ID required');
+            $conn->prepare("UPDATE {$prefix}modules SET status = ? WHERE id = ?")->execute([$status, $id]);
+            commerce_json_response(['success' => true, 'status' => $status]);
+
         case 'delete':
             $id = (int)($input['id'] ?? 0);
             if (!$id) throw new RuntimeException('Module ID required');
-            
-            // Protect core modules
-            $chk = $conn->prepare("SELECT module_type FROM {$prefix}modules WHERE id = ?");
-            $chk->execute([$id]);
-            if ($chk->fetchColumn() === 'core') {
-                throw new RuntimeException('Cannot delete system modules');
-            }
 
             $conn->prepare("DELETE FROM {$prefix}modules WHERE id = ?")->execute([$id]);
             commerce_json_response(['success' => true]);

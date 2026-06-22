@@ -368,7 +368,7 @@ try {
                                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
                                             <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Attendance & Ops</h5>
                                             <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
-                                                <input type="checkbox" class="sys-toggle" <?= $attendanceEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('attendance_enabled', this.checked)" style="display:none;">
+                                                <input type="checkbox" class="sys-toggle" <?= $attendanceEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('attendance_enabled', this.checked, this)" style="display:none;">
                                                 <span class="sys-toggle-pill <?= $attendanceEnabled ? 'active' : '' ?>"></span>
                                             </label>
                                         </div>
@@ -397,7 +397,7 @@ try {
                                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
                                             <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Billing & Transactions</h5>
                                             <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
-                                                <input type="checkbox" class="sys-toggle" <?= $billingEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('billing_enabled', this.checked)" style="display:none;">
+                                                <input type="checkbox" class="sys-toggle" <?= $billingEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('billing_enabled', this.checked, this)" style="display:none;">
                                                 <span class="sys-toggle-pill <?= $billingEnabled ? 'active' : '' ?>"></span>
                                             </label>
                                         </div>
@@ -426,7 +426,7 @@ try {
                                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
                                             <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Bulk Campaigns</h5>
                                             <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
-                                                <input type="checkbox" class="sys-toggle" <?= $campaignsEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('campaigns_enabled', this.checked)" style="display:none;">
+                                                <input type="checkbox" class="sys-toggle" <?= $campaignsEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('campaigns_enabled', this.checked, this)" style="display:none;">
                                                 <span class="sys-toggle-pill <?= $campaignsEnabled ? 'active' : '' ?>"></span>
                                             </label>
                                         </div>
@@ -459,9 +459,19 @@ try {
                             </div>
                         <?php else: ?>
                             <?php foreach ($allModules as $mod): ?>
-                                <div class="mm-module-card <?= $mod['status'] === 'inactive' ? 'mm-inactive' : '' ?>">
-                                    <div class="mm-card-icon"><i class="<?= htmlspecialchars($mod['icon']) ?>"></i></div>
-                                    <h4><?= htmlspecialchars($mod['name']) ?></h4>
+                                <div class="mm-module-card <?= $mod['status'] === 'inactive' ? 'mm-inactive' : '' ?>" id="mod-card-<?= $mod['id'] ?>">
+                                    <div style="display:flex; align-items:center; justify-content:space-between; padding:0 0 12px 0; margin-bottom:12px; border-bottom:1px solid var(--border);">
+                                        <div style="display:flex; align-items:center; gap:12px;">
+                                            <div class="mm-card-icon"><i class="<?= htmlspecialchars($mod['icon']) ?>"></i></div>
+                                            <h4 style="margin:0;"><?= htmlspecialchars($mod['name']) ?></h4>
+                                        </div>
+                                        <label style="display:flex;align-items:center;cursor:pointer;flex-shrink:0;margin:0;">
+                                            <input type="checkbox" class="mod-toggle" <?= $mod['status'] === 'active' ? 'checked' : '' ?>
+                                                onchange="toggleModuleStatus(<?= $mod['id'] ?>, this.checked, this)"
+                                                style="display:none;">
+                                            <span class="sys-toggle-pill <?= $mod['status'] === 'active' ? 'active' : '' ?>"></span>
+                                        </label>
+                                    </div>
                                     <p class="mm-card-desc"><?= htmlspecialchars($mod['description'] ?: 'No description') ?></p>
                                     <div class="mm-card-stats">
                                         <span><i class="fa-solid fa-layer-group"></i> <?= $mod['block_count'] ?> Blocks</span>
@@ -801,33 +811,67 @@ try {
                 else alert(r.error);
             });
         }
-        function toggleSystemModule(key, enabled) {
+        function toggleSystemModule(key, enabled, checkbox) {
+            // Map setting key → sidebar container ID
+            const sidebarMap = {
+                'attendance_enabled': 'sidebar-module-attendance',
+                'billing_enabled':    'sidebar-module-billing',
+                'campaigns_enabled':  'sidebar-module-campaigns'
+            };
+
+            // Optimistically update pill visual
+            if (checkbox) {
+                const pill = checkbox.parentElement.querySelector('.sys-toggle-pill');
+                if (pill) pill.classList.toggle('active', enabled);
+            }
+            // Optimistically update sidebar
+            const sidebarEl = document.getElementById(sidebarMap[key]);
+            if (sidebarEl) sidebarEl.style.display = enabled ? '' : 'none';
+
             api('update_system_setting', { key, value: enabled ? '1' : '0' }).then(r => {
-                if (r.success) location.reload();
-                else alert(r.error);
+                if (!r.success) {
+                    // Revert on failure
+                    if (checkbox) {
+                        checkbox.checked = !enabled;
+                        const pill = checkbox.parentElement.querySelector('.sys-toggle-pill');
+                        if (pill) pill.classList.toggle('active', !enabled);
+                    }
+                    if (sidebarEl) sidebarEl.style.display = enabled ? 'none' : '';
+                    alert(r.error || 'Failed to save setting.');
+                }
             });
         }
         function updateSystemVisibility(key, val) {
             api('update_system_setting', { key, value: val }).then(r => {
-                if (r.success) location.reload();
-                else alert(r.error);
+                if (!r.success) alert(r.error || 'Failed to save setting.');
             });
         }
 
-        // Wire the custom toggle pills to their hidden checkboxes
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.sys-toggle-pill').forEach(function(pill) {
-                pill.addEventListener('click', function() {
-                    const checkbox = this.parentElement.querySelector('.sys-toggle');
-                    if (checkbox) {
-                        checkbox.checked = !checkbox.checked;
-                        checkbox.dispatchEvent(new Event('change'));
-                        // Visual update (optimistic)
-                        this.classList.toggle('active', checkbox.checked);
-                    }
-                });
+        // No custom pill click listener needed — <label> natively toggles the hidden checkbox
+
+        function toggleModuleStatus(id, enabled, checkbox) {
+            const card = document.getElementById('mod-card-' + id);
+            const pill = checkbox ? checkbox.parentElement.querySelector('.sys-toggle-pill') : null;
+
+            // Optimistic UI update
+            if (pill) pill.classList.toggle('active', enabled);
+            if (card) card.classList.toggle('mm-inactive', !enabled);
+
+            // Update sidebar nav item for this module
+            const sidebarLink = document.querySelector('#group-dyn a[href="module_view.php?module=' + id + '"]');
+            if (sidebarLink) sidebarLink.style.display = enabled ? '' : 'none';
+
+            api('toggle_module_status', { id: id, status: enabled ? 'active' : 'inactive' }).then(r => {
+                if (!r.success) {
+                    // Revert on failure
+                    if (checkbox) checkbox.checked = !enabled;
+                    if (pill) pill.classList.toggle('active', !enabled);
+                    if (card) card.classList.toggle('mm-inactive', enabled);
+                    if (sidebarLink) sidebarLink.style.display = enabled ? 'none' : '';
+                    alert(r.error || 'Failed to update module status.');
+                }
             });
-        });
+        }
 
         // Icon Picker Setup
         const ICONS = [
