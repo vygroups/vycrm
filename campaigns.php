@@ -348,8 +348,8 @@ $v = time();
                 </div>
 
                 <div class="form-group" id="scheduleTimeGroup" style="display: none; flex-direction: column; gap: 6px; margin-top: 15px;">
-                    <label class="form-label">Schedule Date & Time *</label>
-                    <input type="datetime-local" id="campaignScheduledAt" class="form-control" style="width: 100%; box-sizing: border-box;">
+                    <label class="form-label">Schedule Date & Time (Hourly) *</label>
+                    <input type="datetime-local" id="campaignScheduledAt" class="form-control" onchange="this.value = this.value.substring(0, 14) + '00';" style="width: 100%; box-sizing: border-box;">
                 </div>
 
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; margin-top: 15px;">

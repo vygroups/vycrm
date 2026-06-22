@@ -191,8 +191,8 @@ try {
             }
             $conn->commit();
 
-            // Set campaign status back to draft
-            $conn->prepare("UPDATE {$prefix}campaigns SET status = 'draft' WHERE id = ?")->execute([$campaignId]);
+            // Set campaign status back to draft, UNLESS it is already scheduled
+            $conn->prepare("UPDATE {$prefix}campaigns SET status = IF(status = 'scheduled', 'scheduled', 'draft') WHERE id = ?")->execute([$campaignId]);
 
             commerce_json_response(['success' => true, 'count' => count($recipients)]);
 

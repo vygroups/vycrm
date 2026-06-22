@@ -6,6 +6,13 @@ set_time_limit(0);
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/dynamic_modules.php';
 
+$lockFile = __DIR__ . '/cron.lock';
+$fp = fopen($lockFile, "w+");
+if (!flock($fp, LOCK_EX | LOCK_NB)) {
+    echo "Cron is already running. Exiting to prevent duplicates.\n";
+    exit;
+}
+
 echo "Cron Campaigns Started at " . date('Y-m-d H:i:s') . "\n";
 
 try {
@@ -18,7 +25,9 @@ try {
     $tenants = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Also add the master tenant itself (it's not in the companies table)
-    array_unshift($tenants, ['db_name' => $masterDB, 'slug' => 'vycrm']);
+    // Extract the slug from the master prefix (e.g., 'master_' -> 'master')
+    $masterSlug = rtrim($prefix, '_');
+    array_unshift($tenants, ['db_name' => $masterDB, 'slug' => $masterSlug]);
 
     foreach ($tenants as $tenant) {
         $dbName = $tenant['db_name'];
@@ -47,7 +56,7 @@ try {
                 SELECT c.*, t.subject, t.body
                 FROM {$tenantPrefix}campaigns c
                 JOIN {$tenantPrefix}campaign_templates t ON t.id = c.template_id
-                WHERE c.status = 'scheduled' AND c.scheduled_at <= ?
+                WHERE (c.status = 'scheduled' AND c.scheduled_at <= ?) OR c.status = 'sending'
             ");
             $cStmt->execute([$now]);
             $dueCampaigns = $cStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -68,8 +77,8 @@ try {
                 // Mark campaign status as 'sending'
                 $conn->prepare("UPDATE {$tenantPrefix}campaigns SET status = 'sending' WHERE id = ?")->execute([$campaignId]);
 
-                // Get pending recipients
-                $rStmt = $conn->prepare("SELECT * FROM {$tenantPrefix}campaign_recipients WHERE campaign_id = ? AND status = 'pending' ORDER BY id ASC");
+                // Get pending recipients (batch of 5 to prevent server timeouts and Hostinger SMTP rate limits)
+                $rStmt = $conn->prepare("SELECT * FROM {$tenantPrefix}campaign_recipients WHERE campaign_id = ? AND status = 'pending' ORDER BY id ASC LIMIT 5");
                 $rStmt->execute([$campaignId]);
                 $recipients = $rStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -160,17 +169,26 @@ try {
                 $currentStatus = $statusCheck->fetchColumn();
 
                 if ($currentStatus === 'sending') {
-                    $failStmt = $conn->prepare("SELECT COUNT(*) FROM {$tenantPrefix}campaign_recipients WHERE campaign_id = ? AND status = 'failed'");
-                    $failStmt->execute([$campaignId]);
-                    $failed = (int)$failStmt->fetchColumn();
+                    // Check if any recipients are still pending
+                    $pendStmt = $conn->prepare("SELECT COUNT(*) FROM {$tenantPrefix}campaign_recipients WHERE campaign_id = ? AND status = 'pending'");
+                    $pendStmt->execute([$campaignId]);
+                    $pending = (int)$pendStmt->fetchColumn();
 
-                    $totStmt = $conn->prepare("SELECT COUNT(*) FROM {$tenantPrefix}campaign_recipients WHERE campaign_id = ?");
-                    $totStmt->execute([$campaignId]);
-                    $total = (int)$totStmt->fetchColumn();
+                    if ($pending === 0) {
+                        $failStmt = $conn->prepare("SELECT COUNT(*) FROM {$tenantPrefix}campaign_recipients WHERE campaign_id = ? AND status = 'failed'");
+                        $failStmt->execute([$campaignId]);
+                        $failed = (int)$failStmt->fetchColumn();
 
-                    $finalStatus = ($failed === $total && $total > 0) ? 'failed' : 'completed';
-                    $conn->prepare("UPDATE {$tenantPrefix}campaigns SET status = ? WHERE id = ?")->execute([$finalStatus, $campaignId]);
-                    echo "    Campaign #{$campaignId} completed processing. Status set to: {$finalStatus}\n";
+                        $totStmt = $conn->prepare("SELECT COUNT(*) FROM {$tenantPrefix}campaign_recipients WHERE campaign_id = ?");
+                        $totStmt->execute([$campaignId]);
+                        $total = (int)$totStmt->fetchColumn();
+
+                        $finalStatus = ($failed === $total && $total > 0) ? 'failed' : 'completed';
+                        $conn->prepare("UPDATE {$tenantPrefix}campaigns SET status = ? WHERE id = ?")->execute([$finalStatus, $campaignId]);
+                        echo "    Campaign #{$campaignId} completed processing. Status set to: {$finalStatus}\n";
+                    } else {
+                        echo "    Campaign #{$campaignId} has {$pending} recipients left. Will resume in next cron tick.\n";
+                    }
                 }
             }
         } catch (Exception $e) {
