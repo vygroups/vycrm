@@ -991,7 +991,7 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
 /**
  * Sends a transactional email securely via raw SMTP sockets.
  */
-function dm_send_smtp_email(string $host, int $port, string $user, string $pass, string $fromEmail, string $fromName, string $to, string $subject, string $body, string $encryption = 'none', string $ccEmail = ''): bool
+function dm_send_smtp_email(string $host, int $port, string $user, string $pass, string $fromEmail, string $fromName, string $to, string $subject, string $body, string $encryption = 'none', string $ccEmail = '', array $attachments = [], string $bccEmail = ''): bool
 {
     $timeout = 15;
     $socketHost = ($encryption === 'ssl') ? 'ssl://' . $host : $host;
@@ -1068,6 +1068,19 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
         }
     }
 
+    if ($bccEmail) {
+        // If there are multiple BCC emails comma separated, loop them
+        $bccArr = array_map('trim', explode(',', $bccEmail));
+        foreach ($bccArr as $bccItem) {
+            if ($bccItem) {
+                $res = $send($socket, "RCPT TO:<" . $bccItem . ">");
+                if (strpos($res, '250') === false && strpos($res, '251') === false) {
+                    throw new Exception("RCPT TO (BCC) failed: " . $res);
+                }
+            }
+        }
+    }
+
     // DATA
     $res = $send($socket, "DATA");
     if (strpos($res, '354') === false) {
@@ -1075,9 +1088,10 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
     }
 
     // Headers & Message
+    $boundary = md5(time() . uniqid());
+    
     $headers = [
         "MIME-Version: 1.0",
-        "Content-Type: text/html; charset=UTF-8",
         "From: " . ($fromName ? '"' . $fromName . '" <' . $fromEmail . '>' : $fromEmail),
         "To: " . $to,
         "Subject: " . $subject,
@@ -1088,8 +1102,33 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
     if ($ccEmail) {
         $headers[] = "Cc: " . $ccEmail;
     }
+    
+    // SMTP standard usually hides BCC from headers, but some systems prefer omitting it entirely
+    // Usually we don't add "Bcc: " header in the message payload, so the recipients don't see each other.
+    // However, if we do add it, SMTP servers often strip it before delivery.
+    // It's safer not to include Bcc in the headers sent inside the DATA command.
 
-    $message = implode("\r\n", $headers) . "\r\n\r\n" . nl2br($body) . "\r\n.";
+    if (empty($attachments)) {
+        $headers[] = "Content-Type: text/html; charset=UTF-8";
+        $message = implode("\r\n", $headers) . "\r\n\r\n" . nl2br($body) . "\r\n.";
+    } else {
+        $headers[] = "Content-Type: multipart/mixed; boundary=\"$boundary\"";
+        
+        $message = implode("\r\n", $headers) . "\r\n\r\n";
+        $message .= "--$boundary\r\n";
+        $message .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $message .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
+        $message .= nl2br($body) . "\r\n\r\n";
+        
+        foreach ($attachments as $att) {
+            $message .= "--$boundary\r\n";
+            $message .= "Content-Type: " . ($att['mime'] ?? 'application/octet-stream') . "; name=\"" . $att['name'] . "\"\r\n";
+            $message .= "Content-Transfer-Encoding: base64\r\n";
+            $message .= "Content-Disposition: attachment; filename=\"" . $att['name'] . "\"\r\n\r\n";
+            $message .= chunk_split(base64_encode($att['content'])) . "\r\n";
+        }
+        $message .= "--$boundary--\r\n.";
+    }
     $res = $send($socket, $message);
 
     // QUIT

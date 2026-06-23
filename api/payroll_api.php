@@ -311,6 +311,29 @@ try {
             $subject = str_replace(array_keys($replacements), array_values($replacements), $template['subject']);
             $body = str_replace(array_keys($replacements), array_values($replacements), $template['body']);
 
+            $attachments = [];
+            $stmtPdf = $conn->query("SELECT body FROM {$prefix}email_templates WHERE module = 'payslip_pdf'");
+            $pdfTemplate = $stmtPdf->fetch(PDO::FETCH_ASSOC);
+            if ($pdfTemplate && !empty($pdfTemplate['body'])) {
+                $pdfHtml = str_replace(array_keys($replacements), array_values($replacements), $pdfTemplate['body']);
+                
+                require_once __DIR__ . '/../includes/tcpdf/tcpdf.php';
+                $pdf = new TCPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+                $pdf->SetCreator(PDF_CREATOR);
+                $pdf->setPrintHeader(false);
+                $pdf->setPrintFooter(false);
+                $pdf->AddPage();
+                $pdf->writeHTML($pdfHtml, true, false, true, false, '');
+                
+                $pdfData = $pdf->Output('payslip.pdf', 'S');
+                
+                $attachments[] = [
+                    'name' => 'Payslip_' . date('M_Y', strtotime($month . '-01')) . '.pdf',
+                    'content' => $pdfData,
+                    'mime' => 'application/pdf'
+                ];
+            }
+
             // Send Email
             $smtpHost = dm_get_system_setting($conn, $prefix, 'smtp_host', '');
             $smtpPort = (int)dm_get_system_setting($conn, $prefix, 'smtp_port', '587');
@@ -328,10 +351,14 @@ try {
                 throw new Exception("Employee has no email address configured in their dynamic record.");
             }
 
+            // Get global CC and BCC
+            $globalCc = dm_get_system_setting($conn, $prefix, 'payslip_cc_email', '');
+            $globalBcc = dm_get_system_setting($conn, $prefix, 'payslip_bcc_email', '');
+            
             $sent = dm_send_smtp_email(
                 $smtpHost, $smtpPort, $smtpUser, $smtpPass,
                 $smtpFromEmail, $smtpFromName,
-                $toEmail, $subject, $body, $smtpEnc, $customCc
+                $toEmail, $subject, $body, $smtpEnc, $globalCc, $attachments, $globalBcc
             );
 
             if ($sent) {
@@ -346,26 +373,58 @@ try {
             $stmt = $conn->query("SELECT subject, body FROM {$prefix}email_templates WHERE module = 'payslip'");
             $template = $stmt->fetch(PDO::FETCH_ASSOC);
             
+            $stmtPdf = $conn->query("SELECT subject, body FROM {$prefix}email_templates WHERE module = 'payslip_pdf'");
+            $pdfTemplate = $stmtPdf->fetch(PDO::FETCH_ASSOC);
+            
             // Also fetch available fields for the template helper
             $sourceModuleId = (int)dm_get_system_setting($conn, $prefix, 'payroll_source_module_id', 0);
+            $ccEmail = dm_get_system_setting($conn, $prefix, 'payslip_cc_email', '');
+            $bccEmail = dm_get_system_setting($conn, $prefix, 'payslip_bcc_email', '');
+            
             $fields = [];
             if ($sourceModuleId) {
                 $fields = dm_fetch_module_fields($conn, $prefix, $sourceModuleId);
             }
 
-            echo json_encode(['success' => true, 'template' => $template, 'fields' => $fields]);
+            echo json_encode([
+                'success' => true, 
+                'template' => $template, 
+                'pdf_template' => $pdfTemplate, 
+                'cc_email' => $ccEmail, 
+                'bcc_email' => $bccEmail, 
+                'fields' => $fields
+            ]);
             break;
 
         case 'save_template':
             $subject = $_POST['subject'] ?? '';
             $body = $_POST['body'] ?? '';
+            $pdfBody = $_POST['pdf_body'] ?? '';
+            $ccEmail = $_POST['cc_email'] ?? '';
+            $bccEmail = $_POST['bcc_email'] ?? '';
 
             if (!$subject || !$body) throw new Exception("Subject and body required");
 
-            $stmt = $conn->prepare("
-                UPDATE {$prefix}email_templates SET subject = ?, body = ? WHERE module = 'payslip'
-            ");
-            $stmt->execute([$subject, $body]);
+            dm_set_system_setting($conn, $prefix, 'payslip_cc_email', $ccEmail);
+            dm_set_system_setting($conn, $prefix, 'payslip_bcc_email', $bccEmail);
+
+            $stmt = $conn->prepare("SELECT id FROM {$prefix}email_templates WHERE module = 'payslip'");
+            $stmt->execute();
+            if ($stmt->fetch()) {
+                $conn->prepare("UPDATE {$prefix}email_templates SET subject = ?, body = ? WHERE module = 'payslip'")->execute([$subject, $body]);
+            } else {
+                $conn->prepare("INSERT INTO {$prefix}email_templates (module, subject, body) VALUES ('payslip', ?, ?)")->execute([$subject, $body]);
+            }
+
+            if ($pdfBody) {
+                $stmtPdf = $conn->prepare("SELECT id FROM {$prefix}email_templates WHERE module = 'payslip_pdf'");
+                $stmtPdf->execute();
+                if ($stmtPdf->fetch()) {
+                    $conn->prepare("UPDATE {$prefix}email_templates SET subject = ?, body = ? WHERE module = 'payslip_pdf'")->execute([$subject, $pdfBody]);
+                } else {
+                    $conn->prepare("INSERT INTO {$prefix}email_templates (module, subject, body) VALUES ('payslip_pdf', ?, ?)")->execute([$subject, $pdfBody]);
+                }
+            }
 
             echo json_encode(['success' => true, 'message' => 'Template saved.']);
             break;

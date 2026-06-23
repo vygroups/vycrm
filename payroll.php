@@ -116,7 +116,6 @@ $v = time();
                                     <th>Gross Earnings</th>
                                     <th>Total Deductions</th>
                                     <th>Net Payable</th>
-                                    <th>CC Email</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
@@ -160,9 +159,26 @@ $v = time();
                                 <label class="form-label">Email Subject</label>
                                 <input type="text" class="form-control" name="subject" id="subject" required>
                             </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label class="form-label">Global CC Email (Optional)</label>
+                                    <input type="email" class="form-control" name="cc_email" id="cc_email">
+                                    <small class="text-muted">A copy of every payslip will be sent here.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Global BCC Email (Optional)</label>
+                                    <input type="email" class="form-control" name="bcc_email" id="bcc_email">
+                                </div>
+                            </div>
                             <div class="form-group">
-                                <label class="form-label">Email Body (HTML / PDF Content)</label>
-                                <textarea name="body" id="body"></textarea>
+                                <label class="form-label">Email Body Content</label>
+                                <textarea name="body" id="body" class="form-control" style="min-height:100px; padding:10px;"></textarea>
+                                <small class="text-muted">This text appears directly in the email body (not the PDF). HTML is supported.</small>
+                            </div>
+                            <div class="form-group" style="margin-top: 20px;">
+                                <label class="form-label">PDF Payslip Template</label>
+                                <textarea name="pdf_body" id="pdf_body"></textarea>
+                                <small class="text-muted">This content will be converted into a PDF file attached to the email.</small>
                             </div>
                             <button type="submit" class="btn-primary" id="saveBtn">SAVE TEMPLATE</button>
                         </form>
@@ -177,6 +193,8 @@ $v = time();
 <script src="/assets/js/toast.js"></script>
 <script>
 let editorInstance;
+let pdfEditorInstance;
+let lastFocusedEditor = null;
 let currentConfig = null;
 
 function switchTab(tabId, el) {
@@ -399,10 +417,9 @@ function renderMonthlyTable() {
         const disabled = rec.status === 'paid' ? 'disabled' : '';
         const grossInput = `<input type="number" step="0.01" class="form-control" style="width:110px; padding:4px 8px; font-size:13px;" value="${rec.gross_earnings}" onchange="updateRow(${rec.record_id}, this.value, 'gross')" ${disabled}>`;
         const dedInput = `<input type="number" step="0.01" class="form-control" style="width:110px; padding:4px 8px; font-size:13px; color:red;" value="${rec.total_deductions}" onchange="updateRow(${rec.record_id}, this.value, 'ded')" ${disabled}>`;
-        const ccInput = `<input type="email" id="cc_${rec.record_id}" class="form-control" style="width:150px; padding:4px 8px; font-size:13px;" placeholder="Optional CC" value="" ${disabled}>`;
 
         let actionHtml = rec.status === 'paid' 
-            ? `<button class="btn-icon text-muted" disabled><i class="fa-solid fa-lock"></i></button>`
+            ? `<button class="btn-primary" style="padding: 6px 12px; font-size: 11px; background-color: #f59e0b;" onclick="processPayslip(${rec.record_id}, false)"><i class="fa-solid fa-rotate-right"></i> Resend</button>`
             : `<button class="btn-primary" style="padding: 6px 12px; font-size: 11px;" onclick="processPayslip(${rec.record_id})"><i class="fa-solid fa-paper-plane"></i> Send Payslip</button>`;
 
         tbody.innerHTML += `
@@ -411,7 +428,6 @@ function renderMonthlyTable() {
                 <td>${grossInput}</td>
                 <td>${dedInput}</td>
                 <td class="text-bold" style="color:#10b981;" id="net_${rec.record_id}">₹${parseFloat(rec.net_payable).toFixed(2)}</td>
-                <td>${ccInput}</td>
                 <td id="status_${rec.record_id}">${statusHtml}</td>
                 <td id="action_${rec.record_id}">${actionHtml}</td>
             </tr>
@@ -448,14 +464,11 @@ async function processPayslip(recordId, skipConfirm = false) {
     await updateRow(recordId, rec.gross_earnings, 'gross');
 
     const month = document.getElementById('monthPicker').value;
-    const ccEl = document.getElementById('cc_' + recordId);
-    const customCc = ccEl ? ccEl.value : '';
     
     const formData = new FormData();
     formData.append('action', 'process_payslip');
     formData.append('record_id', recordId);
     formData.append('month', month);
-    formData.append('custom_cc', customCc);
 
     try {
         const res = await fetch('/api/payroll_api.php', { method: 'POST', body: formData });
@@ -507,6 +520,17 @@ async function initEditor() {
     if (!editorInstance) {
         try {
             editorInstance = await ClassicEditor.create(document.querySelector('#body'));
+            editorInstance.ui.focusTracker.on('change:isFocused', (evt, name, isFocused) => {
+                if (isFocused) lastFocusedEditor = editorInstance;
+            });
+        } catch (e) { console.error(e); }
+    }
+    if (!pdfEditorInstance) {
+        try {
+            pdfEditorInstance = await ClassicEditor.create(document.querySelector('#pdf_body'));
+            pdfEditorInstance.ui.focusTracker.on('change:isFocused', (evt, name, isFocused) => {
+                if (isFocused) lastFocusedEditor = pdfEditorInstance;
+            });
         } catch (e) { console.error(e); }
     }
 
@@ -516,7 +540,12 @@ async function initEditor() {
         if(data.success) {
             if (data.template) {
                 document.getElementById('subject').value = data.template.subject;
-                editorInstance.setData(data.template.body);
+                document.getElementById('cc_email').value = data.cc_email || '';
+                document.getElementById('bcc_email').value = data.bcc_email || '';
+                editorInstance.setData(data.template.body || '');
+                if (pdfEditorInstance && data.pdf_template) {
+                    pdfEditorInstance.setData(data.pdf_template.body || '');
+                }
             }
             
             // Populate dynamic tags
@@ -535,10 +564,17 @@ async function initEditor() {
 }
 
 function insertTag(tag) {
-    if (editorInstance) {
-        const viewFragment = editorInstance.data.processor.toView(tag);
-        const modelFragment = editorInstance.data.toModel(viewFragment);
-        editorInstance.model.insertContent(modelFragment);
+    // Insert into the last focused editor, or default to email body if none.
+    let activeEditor = lastFocusedEditor || editorInstance;
+    
+    // In case the user is actively typing in one, use that
+    if (editorInstance && editorInstance.ui.focusTracker.isFocused) activeEditor = editorInstance;
+    if (pdfEditorInstance && pdfEditorInstance.ui.focusTracker.isFocused) activeEditor = pdfEditorInstance;
+    
+    if (activeEditor) {
+        const viewFragment = activeEditor.data.processor.toView(tag);
+        const modelFragment = activeEditor.data.toModel(viewFragment);
+        activeEditor.model.insertContent(modelFragment);
     }
 }
 
@@ -551,7 +587,12 @@ document.getElementById('templateForm').addEventListener('submit', async functio
     const formData = new FormData();
     formData.append('action', 'save_template');
     formData.append('subject', document.getElementById('subject').value);
+    formData.append('cc_email', document.getElementById('cc_email').value);
+    formData.append('bcc_email', document.getElementById('bcc_email').value);
     formData.append('body', editorInstance.getData());
+    if (pdfEditorInstance) {
+        formData.append('pdf_body', pdfEditorInstance.getData());
+    }
     
     try {
         const res = await fetch('/api/payroll_api.php', { method: 'POST', body: formData });
