@@ -66,9 +66,7 @@ if ($convertFromModuleId && $convertFromRecordId && $convertRuleId) {
 
 // Fetch field change counts if editing an existing record
 $fieldChangeCounts = [];
-$fullRecordHistory = [];
 if ($recordId) {
-    // 1. Get counts
     $cntStmt = $conn->prepare("
         SELECT field_id, COUNT(*) as cnt 
         FROM {$prefix}module_record_history 
@@ -77,18 +75,6 @@ if ($recordId) {
     ");
     $cntStmt->execute([$recordId]);
     $fieldChangeCounts = $cntStmt->fetchAll(PDO::FETCH_KEY_PAIR);
-
-    // 2. Get full audit log
-    $histStmt = $conn->prepare("
-        SELECT h.*, u.username, u.first_name, u.last_name, f.label as field_label 
-        FROM {$prefix}module_record_history h
-        LEFT JOIN users u ON u.id = h.changed_by
-        LEFT JOIN {$prefix}module_fields f ON f.id = h.field_id
-        WHERE h.record_id = ?
-        ORDER BY h.changed_at DESC
-    ");
-    $histStmt->execute([$recordId]);
-    $fullRecordHistory = $histStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // Collect all field rules for JS
@@ -141,6 +127,9 @@ foreach ($module['blocks'] as $block) {
         <header class="topbar">
             <div class="breadcrumb"><?= htmlspecialchars($module['name']) ?> / <span class="current"><?= $isViewOnly ? 'View Record' : ($isEdit ? 'Edit Record' : 'New Record') ?></span></div>
             <div class="topbar-right">
+                <?php if ($recordId): ?>
+                <a href="record_history.php?module=<?= $moduleId ?>&record=<?= $recordId ?>" class="mm-btn" title="View Audit Trail"><i class="fa-solid fa-clock-rotate-left"></i> History</a>
+                <?php endif; ?>
                 <a href="module_view.php?module=<?= $moduleId ?>" class="mm-btn"><i class="fa-solid fa-arrow-left"></i> Back</a>
                 <?php if($isViewOnly): ?>
                     <!-- Conversion actions -->
@@ -349,15 +338,33 @@ foreach ($module['blocks'] as $block) {
                                             $cfg = $field['config'] ?? []; $linkedModId = $cfg['linked_module_id'] ?? 0;
                                             $displayTxt = '';
                                             if ($val) {
-                                                // Find first text/name field as display field
-                                                $dfStmt = $conn->prepare("SELECT id FROM {$prefix}module_fields WHERE module_id = ? AND field_type IN ('text','name','email') ORDER BY sort_order ASC LIMIT 1");
+                                                // Find first field marked as is_title in config, else fallback to text/name/email field
+                                                $dfStmt = $conn->prepare("SELECT id, field_type, config FROM {$prefix}module_fields WHERE module_id = ? ORDER BY sort_order ASC");
                                                 $dfStmt->execute([$linkedModId]);
-                                                $displayFieldId = $dfStmt->fetchColumn();
+                                                $allFields = $dfStmt->fetchAll(PDO::FETCH_ASSOC);
+                                                $displayFieldId = null;
+                                                $fallbackFieldId = null;
+                                                foreach ($allFields as $f) {
+                                                    $fConf = json_decode($f['config'] ?: '{}', true);
+                                                    if (!empty($fConf['is_title'])) {
+                                                        $displayFieldId = $f['id'];
+                                                        break;
+                                                    }
+                                                    if (!$fallbackFieldId && in_array($f['field_type'], ['text','name','email'])) {
+                                                        $fallbackFieldId = $f['id'];
+                                                    }
+                                                }
+                                                if (!$displayFieldId) {
+                                                    $displayFieldId = $fallbackFieldId;
+                                                }
+
                                                 if ($displayFieldId) {
                                                     $rvStmt = $conn->prepare("SELECT value FROM {$prefix}module_record_values WHERE record_id = ? AND field_id = ?");
                                                     $rvStmt->execute([$val, $displayFieldId]);
                                                     $dval = $rvStmt->fetchColumn();
-                                                    if ($dval) $displayTxt = $dval . " (#$val)";
+                                                    $dval = trim((string)$dval);
+                                                    if ($dval === '') $dval = '(Empty)';
+                                                    $displayTxt = $dval . " (#$val)";
                                                 }
                                                 if (!$displayTxt) $displayTxt = "Record #$val";
                                             }
@@ -423,41 +430,6 @@ foreach ($module['blocks'] as $block) {
                 </div>
                 <?php endforeach; ?>
 
-                <?php if ($recordId && !empty($fullRecordHistory)): ?>
-                <!-- Record Audit Trail Card -->
-                <div class="mr-block" style="margin-top: 28px;">
-                    <div class="mr-block-header" style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><i class="fa-solid fa-timeline"></i> Record Audit Trail / Change Logs</span>
-                        <span style="font-size:12px; font-weight:600; padding:2px 8px; background:rgba(123,94,240,0.1); color:var(--primary); border-radius:10px;">Total Updates: <?= count($fullRecordHistory) ?></span>
-                    </div>
-                    <div class="mr-block-body">
-                        <div class="audit-timeline" style="position:relative; padding-left:24px; border-left:2px solid var(--border); margin: 10px 0;">
-                            <?php foreach ($fullRecordHistory as $log): 
-                                $displayName = trim(($log['first_name'] ?? '') . ' ' . ($log['last_name'] ?? ''));
-                                $userDisplay = $displayName ?: ($log['username'] ?? 'System/Unknown');
-                                $dateDisplay = date('d M, Y H:i', strtotime($log['changed_at']));
-                            ?>
-                                <div class="timeline-item" style="position:relative; margin-bottom:20px;">
-                                    <div class="timeline-dot" style="position:absolute; left:-31px; top:4px; width:12px; height:12px; border-radius:50%; background:var(--primary); border:2px solid #fff;"></div>
-                                    <div class="timeline-meta" style="font-size:12px; color:var(--text-muted); margin-bottom:4px; display:flex; align-items:center; gap:8px;">
-                                        <strong><?= htmlspecialchars($userDisplay) ?></strong>
-                                        <span>•</span>
-                                        <span><?= $dateDisplay ?></span>
-                                    </div>
-                                    <div class="timeline-content" style="font-size:14px; color:var(--text-main); background:#fcfcfd; padding:10px 14px; border-radius:8px; border:1px solid var(--border);">
-                                        Updated field <span style="font-weight:600; color:var(--primary); cursor:pointer; text-decoration:underline;" onclick="openFieldHistory(<?= intval($log['field_id']) ?>, '<?= htmlspecialchars(addslashes($log['field_label'] ?: 'Unknown Field'), ENT_QUOTES) ?>')" title="Click to view history for this field"><?= htmlspecialchars($log['field_label'] ?: 'Unknown Field') ?></span>:
-                                        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px; font-size:13px;">
-                                            <span style="text-decoration:line-through; color:#ef4444; background:rgba(239,68,68,0.08); padding:2px 6px; border-radius:4px; font-family:monospace;"><?= htmlspecialchars($log['old_value'] !== '' ? $log['old_value'] : '(empty)') ?></span>
-                                            <i class="fa-solid fa-arrow-right" style="color:var(--text-muted); font-size:12px;"></i>
-                                            <span style="color:#10b981; background:rgba(16,185,129,0.08); padding:2px 6px; border-radius:4px; font-weight:600; font-family:monospace;"><?= htmlspecialchars($log['new_value'] !== '' ? $log['new_value'] : '(empty)') ?></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                </div>
-                <?php endif; ?>
             </div>
         </div>
     </main>

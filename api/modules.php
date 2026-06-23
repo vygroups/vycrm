@@ -762,14 +762,30 @@ try {
 
             if (!$targetModuleId) throw new RuntimeException('Target module ID required');
 
-            // Find first text/name field as display field
+            // Find first field marked as is_title in config, else fallback to text/name/email field
             $dfStmt = $conn->prepare("
-                SELECT id, label FROM {$prefix}module_fields 
-                WHERE module_id = ? AND field_type IN ('text','name','email')
-                ORDER BY sort_order ASC LIMIT 1
+                SELECT id, label, field_type, config FROM {$prefix}module_fields 
+                WHERE module_id = ?
+                ORDER BY sort_order ASC
             ");
             $dfStmt->execute([$targetModuleId]);
-            $displayField = $dfStmt->fetch(PDO::FETCH_ASSOC);
+            $allFields = $dfStmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $displayField = null;
+            $fallbackField = null;
+            foreach ($allFields as $f) {
+                $fConf = json_decode($f['config'] ?: '{}', true);
+                if (!empty($fConf['is_title'])) {
+                    $displayField = $f;
+                    break;
+                }
+                if (!$fallbackField && in_array($f['field_type'], ['text', 'name', 'email'])) {
+                    $fallbackField = $f;
+                }
+            }
+            if (!$displayField) {
+                $displayField = $fallbackField;
+            }
 
             if (!$displayField) {
                 commerce_json_response(['success' => true, 'records' => [], 'total' => 0, 'page' => 1, 'limit' => $limit]);
@@ -777,14 +793,15 @@ try {
 
             $baseSql = "
                 FROM {$prefix}module_records r
-                JOIN {$prefix}module_record_values rv ON rv.record_id = r.id AND rv.field_id = ?
+                LEFT JOIN {$prefix}module_record_values rv ON rv.record_id = r.id AND rv.field_id = ?
                 WHERE r.module_id = ?
             ";
             $params = [(int)$displayField['id'], $targetModuleId];
 
             if ($search) {
-                $baseSql .= " AND rv.value LIKE ?";
+                $baseSql .= " AND (rv.value LIKE ? OR r.id = ?)";
                 $params[] = '%' . $search . '%';
+                $params[] = (int)$search;
             }
 
             // Get total count for pagination
@@ -793,7 +810,7 @@ try {
             $total = (int)$countStmt->fetchColumn();
 
             // Get paginated records
-            $sql = "SELECT r.id, rv.value AS display_value " . $baseSql . " ORDER BY r.id DESC LIMIT $limit OFFSET $offset";
+            $sql = "SELECT r.id, COALESCE(NULLIF(TRIM(rv.value), ''), '(Empty)') AS display_value " . $baseSql . " ORDER BY r.id DESC LIMIT $limit OFFSET $offset";
             $rStmt = $conn->prepare($sql);
             $rStmt->execute($params);
             $results = $rStmt->fetchAll(PDO::FETCH_ASSOC);

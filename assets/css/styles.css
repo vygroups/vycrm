@@ -715,6 +715,7 @@ select.form-control {
     color: var(--text-muted);
     letter-spacing: 0.5px;
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
 }
 
 .crm-table td {
@@ -723,6 +724,7 @@ select.form-control {
     font-size: 14px;
     font-weight: 500;
     color: var(--text-main);
+    white-space: nowrap;
 }
 
 .crm-table tr:last-child td {

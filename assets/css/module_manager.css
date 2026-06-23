@@ -80,7 +80,7 @@
 .mm-rule-row .form-control { flex: 1; min-width: 100px; padding: 8px 10px; font-size: 12px; }
 
 /* Module View/Record Styles */
-.mv-container { max-width: 1200px; margin: 0 auto; }
+.mv-container { max-width: 100%; padding: 0 30px; margin: 0 auto; }
 .mv-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
 .mv-search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0 16px; }
 .mv-search input { border: none; outline: none; padding: 12px 0; font-size: 14px; background: transparent; min-width: 240px; }

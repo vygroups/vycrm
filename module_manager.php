@@ -599,6 +599,7 @@ try {
                     <label><input type="checkbox" id="fieldUnique"> Unique</label>
                     <label><input type="checkbox" id="fieldSearchable"> Searchable</label>
                     <label><input type="checkbox" id="fieldListVisible" checked> Show in List</label>
+                    <label><input type="checkbox" id="fieldIsTitle"> Title (Record Name)</label>
                 </div>
                 <!-- Options for dropdown/multi_picker/radio_group -->
                 <div id="fieldOptionsSection" style="display:none;" class="mm-options-section">
@@ -1046,6 +1047,13 @@ try {
             document.getElementById('fieldUnique').checked = editData ? !!editData.is_unique : false;
             document.getElementById('fieldSearchable').checked = editData ? !!editData.is_searchable : false;
             document.getElementById('fieldListVisible').checked = editData ? !!editData.is_list_visible : true;
+            
+            let configObj = {};
+            if (editData && editData.config) {
+                try { configObj = typeof editData.config === 'string' ? JSON.parse(editData.config) : editData.config; } catch(e){}
+            }
+            document.getElementById('fieldIsTitle').checked = !!configObj.is_title;
+            
             document.getElementById('fieldOptionsList').innerHTML = '';
             if (editData && editData.options) editData.options.forEach(o => addOptionRow(o.label, o.value));
             onFieldTypeChange();
@@ -1085,9 +1093,14 @@ try {
             if (optRows.length) {
                 data.options = [...optRows].map(r => ({ label: r.querySelector('.opt-label').value, value: r.querySelector('.opt-value').value }));
             }
+            // Config object
+            data.config = {
+                is_title: document.getElementById('fieldIsTitle').checked
+            };
+            
             // Config for api_call_picker
             if (data.field_type === 'api_call_picker') {
-                data.config = { linked_module_id: +document.getElementById('fieldLinkedModule').value };
+                data.config.linked_module_id = +document.getElementById('fieldLinkedModule').value;
             }
             const action = editId ? 'update_field' : 'create_field';
             if (editId) data.id = +editId;
