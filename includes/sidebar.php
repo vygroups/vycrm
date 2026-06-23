@@ -19,6 +19,7 @@ try {
         $_sidebarAttendanceEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'attendance_enabled', '1') === '1';
         $_sidebarBillingEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'billing_enabled', '1') === '1';
         $_sidebarCampaignsEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'campaigns_enabled', '1') === '1';
+        $_sidebarPayrollEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'payroll_enabled', '1') === '1';
     }
 } catch (Throwable $e) {
 }
@@ -72,6 +73,24 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
             <a href="manage_requests.php"
                 class="nav-item <?= $currentFile === 'manage_requests.php' ? 'active' : '' ?>">
                 <i class="fa-solid fa-clipboard-check"></i><span class="nav-text">Approvals</span>
+            </a>
+        </div>
+        </div>
+
+        <!-- Payroll -->
+        <div id="sidebar-module-payroll" style="<?= $_sidebarPayrollEnabled ? '' : 'display:none;' ?>">
+        <div class="sidebar-section" onclick="toggleSidebarGroup('group-payroll')">
+            <span>PAYROLL</span> <i class="fa-solid fa-chevron-down toggle-caret"></i>
+        </div>
+        <div class="sidebar-group" id="group-payroll">
+            <a href="payroll.php?tab=employees" class="nav-item <?= ($currentFile === 'payroll.php' && ($_GET['tab'] ?? 'employees') === 'employees') ? 'active' : '' ?>">
+                <i class="fa-solid fa-users"></i><span class="nav-text">Employees</span>
+            </a>
+            <a href="payroll.php?tab=monthly" class="nav-item <?= ($currentFile === 'payroll.php' && ($_GET['tab'] ?? '') === 'monthly') ? 'active' : '' ?>">
+                <i class="fa-solid fa-money-check-dollar"></i><span class="nav-text">Monthly Payroll</span>
+            </a>
+            <a href="payroll.php?tab=template" class="nav-item <?= ($currentFile === 'payroll.php' && ($_GET['tab'] ?? '') === 'template') ? 'active' : '' ?>">
+                <i class="fa-solid fa-envelope-open-text"></i><span class="nav-text">Payslip Template</span>
             </a>
         </div>
         </div>

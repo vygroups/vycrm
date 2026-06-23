@@ -45,6 +45,24 @@ try {
             echo "  [INFO] attendance.type process: " . $e->getMessage() . "\n";
         }
 
+        // 3. Add cc_email to employee_details
+        try {
+            $conn->exec("ALTER TABLE {$tenantPrefix}employee_details ADD COLUMN cc_email VARCHAR(255) DEFAULT NULL AFTER pan_number");
+            echo "  [SUCCESS] Added cc_email to employee_details\n";
+        } catch (Exception $e) {
+            echo "  [INFO] employee_details.cc_email process: " . $e->getMessage() . "\n";
+        }
+
+        // 4. Update salaries for dynamic records
+        try {
+            $conn->exec("ALTER TABLE {$tenantPrefix}salaries MODIFY user_id INT DEFAULT NULL");
+            $conn->exec("ALTER TABLE {$tenantPrefix}salaries ADD COLUMN record_id INT DEFAULT NULL AFTER user_id");
+            $conn->exec("ALTER TABLE {$tenantPrefix}salaries ADD UNIQUE KEY uk_record_month (record_id, salary_month)");
+            echo "  [SUCCESS] Added record_id to salaries\n";
+        } catch (Exception $e) {
+            echo "  [INFO] salaries.record_id process: " . $e->getMessage() . "\n";
+        }
+
         // 3. Ensure default system fields in Calls Module
         try {
             $mStmt = $conn->prepare("SELECT id FROM {$tenantPrefix}modules WHERE slug = 'calls_module' LIMIT 1");

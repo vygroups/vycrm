@@ -756,6 +756,10 @@ try {
         case 'lookup_records':
             $targetModuleId = (int)($input['target_module_id'] ?? $_GET['target_module_id'] ?? 0);
             $search = $input['search'] ?? $_GET['search'] ?? '';
+            $page = max(1, (int)($input['page'] ?? $_GET['page'] ?? 1));
+            $limit = 10;
+            $offset = ($page - 1) * $limit;
+
             if (!$targetModuleId) throw new RuntimeException('Target module ID required');
 
             // Find first text/name field as display field
@@ -768,11 +772,10 @@ try {
             $displayField = $dfStmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$displayField) {
-                commerce_json_response(['success' => true, 'records' => []]);
+                commerce_json_response(['success' => true, 'records' => [], 'total' => 0, 'page' => 1, 'limit' => $limit]);
             }
 
-            $sql = "
-                SELECT r.id, rv.value AS display_value
+            $baseSql = "
                 FROM {$prefix}module_records r
                 JOIN {$prefix}module_record_values rv ON rv.record_id = r.id AND rv.field_id = ?
                 WHERE r.module_id = ?
@@ -780,15 +783,22 @@ try {
             $params = [(int)$displayField['id'], $targetModuleId];
 
             if ($search) {
-                $sql .= " AND rv.value LIKE ?";
+                $baseSql .= " AND rv.value LIKE ?";
                 $params[] = '%' . $search . '%';
             }
 
-            $sql .= " ORDER BY rv.value ASC LIMIT 30";
+            // Get total count for pagination
+            $countStmt = $conn->prepare("SELECT COUNT(*) " . $baseSql);
+            $countStmt->execute($params);
+            $total = (int)$countStmt->fetchColumn();
+
+            // Get paginated records
+            $sql = "SELECT r.id, rv.value AS display_value " . $baseSql . " ORDER BY r.id DESC LIMIT $limit OFFSET $offset";
             $rStmt = $conn->prepare($sql);
             $rStmt->execute($params);
             $results = $rStmt->fetchAll(PDO::FETCH_ASSOC);
-            commerce_json_response(['success' => true, 'records' => $results]);
+            
+            commerce_json_response(['success' => true, 'records' => $results, 'total' => $total, 'page' => $page, 'limit' => $limit]);
 
         default:
             throw new RuntimeException("Unknown action: $action");

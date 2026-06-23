@@ -345,13 +345,36 @@ foreach ($module['blocks'] as $block) {
                                             <?php endforeach; ?>
                                         </select>
                                     <?php break; case 'api_call_picker': ?>
-                                        <?php $cfg = $field['config'] ?? []; $linkedModId = $cfg['linked_module_id'] ?? 0; ?>
-                                        <div class="dm-api-picker" data-field-id="<?= $fid ?>" data-linked-module="<?= $linkedModId ?>">
-                                            <select class="form-control dm-field" data-field-id="<?= $fid ?>" <?= $field['is_required'] ? 'required' : '' ?>>
-                                                <option value="">Search & Select...</option>
-                                                <?php if($val): ?><option value="<?= htmlspecialchars($val) ?>" selected>Record #<?= htmlspecialchars($val) ?></option><?php endif; ?>
-                                            </select>
-                                            <button class="mr-add-option" onclick="searchLinkedRecords(<?= $fid ?>, <?= $linkedModId ?>)"><i class="fa-solid fa-search"></i> Search</button>
+                                        <?php 
+                                            $cfg = $field['config'] ?? []; $linkedModId = $cfg['linked_module_id'] ?? 0;
+                                            $displayTxt = '';
+                                            if ($val) {
+                                                // Find first text/name field as display field
+                                                $dfStmt = $conn->prepare("SELECT id FROM {$prefix}module_fields WHERE module_id = ? AND field_type IN ('text','name','email') ORDER BY sort_order ASC LIMIT 1");
+                                                $dfStmt->execute([$linkedModId]);
+                                                $displayFieldId = $dfStmt->fetchColumn();
+                                                if ($displayFieldId) {
+                                                    $rvStmt = $conn->prepare("SELECT value FROM {$prefix}module_record_values WHERE record_id = ? AND field_id = ?");
+                                                    $rvStmt->execute([$val, $displayFieldId]);
+                                                    $dval = $rvStmt->fetchColumn();
+                                                    if ($dval) $displayTxt = $dval . " (#$val)";
+                                                }
+                                                if (!$displayTxt) $displayTxt = "Record #$val";
+                                            }
+                                        ?>
+                                        <div class="dm-api-picker-wrapper" data-field-id="<?= $fid ?>" data-linked-module="<?= $linkedModId ?>" style="position: relative;">
+                                            <input type="hidden" class="dm-field dm-api-hidden" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?>>
+                                            <div style="display:flex; align-items:center; gap:8px;">
+                                                <div class="form-control" style="flex:1; cursor:pointer; background:var(--surface); display:flex; align-items:center; justify-content:space-between;" onclick="openRecordPickerModal(<?= $fid ?>, <?= $linkedModId ?>)">
+                                                    <span id="api-display-<?= $fid ?>" style="color: <?= $val ? 'var(--text-main)' : 'var(--text-muted)' ?>; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                                        <?= $val ? htmlspecialchars($displayTxt) : "Search & Select..." ?>
+                                                    </span>
+                                                    <i class="fa-solid fa-chevron-down" style="color:var(--text-muted); font-size:12px; flex-shrink:0;"></i>
+                                                </div>
+                                                <?php if($val && !$isViewOnly): ?>
+                                                <button type="button" class="mm-icon-btn rp-clear-btn" onclick="clearApiPicker(<?= $fid ?>)" style="color:#ef4444; flex-shrink:0;" title="Clear Selection"><i class="fa-solid fa-xmark"></i></button>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                     <?php break; case 'attachment': ?>
                                         <div class="dm-attachment" data-field-id="<?= $fid ?>">
@@ -468,6 +491,52 @@ foreach ($module['blocks'] as $block) {
         <div class="mm-modal-footer">
             <button class="mm-btn" onclick="closeModal('mapModal')">Cancel</button>
             <button class="mm-btn mm-btn-primary" onclick="confirmMapSelection()"><i class="fa-solid fa-check"></i> Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Record Picker Modal -->
+<style>
+#recordPickerModal .mm-modal { border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); border: none; overflow: hidden; max-width: 600px; }
+#recordPickerModal .mm-modal-header { border-bottom: none; padding: 24px 24px 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+#recordPickerModal .mm-modal-header h3 { margin: 0; font-size: 18px; font-weight: 600; color: var(--text-main); }
+#recordPickerModal .mm-modal-header .mm-icon-btn { background: transparent; border: 1px solid var(--border); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--text-main); transition: all 0.2s; }
+#recordPickerModal .mm-modal-header .mm-icon-btn:hover { background: var(--surface-hover); border-color: var(--text-muted); }
+#recordPickerModal .rp-search-wrapper { position: relative; margin-bottom: 20px; }
+#recordPickerModal .rp-search-wrapper i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px; }
+#recordPickerModal .rp-search-input { width: 100%; padding: 12px 16px 12px 42px; border-radius: 12px; border: 1.5px solid var(--primary); font-size: 15px; color: var(--text-main); outline: none; transition: box-shadow 0.2s; box-shadow: 0 0 0 3px rgba(123,94,240,0.1); }
+#recordPickerModal .rp-search-input:focus { box-shadow: 0 0 0 4px rgba(123,94,240,0.15); }
+#recordPickerModal .rp-list-section { font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+#recordPickerModal .rp-item { display: flex; align-items: center; padding: 12px 16px; margin: 0 -16px; border-radius: 8px; cursor: pointer; transition: background 0.2s; gap: 12px; }
+#recordPickerModal .rp-item:hover { background: rgba(0,0,0,0.03); }
+#recordPickerModal .rp-item-icon { width: 36px; height: 36px; border-radius: 50%; background: rgba(123,94,240,0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; flex-shrink: 0; }
+#recordPickerModal .rp-item-content { flex: 1; min-width: 0; }
+#recordPickerModal .rp-item-title { font-size: 14px; font-weight: 500; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+#recordPickerModal .rp-item-subtitle { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#recordPickerModal .rp-item-right { font-size: 13px; font-weight: 500; color: var(--text-main); flex-shrink: 0; }
+#recordPickerModal .rp-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border); }
+</style>
+<div class="mm-modal-overlay" id="recordPickerModal">
+    <div class="mm-modal mm-modal-lg">
+        <div class="mm-modal-header">
+            <h3 id="recordPickerModalTitle">Select Record</h3>
+            <button class="mm-icon-btn" onclick="closeModal('recordPickerModal')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="mm-modal-body" style="padding: 0 24px 24px 24px; min-height: 400px; display: flex; flex-direction: column;">
+            <div class="rp-search-wrapper">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="recordPickerSearch" class="rp-search-input" placeholder="Search item..." oninput="debouncedSearchRecordPicker()">
+            </div>
+            
+            <div id="recordPickerContent" style="flex: 1; overflow-y: auto; min-height: 250px;">
+                <!-- Content via AJAX -->
+            </div>
+            
+            <div class="rp-pagination" id="recordPickerPagination">
+                <button class="mm-btn" id="rpPrevBtn" onclick="changeRecordPickerPage(-1)">Previous</button>
+                <span id="rpPageInfo" style="font-size:13px; font-weight:600; color:var(--text-muted);">Page 1</span>
+                <button class="mm-btn" id="rpNextBtn" onclick="changeRecordPickerPage(1)">Next</button>
+            </div>
         </div>
     </div>
 </div>
@@ -783,9 +852,14 @@ document.querySelectorAll('.dm-tom-select').forEach(el => {
     let fieldId = el.dataset.fieldId;
     let isDropdown = el.classList.contains('dm-dropdown');
     
-    new TomSelect(el, {
+    let tsOptions = {
         dropdownParent: 'body',
-        create: (isDropdown && !isMulti) ? function(input, callback) {
+        plugins: isMulti ? ['remove_button'] : [],
+        sortField: { field: 'text', direction: 'asc' }
+    };
+
+    if (isDropdown && !isMulti) {
+        tsOptions.create = function(input, callback) {
             fetch(API, {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({action: 'add_dropdown_option', field_id: fieldId, label: input})
@@ -797,10 +871,12 @@ document.querySelectorAll('.dm-tom-select').forEach(el => {
                     callback();
                 }
             }).catch(() => callback());
-        } : false,
-        plugins: isMulti ? ['remove_button'] : [],
-        sortField: { field: 'text', direction: 'asc' }
-    });
+        };
+    } else {
+        tsOptions.create = false;
+    }
+
+    new TomSelect(el, tsOptions);
 });
 
 // Update image preview on file selection
@@ -871,20 +947,152 @@ flatpickr('.dm-time-picker', {
     allowInput: true
 });
 
-// API Call Picker search
-function searchLinkedRecords(fieldId, linkedModuleId) {
-    const q = prompt('Search:');
-    if (q === null) return;
-    fetch(API + '?action=lookup_records&target_module_id=' + linkedModuleId + '&search=' + encodeURIComponent(q))
-    .then(r => r.json()).then(r => {
-        if (!r.success) return alert(r.error);
-        const sel = document.querySelector(`select.dm-field[data-field-id="${fieldId}"]`);
-        sel.innerHTML = '<option value="">Select...</option>';
-        (r.records || []).forEach(rec => {
-            sel.innerHTML += `<option value="${rec.id}">${rec.display_value} (#${rec.id})</option>`;
+// Record Picker Modal logic
+let currentPickerFieldId = null;
+let currentPickerModuleId = null;
+let currentPickerPage = 1;
+let currentPickerQuery = '';
+let searchTimeout = null;
+
+function openRecordPickerModal(fieldId, linkedModuleId) {
+    if (IS_VIEW_ONLY) return;
+    currentPickerFieldId = fieldId;
+    currentPickerModuleId = linkedModuleId;
+    currentPickerPage = 1;
+    currentPickerQuery = '';
+    const searchInput = document.getElementById('recordPickerSearch');
+    searchInput.value = '';
+    document.getElementById('recordPickerModal').classList.add('show');
+    setTimeout(() => searchInput.focus(), 100);
+    loadRecordPickerData();
+}
+
+function debouncedSearchRecordPicker() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        searchRecordPicker();
+    }, 300);
+}
+
+function searchRecordPicker() {
+    currentPickerQuery = document.getElementById('recordPickerSearch').value.trim();
+    currentPickerPage = 1;
+    loadRecordPickerData();
+}
+
+function changeRecordPickerPage(dir) {
+    currentPickerPage += dir;
+    loadRecordPickerData();
+}
+
+function loadRecordPickerData() {
+    const contentDiv = document.getElementById('recordPickerContent');
+    contentDiv.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; margin-bottom:10px; display:block;"></i> Loading...</div>';
+    
+    document.getElementById('rpPrevBtn').disabled = true;
+    document.getElementById('rpNextBtn').disabled = true;
+
+    fetch(`${API}?action=lookup_records&target_module_id=${currentPickerModuleId}&search=${encodeURIComponent(currentPickerQuery)}&page=${currentPickerPage}`)
+    .then(r => r.json())
+    .then(r => {
+        if (!r.success) {
+            contentDiv.innerHTML = `<div style="color:#ef4444; text-align:center; padding: 20px;">Error: ${r.error}</div>`;
+            return;
+        }
+
+        if (r.records.length === 0) {
+            contentDiv.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted); font-size: 14px;">No records found.</div>';
+            document.getElementById('rpPageInfo').textContent = 'Page 1 of 1';
+            return;
+        }
+
+        let html = '<div class="rp-list-section">Results</div>';
+        html += '<div style="display:flex; flex-direction:column;">';
+        r.records.forEach(rec => {
+            const firstLetter = rec.display_value ? rec.display_value.charAt(0).toUpperCase() : '#';
+            html += `
+                <div class="rp-item" onclick="selectRecordFromPicker(${rec.id}, '${escapeHtml(rec.display_value)}')">
+                    <div class="rp-item-icon">${firstLetter}</div>
+                    <div class="rp-item-content">
+                        <div class="rp-item-title">${escapeHtml(rec.display_value)}</div>
+                        <div class="rp-item-subtitle">Record #${rec.id}</div>
+                    </div>
+                    <div class="rp-item-right">
+                        Select
+                    </div>
+                </div>
+            `;
         });
+        html += '</div>';
+
+        contentDiv.innerHTML = html;
+
+        const totalPages = Math.ceil(r.total / r.limit) || 1;
+        document.getElementById('rpPageInfo').textContent = `Page ${r.page} of ${totalPages}`;
+        
+        document.getElementById('rpPrevBtn').disabled = r.page <= 1;
+        document.getElementById('rpNextBtn').disabled = r.page >= totalPages;
+    })
+    .catch(() => {
+        contentDiv.innerHTML = `<div style="color:#ef4444; text-align:center; padding: 20px;">Network error occurred.</div>`;
     });
 }
+
+function selectRecordFromPicker(id, displayValue) {
+    const hiddenInput = document.querySelector(`.dm-api-hidden[data-field-id="${currentPickerFieldId}"]`);
+    if (hiddenInput) {
+        hiddenInput.value = id;
+        hiddenInput.dispatchEvent(new Event('change'));
+    }
+    
+    const displaySpan = document.getElementById(`api-display-${currentPickerFieldId}`);
+    if (displaySpan) {
+        displaySpan.textContent = displayValue + ' (#' + id + ')';
+        displaySpan.style.color = 'var(--text-main)';
+    }
+
+    const wrapper = document.querySelector(`.dm-api-picker-wrapper[data-field-id="${currentPickerFieldId}"]`);
+    if (wrapper) {
+        let clearBtn = wrapper.querySelector('.rp-clear-btn');
+        if (!clearBtn) {
+            const flexDiv = wrapper.querySelector('div[style*="display:flex; align-items:center"]');
+            if (flexDiv) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'mm-icon-btn rp-clear-btn';
+                btn.style.color = '#ef4444';
+                btn.style.flexShrink = '0';
+                btn.title = 'Clear Selection';
+                btn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                btn.onclick = () => clearApiPicker(currentPickerFieldId);
+                flexDiv.appendChild(btn);
+            }
+        }
+    }
+
+    closeModal('recordPickerModal');
+}
+
+function clearApiPicker(fieldId) {
+    const hiddenInput = document.querySelector(`.dm-api-hidden[data-field-id="${fieldId}"]`);
+    if (hiddenInput) {
+        hiddenInput.value = '';
+        hiddenInput.dispatchEvent(new Event('change'));
+    }
+    
+    const displaySpan = document.getElementById(`api-display-${fieldId}`);
+    if (displaySpan) {
+        displaySpan.textContent = 'Search & Select...';
+        displaySpan.style.color = 'var(--text-muted)';
+    }
+
+    const wrapper = document.querySelector(`.dm-api-picker-wrapper[data-field-id="${fieldId}"]`);
+    if (wrapper) {
+        const clearBtn = wrapper.querySelector('.rp-clear-btn');
+        if (clearBtn) clearBtn.remove();
+    }
+}
+
 
 <?php
 // Pre-populate state and district fields on edit

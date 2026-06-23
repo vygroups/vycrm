@@ -991,7 +991,7 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
 /**
  * Sends a transactional email securely via raw SMTP sockets.
  */
-function dm_send_smtp_email(string $host, int $port, string $user, string $pass, string $fromEmail, string $fromName, string $to, string $subject, string $body, string $encryption = 'none'): bool
+function dm_send_smtp_email(string $host, int $port, string $user, string $pass, string $fromEmail, string $fromName, string $to, string $subject, string $body, string $encryption = 'none', string $ccEmail = ''): bool
 {
     $timeout = 15;
     $socketHost = ($encryption === 'ssl') ? 'ssl://' . $host : $host;
@@ -1061,6 +1061,13 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
         throw new Exception("RCPT TO failed: " . $res);
     }
 
+    if ($ccEmail) {
+        $res = $send($socket, "RCPT TO:<" . $ccEmail . ">");
+        if (strpos($res, '250') === false && strpos($res, '251') === false) {
+            throw new Exception("RCPT TO (CC) failed: " . $res);
+        }
+    }
+
     // DATA
     $res = $send($socket, "DATA");
     if (strpos($res, '354') === false) {
@@ -1077,6 +1084,10 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
         "Date: " . date('r'),
         "Message-ID: <" . time() . '.' . uniqid() . '@' . $host . ">"
     ];
+
+    if ($ccEmail) {
+        $headers[] = "Cc: " . $ccEmail;
+    }
 
     $message = implode("\r\n", $headers) . "\r\n\r\n" . nl2br($body) . "\r\n.";
     $res = $send($socket, $message);
