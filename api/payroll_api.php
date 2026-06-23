@@ -303,9 +303,19 @@ try {
                 '{{net_payable}}' => number_format($sal['net_payable'], 2),
             ];
 
+            // Fetch fields to map field_id to field_key
+            $fields = dm_fetch_module_fields($conn, $prefix, $sourceModuleId);
+            $fieldKeyMap = [];
+            foreach ($fields as $f) {
+                $fieldKeyMap[$f['id']] = $f['field_key'];
+            }
+
             // Add all dynamic fields
-            foreach ($recData['values'] as $key => $val) {
-                $replacements['{{' . $key . '}}'] = is_array($val) ? implode(', ', $val) : (string)$val;
+            foreach ($recData['values'] as $fid => $val) {
+                if (isset($fieldKeyMap[$fid])) {
+                    $key = $fieldKeyMap[$fid];
+                    $replacements['{{' . $key . '}}'] = is_array($val) ? implode(', ', $val) : (string)$val;
+                }
             }
 
             $subject = str_replace(array_keys($replacements), array_values($replacements), $template['subject']);

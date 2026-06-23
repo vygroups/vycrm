@@ -137,13 +137,13 @@ $v = time();
                             Click any variable below to insert it into your template. These variables will be dynamically replaced with the specific employee's data when processing the payslip.
                         </p>
                         
-                        <div style="margin-bottom: 15px;">
-                            <strong>Standard Variables:</strong>
+                        <div style="margin-bottom: 20px;">
+                            <strong>Built-in Variables:</strong>
                             <div class="tag-list">
-                                <span class="tag-item" onclick="insertTag('{{salary_month}}')">{{salary_month}}</span>
-                                <span class="tag-item" onclick="insertTag('{{gross_earnings}}')">{{gross_earnings}}</span>
-                                <span class="tag-item" onclick="insertTag('{{total_deductions}}')">{{total_deductions}}</span>
-                                <span class="tag-item" onclick="insertTag('{{net_payable}}')">{{net_payable}}</span>
+                                <span class="tag-item" onclick="insertTag('{{salary_month}}')">Salary Month</span>
+                                <span class="tag-item" onclick="insertTag('{{gross_earnings}}')">Gross Earnings</span>
+                                <span class="tag-item" onclick="insertTag('{{total_deductions}}')">Total Deductions</span>
+                                <span class="tag-item" onclick="insertTag('{{net_payable}}')">Net Payable</span>
                             </div>
                         </div>
 
@@ -517,9 +517,16 @@ async function processAllUnpaid() {
 
 // ================= TEMPLATE =================
 async function initEditor() {
+    const editorConfig = {
+        simpleUpload: {
+            uploadUrl: '/api/upload_image.php',
+            withCredentials: true
+        }
+    };
+
     if (!editorInstance) {
         try {
-            editorInstance = await ClassicEditor.create(document.querySelector('#body'));
+            editorInstance = await ClassicEditor.create(document.querySelector('#body'), editorConfig);
             editorInstance.ui.focusTracker.on('change:isFocused', (evt, name, isFocused) => {
                 if (isFocused) lastFocusedEditor = editorInstance;
             });
@@ -527,7 +534,7 @@ async function initEditor() {
     }
     if (!pdfEditorInstance) {
         try {
-            pdfEditorInstance = await ClassicEditor.create(document.querySelector('#pdf_body'));
+            pdfEditorInstance = await ClassicEditor.create(document.querySelector('#pdf_body'), editorConfig);
             pdfEditorInstance.ui.focusTracker.on('change:isFocused', (evt, name, isFocused) => {
                 if (isFocused) lastFocusedEditor = pdfEditorInstance;
             });
@@ -554,7 +561,8 @@ async function initEditor() {
                 tagsList.innerHTML = '';
                 data.fields.forEach(f => {
                     const tag = `{{${f.field_key}}}`;
-                    tagsList.innerHTML += `<span class="tag-item" onclick="insertTag('${tag}')">${tag}</span>`;
+                    const label = f.label || f.field_key;
+                    tagsList.innerHTML += `<span class="tag-item" onclick="insertTag('${tag}')" title="${tag}">${label}</span>`;
                 });
             } else {
                 tagsList.innerHTML = '<span class="text-muted" style="font-size:12px;">No module configured or module has no fields.</span>';
