@@ -356,26 +356,24 @@ try {
                         $billingVisibility = dm_get_system_setting($conn, $prefix, 'billing_visibility', 'all');
                         $campaignsVisibility = dm_get_system_setting($conn, $prefix, 'campaigns_visibility', 'all');
                         ?>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
 
                             <!-- Attendance Card -->
-                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
-                                <div style="display: flex; align-items: flex-start; gap: 14px;">
-                                    <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #6366f1, #818cf8); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                        <i class="fa-solid fa-calendar-check" style="color: #fff; font-size: 20px;"></i>
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                                    <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #818cf8); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-calendar-check" style="color: #fff; font-size: 16px;"></i>
                                     </div>
                                     <div style="flex: 1; min-width: 0;">
                                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
-                                            <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Attendance & Ops</h5>
+                                            <h5 style="margin: 0; font-size: 13px; font-weight: 700; color: var(--text);">Attendance & Ops</h5>
                                             <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
                                                 <input type="checkbox" class="sys-toggle" <?= $attendanceEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('attendance_enabled', this.checked, this)" style="display:none;">
                                                 <span class="sys-toggle-pill <?= $attendanceEnabled ? 'active' : '' ?>"></span>
                                             </label>
                                         </div>
-                                        <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">Track clock-ins, leave requests, and HR operations.</p>
-                                        <div>
-                                            <label style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;">Visibility</label>
-                                            <select class="form-control" onchange="updateSystemVisibility('attendance_visibility', this.value)" style="width: 100%; font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 34px; box-sizing: border-box;">
+                                        <div style="padding-top: 8px;">
+                                            <select class="form-control" onchange="updateSystemVisibility('attendance_visibility', this.value)" style="width: 100%; font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 28px; box-sizing: border-box;">
                                                 <option value="all" <?= $attendanceVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
                                                 <option value="owner" <?= $attendanceVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
                                                 <option value="role_down" <?= $attendanceVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
@@ -388,23 +386,21 @@ try {
                             </div>
 
                             <!-- Billing Card -->
-                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
-                                <div style="display: flex; align-items: flex-start; gap: 14px;">
-                                    <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #0ea5e9, #38bdf8); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                        <i class="fa-solid fa-file-invoice-dollar" style="color: #fff; font-size: 20px;"></i>
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                                    <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #0ea5e9, #38bdf8); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-file-invoice-dollar" style="color: #fff; font-size: 16px;"></i>
                                     </div>
                                     <div style="flex: 1; min-width: 0;">
                                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
-                                            <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Billing & Transactions</h5>
+                                            <h5 style="margin: 0; font-size: 13px; font-weight: 700; color: var(--text);">Billing & Transactions</h5>
                                             <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
                                                 <input type="checkbox" class="sys-toggle" <?= $billingEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('billing_enabled', this.checked, this)" style="display:none;">
                                                 <span class="sys-toggle-pill <?= $billingEnabled ? 'active' : '' ?>"></span>
                                             </label>
                                         </div>
-                                        <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">Invoices, purchases, vendors, and expense tracking.</p>
-                                        <div>
-                                            <label style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;">Visibility</label>
-                                            <select class="form-control" onchange="updateSystemVisibility('billing_visibility', this.value)" style="width: 100%; font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 34px; box-sizing: border-box;">
+                                        <div style="padding-top: 8px;">
+                                            <select class="form-control" onchange="updateSystemVisibility('billing_visibility', this.value)" style="width: 100%; font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 28px; box-sizing: border-box;">
                                                 <option value="all" <?= $billingVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
                                                 <option value="owner" <?= $billingVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
                                                 <option value="role_down" <?= $billingVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
@@ -417,23 +413,21 @@ try {
                             </div>
 
                             <!-- Campaigns Card -->
-                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
-                                <div style="display: flex; align-items: flex-start; gap: 14px;">
-                                    <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #10b981, #34d399); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                        <i class="fa-solid fa-bullhorn" style="color: #fff; font-size: 20px;"></i>
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                                    <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #10b981, #34d399); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-bullhorn" style="color: #fff; font-size: 16px;"></i>
                                     </div>
                                     <div style="flex: 1; min-width: 0;">
                                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
-                                            <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Bulk Campaigns</h5>
+                                            <h5 style="margin: 0; font-size: 13px; font-weight: 700; color: var(--text);">Bulk Campaigns</h5>
                                             <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
                                                 <input type="checkbox" class="sys-toggle" <?= $campaignsEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('campaigns_enabled', this.checked, this)" style="display:none;">
                                                 <span class="sys-toggle-pill <?= $campaignsEnabled ? 'active' : '' ?>"></span>
                                             </label>
                                         </div>
-                                        <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">Bulk email & WhatsApp campaigns with scheduling.</p>
-                                        <div>
-                                            <label style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;">Visibility</label>
-                                            <select class="form-control" onchange="updateSystemVisibility('campaigns_visibility', this.value)" style="width: 100%; font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 34px; box-sizing: border-box;">
+                                        <div style="padding-top: 8px;">
+                                            <select class="form-control" onchange="updateSystemVisibility('campaigns_visibility', this.value)" style="width: 100%; font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 28px; box-sizing: border-box;">
                                                 <option value="all" <?= $campaignsVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
                                                 <option value="owner" <?= $campaignsVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
                                                 <option value="role_down" <?= $campaignsVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
@@ -450,23 +444,21 @@ try {
                             $payrollEnabled = dm_get_system_setting($conn, $prefix, 'payroll_enabled', '1') === '1';
                             $payrollVisibility = dm_get_system_setting($conn, $prefix, 'payroll_visibility', 'all');
                             ?>
-                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
-                                <div style="display: flex; align-items: flex-start; gap: 14px;">
-                                    <div style="width: 44px; height: 44px; background: linear-gradient(135deg, #f59e0b, #fbbf24); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                        <i class="fa-solid fa-money-check-dollar" style="color: #fff; font-size: 20px;"></i>
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                                    <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #f59e0b, #fbbf24); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-money-check-dollar" style="color: #fff; font-size: 16px;"></i>
                                     </div>
                                     <div style="flex: 1; min-width: 0;">
                                         <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
-                                            <h5 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text);">Payroll Management</h5>
+                                            <h5 style="margin: 0; font-size: 13px; font-weight: 700; color: var(--text);">Payroll Management</h5>
                                             <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
                                                 <input type="checkbox" class="sys-toggle" <?= $payrollEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('payroll_enabled', this.checked, this)" style="display:none;">
                                                 <span class="sys-toggle-pill <?= $payrollEnabled ? 'active' : '' ?>"></span>
                                             </label>
                                         </div>
-                                        <p style="margin: 0 0 12px 0; font-size: 12px; color: var(--text-muted); line-height: 1.5;">Process employee salaries and send automated payslips.</p>
-                                        <div>
-                                            <label style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;">Visibility</label>
-                                            <select class="form-control" onchange="updateSystemVisibility('payroll_visibility', this.value)" style="width: 100%; font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 34px; box-sizing: border-box;">
+                                        <div style="padding-top: 8px;">
+                                            <select class="form-control" onchange="updateSystemVisibility('payroll_visibility', this.value)" style="width: 100%; font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 28px; box-sizing: border-box;">
                                                 <option value="all" <?= $payrollVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
                                                 <option value="owner" <?= $payrollVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
                                                 <option value="role_down" <?= $payrollVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>

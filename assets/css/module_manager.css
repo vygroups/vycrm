@@ -6,17 +6,17 @@
 .mm-editor-actions { display: flex; gap: 10px; }
 .mm-edit-name-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; }
 
-.mm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
-.mm-module-card { background: var(--surface); border-radius: 20px; padding: 28px; box-shadow: var(--shadow-md); border: 1px solid var(--border); transition: all .3s ease; position: relative; overflow: hidden; }
+.mm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+.mm-module-card { background: var(--surface); border-radius: 16px; padding: 20px; box-shadow: var(--shadow-md); border: 1px solid var(--border); transition: all .3s ease; position: relative; overflow: hidden; }
 .mm-module-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
 .mm-module-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--primary), #a78bfa); }
 .mm-inactive { opacity: .6; }
 .mm-inactive::before { background: var(--text-muted); }
-.mm-card-icon { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, rgba(123,94,240,.12), rgba(123,94,240,.04)); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
-.mm-card-icon i { font-size: 22px; color: var(--primary); }
-.mm-module-card h4 { font-size: 18px; margin-bottom: 6px; }
-.mm-card-desc { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
-.mm-card-stats { display: flex; gap: 16px; margin-bottom: 18px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.mm-card-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, rgba(123,94,240,.12), rgba(123,94,240,.04)); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.mm-card-icon i { font-size: 18px; color: var(--primary); }
+.mm-module-card h4 { font-size: 16px; margin-bottom: 4px; }
+.mm-card-desc { color: var(--text-muted); font-size: 12px; margin-bottom: 12px; line-height: 1.5; }
+.mm-card-stats { display: flex; gap: 12px; margin-bottom: 14px; font-size: 11px; color: var(--text-muted); font-weight: 600; }
 .mm-card-stats i { margin-right: 4px; color: var(--primary); }
 .mm-card-actions { display: flex; gap: 8px; align-items: center; }
 
