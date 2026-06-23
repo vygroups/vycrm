@@ -67,6 +67,12 @@ $v = time();
                         </div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                             <div class="form-group">
+                                <label class="form-label">Name Field</label>
+                                <select id="name_field_id" name="name_field_id" class="form-control" required>
+                                    <option value="">-- Select Field --</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
                                 <label class="form-label">Email Address Field</label>
                                 <select id="email_field_id" name="email_field_id" class="form-control" required>
                                     <option value="">-- Select Field --</option>
@@ -83,21 +89,6 @@ $v = time();
                             <label class="form-label">Filter Value (e.g. Active)</label>
                             <p class="text-muted" style="font-size:12px; margin-top:0;">Only records matching this value will appear in the Monthly Roster.</p>
                             <input type="text" id="filter_value" name="filter_value" class="form-control">
-                        </div>
-                        <h4 style="margin-top: 30px; margin-bottom: 10px; color: var(--primary);">Default Salary Mapping</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div class="form-group">
-                                <label class="form-label">Gross Earnings Field</label>
-                                <select id="gross_field_id" name="gross_field_id" class="form-control">
-                                    <option value="">-- None --</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Total Deductions Field</label>
-                                <select id="deductions_field_id" name="deductions_field_id" class="form-control">
-                                    <option value="">-- None --</option>
-                                </select>
-                            </div>
                         </div>
                         <button type="submit" class="btn-primary" id="saveConfigBtn" style="margin-top: 20px;">SAVE CONFIGURATION</button>
                     </form>
@@ -228,37 +219,34 @@ async function loadConfigFields() {
         const res = await fetch(`/api/payroll_api.php?action=get_module_fields&module_id=${moduleId}`);
         const data = await res.json();
         if(data.success) {
-            populateAllFields(data.fields, currentConfig || {});
+            if(!currentConfig) currentConfig = {};
+            currentConfig.fields = data.fields;
+            populateAllFields(data.fields, currentConfig);
         }
     } catch(e) {}
 }
 
 function populateAllFields(fields, config) {
+    const nameSelect = document.getElementById('name_field_id');
     const emailSelect = document.getElementById('email_field_id');
     const filterSelect = document.getElementById('filter_field_id');
-    const grossSelect = document.getElementById('gross_field_id');
-    const dedSelect = document.getElementById('deductions_field_id');
 
     let baseHtml = '<option value="">-- None --</option>';
     let emailHtml = '<option value="">-- Select Field --</option>';
+    let nameHtml = '<option value="">-- Select Field --</option>';
     
     fields.forEach(f => {
         emailHtml += `<option value="${f.id}" ${f.id == config.email_field_id ? 'selected' : ''}>${f.label}</option>`;
-        const isFilter = f.id == config.filter_field_id ? 'selected' : '';
-        const isGross = f.id == config.gross_field_id ? 'selected' : '';
-        const isDed = f.id == config.deductions_field_id ? 'selected' : '';
+        nameHtml += `<option value="${f.id}" ${f.id == config.name_field_id ? 'selected' : ''}>${f.label}</option>`;
         
         baseHtml += `<option value="${f.id}">${f.label}</option>`;
     });
 
+    nameSelect.innerHTML = nameHtml;
     emailSelect.innerHTML = emailHtml;
     filterSelect.innerHTML = baseHtml;
-    grossSelect.innerHTML = baseHtml;
-    dedSelect.innerHTML = baseHtml;
     
     if(config.filter_field_id) filterSelect.value = config.filter_field_id;
-    if(config.gross_field_id) grossSelect.value = config.gross_field_id;
-    if(config.deductions_field_id) dedSelect.value = config.deductions_field_id;
     
     // Will be handled by renderFilterValueInput
     // document.getElementById('filter_value').value = config.filter_value || '';

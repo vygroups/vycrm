@@ -46,6 +46,7 @@ try {
     switch ($action) {
         case 'get_config':
             $sourceModuleId = dm_get_system_setting($conn, $prefix, 'payroll_source_module_id', '');
+            $nameFieldId = dm_get_system_setting($conn, $prefix, 'payroll_name_field_id', '');
             $emailFieldId = dm_get_system_setting($conn, $prefix, 'payroll_email_field_id', '');
             $filterFieldId = dm_get_system_setting($conn, $prefix, 'payroll_filter_field_id', '');
             $filterValue = dm_get_system_setting($conn, $prefix, 'payroll_filter_value', '');
@@ -85,6 +86,7 @@ try {
             echo json_encode([
                 'success' => true, 
                 'source_module_id' => $sourceModuleId,
+                'name_field_id' => $nameFieldId,
                 'email_field_id' => $emailFieldId,
                 'filter_field_id' => $filterFieldId,
                 'filter_value' => $filterValue,
@@ -98,6 +100,7 @@ try {
 
         case 'save_config':
             $sourceModuleId = $_POST['source_module_id'] ?? '';
+            $nameFieldId = $_POST['name_field_id'] ?? '';
             $emailFieldId = $_POST['email_field_id'] ?? '';
             $filterFieldId = $_POST['filter_field_id'] ?? '';
             $filterValue = $_POST['filter_value'] ?? '';
@@ -107,6 +110,7 @@ try {
             if (!$sourceModuleId) throw new Exception("Please select a module.");
 
             dm_set_system_setting($conn, $prefix, 'payroll_source_module_id', $sourceModuleId);
+            dm_set_system_setting($conn, $prefix, 'payroll_name_field_id', $nameFieldId);
             dm_set_system_setting($conn, $prefix, 'payroll_email_field_id', $emailFieldId);
             dm_set_system_setting($conn, $prefix, 'payroll_filter_field_id', $filterFieldId);
             dm_set_system_setting($conn, $prefix, 'payroll_filter_value', $filterValue);
@@ -155,20 +159,11 @@ try {
             $dynamicRecords = $dynData['records'] ?? [];
 
             // Get settings for filtering and mapping
+            $nameFieldId = dm_get_system_setting($conn, $prefix, 'payroll_name_field_id', '');
             $filterFieldId = dm_get_system_setting($conn, $prefix, 'payroll_filter_field_id', '');
             $filterValue = dm_get_system_setting($conn, $prefix, 'payroll_filter_value', '');
             $grossFieldId = dm_get_system_setting($conn, $prefix, 'payroll_gross_field_id', '');
             $deductionsFieldId = dm_get_system_setting($conn, $prefix, 'payroll_deductions_field_id', '');
-
-            $filterFieldKey = null;
-            $grossFieldKey = null;
-            $deductionsFieldKey = null;
-
-            foreach ($moduleFields as $f) {
-                if ($f['id'] == $filterFieldId) $filterFieldKey = $f['field_key'];
-                if ($f['id'] == $grossFieldId) $grossFieldKey = $f['field_key'];
-                if ($f['id'] == $deductionsFieldId) $deductionsFieldKey = $f['field_key'];
-            }
 
             // Fetch salaries for this month
             $sStmt = $conn->prepare("SELECT record_id, gross_earnings, total_deductions, net_payable, status, payslip_sent FROM {$prefix}salaries WHERE salary_month = ?");
@@ -182,8 +177,8 @@ try {
             $combined = [];
             foreach ($dynamicRecords as $rec) {
                 // Apply filter
-                if ($filterFieldKey && $filterValue !== '') {
-                    $recVal = $rec['values'][$filterFieldKey] ?? '';
+                if ($filterFieldId && $filterValue !== '') {
+                    $recVal = $rec['values'][$filterFieldId] ?? '';
                     if (strcasecmp((string)$recVal, $filterValue) !== 0) {
                         continue; // Skip this record
                     }
@@ -200,11 +195,11 @@ try {
                     $deductions = $sData['total_deductions'];
                 } else {
                     // Try to auto-populate from mapped fields
-                    if ($grossFieldKey && !empty($rec['values'][$grossFieldKey])) {
-                        $gross = (float)$rec['values'][$grossFieldKey];
+                    if ($grossFieldId && !empty($rec['values'][$grossFieldId])) {
+                        $gross = (float)$rec['values'][$grossFieldId];
                     }
-                    if ($deductionsFieldKey && !empty($rec['values'][$deductionsFieldKey])) {
-                        $deductions = (float)$rec['values'][$deductionsFieldKey];
+                    if ($deductionsFieldId && !empty($rec['values'][$deductionsFieldId])) {
+                        $deductions = (float)$rec['values'][$deductionsFieldId];
                     }
                 }
                 
@@ -212,14 +207,18 @@ try {
                 $status = $sData ? $sData['status'] : 'draft';
                 $payslip_sent = $sData ? $sData['payslip_sent'] : 0;
 
-                // We will use the first text field as the "Name" or Title
+                // We will use the configured Name field or the first text field as the Title
                 $title = "Record #$rid";
-                foreach ($moduleFields as $f) {
-                    if ($f['field_type'] === 'text') {
-                        $key = $f['field_key'];
-                        if (!empty($rec['values'][$key])) {
-                            $title = $rec['values'][$key];
-                            break;
+                if ($nameFieldId && !empty($rec['values'][$nameFieldId])) {
+                    $title = $rec['values'][$nameFieldId];
+                } else {
+                    foreach ($moduleFields as $f) {
+                        if ($f['field_type'] === 'text') {
+                            $fid = $f['id'];
+                            if (!empty($rec['values'][$fid])) {
+                                $title = $rec['values'][$fid];
+                                break;
+                            }
                         }
                     }
                 }
@@ -287,14 +286,8 @@ try {
 
             // Find Email Address
             $toEmail = '';
-            if ($emailFieldId) {
-                // Determine field key
-                $fStmt = $conn->prepare("SELECT field_key FROM {$prefix}module_fields WHERE id = ?");
-                $fStmt->execute([$emailFieldId]);
-                $fKey = $fStmt->fetchColumn();
-                if ($fKey && !empty($recData['values'][$fKey])) {
-                    $toEmail = $recData['values'][$fKey];
-                }
+            if ($emailFieldId && !empty($recData['values'][$emailFieldId])) {
+                $toEmail = $recData['values'][$emailFieldId];
             }
 
             // Get Email Template
