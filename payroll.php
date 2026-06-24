@@ -113,15 +113,18 @@ $v = time();
                             <thead>
                                 <tr>
                                     <th>Employee Record</th>
+                                    <th>Total Working Days</th>
+                                    <th>LOP</th>
+                                    <th>Paid Days</th>
                                     <th>Gross Earnings</th>
                                     <th>Total Deductions</th>
                                     <th>Net Payable</th>
                                     <th>Status</th>
-                                    <th>Actions</th>
+                                    <th style="position: sticky; right: 0; background: #f8fafc; z-index: 10; box-shadow: -2px 0 5px rgba(0,0,0,0.05);">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="payrollTableBody">
-                                <tr><td colspan="7" class="text-center text-muted">Loading...</td></tr>
+                                <tr><td colspan="10" class="text-center text-muted">Loading...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -141,6 +144,9 @@ $v = time();
                             <strong>Built-in Variables:</strong>
                             <div class="tag-list">
                                 <span class="tag-item" onclick="insertTag('{{salary_month}}')">Salary Month</span>
+                                <span class="tag-item" onclick="insertTag('{{total_working_days}}')">Total Working Days</span>
+                                <span class="tag-item" onclick="insertTag('{{lop_days}}')">LOP Days</span>
+                                <span class="tag-item" onclick="insertTag('{{paid_days}}')">Paid Days</span>
                                 <span class="tag-item" onclick="insertTag('{{gross_earnings}}')">Gross Earnings</span>
                                 <span class="tag-item" onclick="insertTag('{{total_deductions}}')">Total Deductions</span>
                                 <span class="tag-item" onclick="insertTag('{{net_payable}}')">Net Payable</span>
@@ -370,23 +376,23 @@ async function loadMonthly() {
     const month = document.getElementById('monthPicker').value;
     if(!month) return;
     const tbody = document.getElementById('payrollTableBody');
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Loading...</td></tr>';
     
     try {
         const res = await fetch(`/api/payroll_api.php?action=get_monthly_payroll&month=${month}`);
         const data = await res.json();
         if(data.success) {
             if (data.error) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="color:red;">${data.error}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted" style="color:red;">${data.error}</td></tr>`;
             } else {
                 payrollRecords = data.records;
                 renderMonthlyTable();
             }
         } else {
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="color:red;">Error: ${data.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted" style="color:red;">Error: ${data.message}</td></tr>`;
         }
     } catch(e) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="color:red;">Network or Server Error</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-muted" style="color:red;">Network or Server Error</td></tr>`;
     }
 }
 
@@ -397,7 +403,7 @@ function renderMonthlyTable() {
     const btnAll = document.getElementById('btnProcessAll');
     
     if(payrollRecords.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No records found in the configured module.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No records found in the configured module.</td></tr>';
         if(btnAll) btnAll.style.display = 'none';
         return;
     }
@@ -415,8 +421,11 @@ function renderMonthlyTable() {
         }
 
         const disabled = rec.status === 'paid' ? 'disabled' : '';
-        const grossInput = `<input type="number" step="0.01" class="form-control" style="width:110px; padding:4px 8px; font-size:13px;" value="${rec.gross_earnings}" onchange="updateRow(${rec.record_id}, this.value, 'gross')" ${disabled}>`;
-        const dedInput = `<input type="number" step="0.01" class="form-control" style="width:110px; padding:4px 8px; font-size:13px; color:red;" value="${rec.total_deductions}" onchange="updateRow(${rec.record_id}, this.value, 'ded')" ${disabled}>`;
+        const twdInput = `<input type="number" id="twd_${rec.record_id}" step="0.5" class="form-control" style="width:70px; padding:4px 8px; font-size:13px;" value="${rec.total_working_days}" onchange="updateRow(${rec.record_id}, this.value, 'twd')" ${disabled}>`;
+        const lopInput = `<input type="number" id="lop_${rec.record_id}" step="0.5" class="form-control" style="width:70px; padding:4px 8px; font-size:13px;" value="${rec.lop_days}" onchange="updateRow(${rec.record_id}, this.value, 'lop')" ${disabled}>`;
+        const pdInput = `<input type="number" id="pd_${rec.record_id}" step="0.5" class="form-control" style="width:70px; padding:4px 8px; font-size:13px;" value="${rec.paid_days}" onchange="updateRow(${rec.record_id}, this.value, 'pd')" ${disabled}>`;
+        const grossInput = `<input type="number" id="gross_${rec.record_id}" step="0.01" class="form-control" style="width:110px; padding:4px 8px; font-size:13px;" value="${rec.gross_earnings}" onchange="updateRow(${rec.record_id}, this.value, 'gross')" ${disabled}>`;
+        const dedInput = `<input type="number" id="ded_${rec.record_id}" step="0.01" class="form-control" style="width:110px; padding:4px 8px; font-size:13px; color:red;" value="${rec.total_deductions}" onchange="updateRow(${rec.record_id}, this.value, 'ded')" ${disabled}>`;
 
         let actionHtml = rec.status === 'paid' 
             ? `<button class="btn-primary" style="padding: 6px 12px; font-size: 11px; background-color: #f59e0b;" onclick="processPayslip(${rec.record_id}, false)"><i class="fa-solid fa-rotate-right"></i> Resend</button>`
@@ -425,11 +434,14 @@ function renderMonthlyTable() {
         tbody.innerHTML += `
             <tr>
                 <td class="text-bold">${rec.title}</td>
+                <td>${twdInput}</td>
+                <td>${lopInput}</td>
+                <td>${pdInput}</td>
                 <td>${grossInput}</td>
                 <td>${dedInput}</td>
                 <td class="text-bold" style="color:#10b981;" id="net_${rec.record_id}">₹${parseFloat(rec.net_payable).toFixed(2)}</td>
                 <td id="status_${rec.record_id}">${statusHtml}</td>
-                <td id="action_${rec.record_id}">${actionHtml}</td>
+                <td id="action_${rec.record_id}" style="position: sticky; right: 0; background: white; z-index: 9; box-shadow: -2px 0 5px rgba(0,0,0,0.05);">${actionHtml}</td>
             </tr>
         `;
     });
@@ -438,6 +450,9 @@ function renderMonthlyTable() {
 async function updateRow(recordId, value, type) {
     const rec = payrollRecords.find(r => r.record_id == recordId);
     if(!rec) return;
+    if(type === 'twd') rec.total_working_days = parseFloat(value) || 0;
+    if(type === 'lop') rec.lop_days = parseFloat(value) || 0;
+    if(type === 'pd') rec.paid_days = parseFloat(value) || 0;
     if(type === 'gross') rec.gross_earnings = parseFloat(value) || 0;
     if(type === 'ded') rec.total_deductions = parseFloat(value) || 0;
     rec.net_payable = rec.gross_earnings - rec.total_deductions;
@@ -448,6 +463,9 @@ async function updateRow(recordId, value, type) {
     formData.append('action', 'save_salary');
     formData.append('record_id', recordId);
     formData.append('month', month);
+    formData.append('total_working_days', rec.total_working_days);
+    formData.append('lop_days', rec.lop_days);
+    formData.append('paid_days', rec.paid_days);
     formData.append('gross_earnings', rec.gross_earnings);
     formData.append('total_deductions', rec.total_deductions);
     formData.append('net_payable', rec.net_payable);
@@ -461,6 +479,19 @@ async function processPayslip(recordId, skipConfirm = false) {
     if(btnCell) btnCell.innerHTML = '<span class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> Processing...</span>';
 
     const rec = payrollRecords.find(r => r.record_id == recordId);
+    
+    // Ensure we grab latest values from inputs in case onchange hasn't fired
+    const twdEl = document.getElementById(`twd_${recordId}`);
+    if (twdEl) rec.total_working_days = parseFloat(twdEl.value) || 0;
+    const lopEl = document.getElementById(`lop_${recordId}`);
+    if (lopEl) rec.lop_days = parseFloat(lopEl.value) || 0;
+    const pdEl = document.getElementById(`pd_${recordId}`);
+    if (pdEl) rec.paid_days = parseFloat(pdEl.value) || 0;
+    const grossEl = document.getElementById(`gross_${recordId}`);
+    if (grossEl) rec.gross_earnings = parseFloat(grossEl.value) || 0;
+    const dedEl = document.getElementById(`ded_${recordId}`);
+    if (dedEl) rec.total_deductions = parseFloat(dedEl.value) || 0;
+
     await updateRow(recordId, rec.gross_earnings, 'gross');
 
     const month = document.getElementById('monthPicker').value;
@@ -518,9 +549,8 @@ async function processAllUnpaid() {
 // ================= TEMPLATE =================
 async function initEditor() {
     const editorConfig = {
-        simpleUpload: {
-            uploadUrl: '/api/upload_image.php',
-            withCredentials: true
+        ckfinder: {
+            uploadUrl: '/api/upload_image.php'
         }
     };
 

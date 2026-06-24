@@ -43,6 +43,18 @@ try {
 }
 
 try {
+    $conn->exec("ALTER TABLE {$prefix}salaries ADD COLUMN total_working_days DECIMAL(5,2) DEFAULT 0");
+} catch (Throwable $t) {}
+
+try {
+    $conn->exec("ALTER TABLE {$prefix}salaries ADD COLUMN lop_days DECIMAL(5,2) DEFAULT 0");
+} catch (Throwable $t) {}
+
+try {
+    $conn->exec("ALTER TABLE {$prefix}salaries ADD COLUMN paid_days DECIMAL(5,2) DEFAULT 0");
+} catch (Throwable $t) {}
+
+try {
     switch ($action) {
         case 'get_config':
             $sourceModuleId = dm_get_system_setting($conn, $prefix, 'payroll_source_module_id', '');
@@ -166,7 +178,7 @@ try {
             $deductionsFieldId = dm_get_system_setting($conn, $prefix, 'payroll_deductions_field_id', '');
 
             // Fetch salaries for this month
-            $sStmt = $conn->prepare("SELECT record_id, gross_earnings, total_deductions, net_payable, status, payslip_sent FROM {$prefix}salaries WHERE salary_month = ?");
+            $sStmt = $conn->prepare("SELECT record_id, gross_earnings, total_deductions, net_payable, status, payslip_sent, total_working_days, lop_days, paid_days FROM {$prefix}salaries WHERE salary_month = ?");
             $sStmt->execute([$month]);
             $salariesRaw = $sStmt->fetchAll(PDO::FETCH_ASSOC);
             $salaries = [];
@@ -189,10 +201,16 @@ try {
                 
                 $gross = 0;
                 $deductions = 0;
+                $total_working_days = 0;
+                $lop_days = 0;
+                $paid_days = 0;
                 
                 if ($sData) {
                     $gross = $sData['gross_earnings'];
                     $deductions = $sData['total_deductions'];
+                    $total_working_days = $sData['total_working_days'] ?? 0;
+                    $lop_days = $sData['lop_days'] ?? 0;
+                    $paid_days = $sData['paid_days'] ?? 0;
                 } else {
                     // Try to auto-populate from mapped fields
                     if ($grossFieldId && !empty($rec['values'][$grossFieldId])) {
@@ -227,6 +245,9 @@ try {
                     'record_id' => $rid,
                     'title' => $title,
                     'dynamic_data' => $rec['values'],
+                    'total_working_days' => $total_working_days,
+                    'lop_days' => $lop_days,
+                    'paid_days' => $paid_days,
                     'gross_earnings' => $gross,
                     'total_deductions' => $deductions,
                     'net_payable' => $net,
@@ -241,6 +262,9 @@ try {
         case 'save_salary':
             $recordId = (int)($_POST['record_id'] ?? 0);
             $month = $_POST['month'] ?? '';
+            $twd = (float)($_POST['total_working_days'] ?? 0);
+            $lop = (float)($_POST['lop_days'] ?? 0);
+            $pd = (float)($_POST['paid_days'] ?? 0);
             $gross = (float)($_POST['gross_earnings'] ?? 0);
             $deductions = (float)($_POST['total_deductions'] ?? 0);
             $net = (float)($_POST['net_payable'] ?? 0);
@@ -249,12 +273,12 @@ try {
             if (!$recordId || !$month) throw new Exception("Record ID and Month required");
 
             $stmt = $conn->prepare("
-                INSERT INTO {$prefix}salaries (record_id, salary_month, gross_earnings, total_deductions, net_payable, status)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO {$prefix}salaries (record_id, salary_month, total_working_days, lop_days, paid_days, gross_earnings, total_deductions, net_payable, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
-                gross_earnings=VALUES(gross_earnings), total_deductions=VALUES(total_deductions), net_payable=VALUES(net_payable), status=VALUES(status)
+                total_working_days=VALUES(total_working_days), lop_days=VALUES(lop_days), paid_days=VALUES(paid_days), gross_earnings=VALUES(gross_earnings), total_deductions=VALUES(total_deductions), net_payable=VALUES(net_payable), status=VALUES(status)
             ");
-            $stmt->execute([$recordId, $month, $gross, $deductions, $net, $status]);
+            $stmt->execute([$recordId, $month, $twd, $lop, $pd, $gross, $deductions, $net, $status]);
 
             echo json_encode(['success' => true, 'message' => 'Salary saved.']);
             break;
@@ -279,7 +303,7 @@ try {
             if (!$recData) throw new Exception("Employee record not found");
             
             // Fetch Salary Data
-            $stmt = $conn->prepare("SELECT gross_earnings, total_deductions, net_payable FROM {$prefix}salaries WHERE record_id = ? AND salary_month = ?");
+            $stmt = $conn->prepare("SELECT total_working_days, lop_days, paid_days, gross_earnings, total_deductions, net_payable FROM {$prefix}salaries WHERE record_id = ? AND salary_month = ?");
             $stmt->execute([$recordId, $month]);
             $sal = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$sal) throw new Exception("Salary record not found for this month");
@@ -298,6 +322,9 @@ try {
             // Build Replacements
             $replacements = [
                 '{{salary_month}}' => date('F Y', strtotime($month . '-01')),
+                '{{total_working_days}}' => number_format($sal['total_working_days'] ?? 0, 1),
+                '{{lop_days}}' => number_format($sal['lop_days'] ?? 0, 1),
+                '{{paid_days}}' => number_format($sal['paid_days'] ?? 0, 1),
                 '{{gross_earnings}}' => number_format($sal['gross_earnings'], 2),
                 '{{total_deductions}}' => number_format($sal['total_deductions'], 2),
                 '{{net_payable}}' => number_format($sal['net_payable'], 2),
