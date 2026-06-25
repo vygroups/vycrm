@@ -33,9 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 if (isset($_FILES['logo']) && $_FILES['logo']['error'] == 0) {
                     $ext = pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION);
                     if ($ext !== '') {
-                        $destination = upload_company_file_path($slug, 'logo', $ext, 'branding');
-                        if (move_uploaded_file($_FILES['logo']['tmp_name'], $destination)) {
-                            $logo_path = $destination;
+                        $logicalDest = upload_company_file_path($slug, 'logo', $ext, 'branding');
+                        $physicalDest = UPLOAD_BASE_DIR . $logicalDest;
+                        if (move_uploaded_file($_FILES['logo']['tmp_name'], $physicalDest)) {
+                            $logo_path = $logicalDest;
                         }
                     }
                 }
@@ -287,7 +288,7 @@ endif; ?>
 
                             <td>
                                 <?php if ($c['logo']): ?>
-                                <img src="/<?= $c['logo']?>" class="logo-img">
+                                <img src="<?= UPLOAD_BASE_URL . urlencode(ltrim($c['logo'], '/')) ?>" class="logo-img">
                                 <?php
     endif; ?>
                             </td>

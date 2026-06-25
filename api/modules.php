@@ -380,7 +380,12 @@ try {
                     $moduleSlug = $mStmt->fetchColumn() ?: 'unknown_module';
                     
                     $tenantSlug = $_SESSION['tenant_slug'] ?? 'default_tenant';
-                    $uploadDir = __DIR__ . "/../uploads/{$tenantSlug}/{$moduleSlug}/";
+                    
+                    // Use UPLOAD_BASE_DIR defined in upload_paths.php
+                    require_once __DIR__ . '/../includes/upload_paths.php';
+                    $logicalDir = "uploads/{$tenantSlug}/{$moduleSlug}/";
+                    $uploadDir = UPLOAD_BASE_DIR . $logicalDir;
+                    
                     if (!is_dir($uploadDir)) {
                         mkdir($uploadDir, 0777, true);
                     }
@@ -392,11 +397,12 @@ try {
                             $name = time() . '_' . $name;
                             $dest = $uploadDir . $name;
                             if (move_uploaded_file($tmpName, $dest)) {
-                                $values[$fieldId] = "uploads/{$tenantSlug}/{$moduleSlug}/{$name}";
+                                $values[$fieldId] = $logicalDir . $name;
                             }
                         }
                     }
                 }
+
 
                 // Fetch old values for comparison (only for existing records)
                 $oldValues = [];

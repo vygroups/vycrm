@@ -12,6 +12,8 @@
  * This replaces the repeated try/catch blocks in every page.
  */
 
+require_once __DIR__ . '/upload_paths.php';
+
 $companyLogo = "/images/logo.png";
 $companyName = "Vy CRM";
 $companySlug = $_SESSION['tenant_slug'] ?? '';
@@ -24,7 +26,7 @@ try {
     $brandStmt->execute([$companySlug]);
     $companyData = $brandStmt->fetch(PDO::FETCH_ASSOC);
     if ($companyData && $companyData['logo']) {
-        $companyLogo = '/' . $companyData['logo'];
+        $companyLogo = UPLOAD_BASE_URL . urlencode(ltrim($companyData['logo'], '/'));
         $companyName = htmlspecialchars($companyData['name']);
     } elseif ($companyData) {
         $companyName = htmlspecialchars($companyData['name']);
@@ -43,7 +45,7 @@ try {
         $bpStmt = $bpConn->query("SELECT logo_path FROM {$tenantPrefix}business_profile WHERE id = 1");
         $bpRow = $bpStmt->fetch(PDO::FETCH_ASSOC);
         if ($bpRow && !empty($bpRow['logo_path'])) {
-            $companyLogo = '/' . ltrim($bpRow['logo_path'], '/');
+            $companyLogo = UPLOAD_BASE_URL . urlencode(ltrim($bpRow['logo_path'], '/'));
         }
     }
 } catch (Throwable $e) {

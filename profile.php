@@ -89,9 +89,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ext = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
         $allowed = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
         if (in_array($ext, $allowed)) {
-            $dest = upload_company_file_path($slug, 'logo', $ext, 'branding');
-            if (move_uploaded_file($_FILES['logo']['tmp_name'], $dest)) {
-                $logoPath = $dest;
+            $logicalDest = upload_company_file_path($slug, 'logo', $ext, 'branding');
+            $physicalDest = UPLOAD_BASE_DIR . $logicalDest;
+            if (move_uploaded_file($_FILES['logo']['tmp_name'], $physicalDest)) {
+                $logoPath = $logicalDest;
                 try {
                     $brandDb = Database::getMasterConn();
                     $brandPrefix = Database::getMasterPrefix();
@@ -110,9 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ext = strtolower(pathinfo($_FILES['signature']['name'], PATHINFO_EXTENSION));
         $allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
         if (in_array($ext, $allowed)) {
-            $dest = upload_company_file_path($slug, 'signature', $ext, 'branding');
-            if (move_uploaded_file($_FILES['signature']['tmp_name'], $dest)) {
-                $sigPath = $dest;
+            $logicalDest = upload_company_file_path($slug, 'signature', $ext, 'branding');
+            $physicalDest = UPLOAD_BASE_DIR . $logicalDest;
+            if (move_uploaded_file($_FILES['signature']['tmp_name'], $physicalDest)) {
+                $sigPath = $logicalDest;
             }
         }
     }
@@ -159,18 +161,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// Resolve display paths for logo and signature with prioritized extension fallbacks
 $displayLogo = '';
 $rawLogoPath = !empty($profile['logo_path']) ? ltrim($profile['logo_path'], '/') : '';
-if ($rawLogoPath && (file_exists(__DIR__ . '/' . $rawLogoPath) || file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $rawLogoPath))) {
-    $displayLogo = '/' . $rawLogoPath;
+if ($rawLogoPath && (file_exists(UPLOAD_BASE_DIR . $rawLogoPath) || file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $rawLogoPath))) {
+    $displayLogo = UPLOAD_BASE_URL . urlencode($rawLogoPath);
 } elseif (!empty($slug)) {
     $ext = $rawLogoPath ? strtolower(pathinfo($rawLogoPath, PATHINFO_EXTENSION)) : '';
     $fallbackExts = ($ext === 'png') ? ['png', 'jpeg', 'jpg'] : ['jpeg', 'jpg', 'png'];
     foreach ($fallbackExts as $fe) {
         $fb = "assets/uploads/logos/{$slug}_logo.{$fe}";
-        if (file_exists(__DIR__ . '/' . $fb) || file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $fb)) {
-            $displayLogo = '/' . $fb;
+        if (file_exists(UPLOAD_BASE_DIR . $fb) || file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $fb)) {
+            $displayLogo = UPLOAD_BASE_URL . urlencode($fb);
             break;
         }
     }
@@ -180,7 +181,7 @@ if (empty($displayLogo)) {
 }
 $displaySig = '';
 if (!empty($profile['signature_path'])) {
-    $displaySig = '/' . ltrim($profile['signature_path'], '/');
+    $displaySig = UPLOAD_BASE_URL . urlencode(ltrim($profile['signature_path'], '/'));
 }
 ?>
 <!DOCTYPE html>

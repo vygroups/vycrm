@@ -2,6 +2,7 @@
 require_once 'auth_check.php';
 require_once 'includes/commerce.php';
 require_once 'includes/brand.php';
+require_once 'includes/upload_paths.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
@@ -43,12 +44,12 @@ $bizAddr = htmlspecialchars($biz['address'] ?? '123 Business Street, City');
 $bizPhone = htmlspecialchars($biz['phone'] ?? '+91 98765 43210');
 $bizEmail = htmlspecialchars($biz['email'] ?? 'contact@company.com');
 $bizGstin = htmlspecialchars($biz['gstin'] ?? '33AABCU9603R1ZM');
-$bizLogo = !empty($biz['logo_path']) ? '/' . $biz['logo_path'] : ($companyLogo ?? '');
+$bizLogo = !empty($biz['logo_path']) ? UPLOAD_BASE_URL . urlencode(ltrim($biz['logo_path'], '/')) : ($companyLogo ?? '');
 $bankName = htmlspecialchars($biz['bank_name'] ?? 'State Bank of India');
 $accountNo = htmlspecialchars($biz['account_no'] ?? '120028XXXXXX');
 $ifscCode = htmlspecialchars($biz['ifsc_code'] ?? 'SBIN0007440');
 $terms = htmlspecialchars($biz['terms'] ?? 'Thanks for doing business with us!');
-$sigPath = !empty($biz['signature_path']) ? '/' . $biz['signature_path'] : '';
+$sigPath = !empty($biz['signature_path']) ? UPLOAD_BASE_URL . urlencode(ltrim($biz['signature_path'], '/')) : '';
 
 // Handle POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

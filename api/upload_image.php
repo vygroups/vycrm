@@ -48,9 +48,8 @@ if (!$tenantSlug) {
 }
 
 $section = 'ck_editor_images';
-$baseDir = __DIR__ . '/../';
 $relDir = upload_company_asset_dir($tenantSlug, $section);
-$uploadDir = $baseDir . $relDir;
+$uploadDir = UPLOAD_BASE_DIR . $relDir;
 
 upload_ensure_dir($uploadDir);
 
@@ -60,7 +59,7 @@ $targetPath = $uploadDir . $newFilename;
 if (move_uploaded_file($file['tmp_name'], $targetPath)) {
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
     $host = $_SERVER['HTTP_HOST'];
-    $publicUrl = $protocol . $host . '/' . $relDir . $newFilename;
+    $publicUrl = $protocol . $host . UPLOAD_BASE_URL . ltrim($relDir, '/') . $newFilename;
 
     echo json_encode([
         'uploaded' => 1,

@@ -2,6 +2,7 @@
 require_once 'auth_check.php';
 require_once 'includes/commerce.php';
 require_once 'includes/brand.php';
+require_once 'includes/upload_paths.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
@@ -28,12 +29,12 @@ $bizAddr = htmlspecialchars($biz['address'] ?? '');
 $bizPhone = htmlspecialchars($biz['phone'] ?? '');
 $bizEmail = htmlspecialchars($biz['email'] ?? '');
 $bizGstin = htmlspecialchars($biz['gstin'] ?? '');
-$bizLogo = !empty($biz['logo_path']) ? '/' . $biz['logo_path'] : $companyLogo;
+$bizLogo = !empty($biz['logo_path']) ? UPLOAD_BASE_URL . urlencode(ltrim($biz['logo_path'], '/')) : $companyLogo;
 $bankName = htmlspecialchars($biz['bank_name'] ?? '');
 $accountNo = htmlspecialchars($biz['account_no'] ?? '');
 $ifscCode = htmlspecialchars($biz['ifsc_code'] ?? '');
 $terms = htmlspecialchars($biz['terms'] ?? 'Thanks for doing business with us!');
-$sigPath = !empty($biz['signature_path']) ? '/' . $biz['signature_path'] : '';
+$sigPath = !empty($biz['signature_path']) ? UPLOAD_BASE_URL . urlencode(ltrim($biz['signature_path'], '/')) : '';
 
 // Fetch invoice print settings
 $invSettingsStmt = $conn->query("SELECT * FROM {$prefix}invoice_settings WHERE id = 1");
