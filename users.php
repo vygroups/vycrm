@@ -83,7 +83,7 @@ $v = time();
                                     <?php endif; ?>
                                 </td>
                                 <td><?= date('M d, Y', strtotime($u['created_at'])) ?></td>
-                                <td><button class="btn-icon" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button></td>
+                                <td><button class="btn-icon" title="Edit" onclick='editUser(<?= json_encode($u) ?>)'><i class="fa-solid fa-pen-to-square"></i></button></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -97,10 +97,11 @@ $v = time();
 <div class="modal" id="userModal">
     <div class="modal-content">
         <div class="flex justify-between items-center mb-4">
-            <h3 style="margin:0;">Add Tenant User</h3>
+            <h3 id="modalTitle" style="margin:0;">Add Tenant User</h3>
             <button class="btn-icon" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <form id="addUserForm">
+            <input type="hidden" name="id" id="user_id" value="">
             <div style="display: flex; gap: 15px;">
                 <div class="form-group" style="flex: 1;">
                     <label class="form-label">First Name</label>
@@ -120,8 +121,8 @@ $v = time();
                 <input type="email" class="form-control" name="email" required placeholder="e.g. jane@company.com">
             </div>
             <div class="form-group">
-                <label class="form-label">Initial Password</label>
-                <input type="password" class="form-control" name="password" required placeholder="••••••••">
+                <label class="form-label" id="pwdLabel">Initial Password</label>
+                <input type="password" class="form-control" name="password" id="user_password" placeholder="••••••••">
             </div>
             <div class="form-group">
                 <label class="form-label">Assign Role</label>
@@ -143,13 +144,35 @@ $v = time();
 </div>
 
 <script>
-function openModal() { document.getElementById('userModal').style.display = 'flex'; }
+function openModal() { 
+    document.getElementById('userModal').style.display = 'flex'; 
+    document.getElementById('modalTitle').innerText = 'Add Tenant User';
+    document.getElementById('addUserForm').reset();
+    document.getElementById('user_id').value = '';
+    document.getElementById('user_password').required = true;
+    document.getElementById('pwdLabel').innerText = 'Initial Password';
+}
 function closeModal() { document.getElementById('userModal').style.display = 'none'; }
+
+function editUser(user) {
+    openModal();
+    document.getElementById('modalTitle').innerText = 'Edit Tenant User';
+    document.getElementById('user_id').value = user.id;
+    document.querySelector('input[name="first_name"]').value = user.first_name || '';
+    document.querySelector('input[name="last_name"]').value = user.last_name || '';
+    document.querySelector('input[name="username"]').value = user.username || '';
+    document.querySelector('input[name="email"]').value = user.email || '';
+    document.querySelector('select[name="role_id"]').value = user.role_id || '';
+    document.getElementById('is_admin').checked = user.is_admin == 1;
+    
+    document.getElementById('user_password').required = false;
+    document.getElementById('pwdLabel').innerText = 'Password (leave blank to keep current)';
+}
 
 document.getElementById('addUserForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData(this);
-    fetch('/api/create_user.php', { method: 'POST', body: formData })
+    fetch('/api/save_user.php', { method: 'POST', body: formData })
     .then(r => r.json())
     .then(data => {
         if(data.success) {

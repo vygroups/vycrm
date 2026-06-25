@@ -159,6 +159,9 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
                     style="<?= $_sidebarBillingEnabled ? '' : 'display:none;' ?>">
                     <i class="fa-solid fa-print"></i><span class="nav-text">Invoice Settings</span>
                 </a>
+                <a href="communications.php" class="nav-item <?= $currentFile === 'communications.php' ? 'active' : '' ?>">
+                    <i class="fa-solid fa-satellite-dish"></i><span class="nav-text">Communications</span>
+                </a>
                 <a href="module_manager.php" class="nav-item <?= $currentFile === 'module_manager.php' ? 'active' : '' ?>">
                     <i class="fa-solid fa-cubes"></i><span class="nav-text">Module Manager</span>
                 </a>

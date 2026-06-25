@@ -103,49 +103,91 @@ try {
                         '{Designation}' => $recipient['designation'] ?: ''
                     ];
 
-                    $subject = str_replace(array_keys($replacements), array_values($replacements), $campaign['subject'] ?? '');
-                    $body = str_replace(array_keys($replacements), array_values($replacements), $campaign['body'] ?? '');
+                    $subject = str_ireplace(array_keys($replacements), array_values($replacements), $campaign['subject'] ?? '');
+                    $body = str_ireplace(array_keys($replacements), array_values($replacements), $campaign['body'] ?? '');
 
                     $sendSuccess = false;
                     $errorMsg = null;
 
                     if ($campaignType === 'email') {
-                        $smtpHost = dm_get_system_setting($conn, $tenantPrefix, 'smtp_host', '');
-                        $smtpPort = (int)dm_get_system_setting($conn, $tenantPrefix, 'smtp_port', '587');
-                        $smtpUser = dm_get_system_setting($conn, $tenantPrefix, 'smtp_user', '');
-                        $smtpPass = dm_get_system_setting($conn, $tenantPrefix, 'smtp_pass', '');
-                        $smtpFromEmail = dm_get_system_setting($conn, $tenantPrefix, 'smtp_from_email', '');
-                        $smtpFromName = dm_get_system_setting($conn, $tenantPrefix, 'smtp_from_name', '');
-                        $smtpEnc = dm_get_system_setting($conn, $tenantPrefix, 'smtp_encryption', 'none');
+                        $configData = null;
+                        if (!empty($campaign['communication_config_id'])) {
+                            $cStmt = $conn->prepare("SELECT config_data FROM {$tenantPrefix}communication_configs WHERE id = ? AND type = 'smtp'");
+                            $cStmt->execute([$campaign['communication_config_id']]);
+                            $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+                            if ($cRow && $cRow['config_data']) {
+                                $configData = json_decode($cRow['config_data'], true);
+                            }
+                        }
+                        if (!$configData) {
+                            $cStmt = $conn->query("SELECT config_data FROM {$tenantPrefix}communication_configs WHERE type = 'smtp' AND is_default = 1 LIMIT 1");
+                            $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+                            if ($cRow && $cRow['config_data']) {
+                                $configData = json_decode($cRow['config_data'], true);
+                            }
+                        }
 
-                        if (!$smtpHost || !$smtpFromEmail) {
-                            $errorMsg = 'SMTP settings are not configured. Go to Settings > Business Profile.';
-                        } else if (!$recipient['email']) {
-                            $errorMsg = 'No email address provided for recipient.';
+                        if (!$configData) {
+                            $errorMsg = 'SMTP configuration is missing. Add one in Settings > Communications.';
                         } else {
-                            try {
-                                $sendSuccess = dm_send_smtp_email(
-                                    $smtpHost, $smtpPort, $smtpUser, $smtpPass,
-                                    $smtpFromEmail, $smtpFromName,
-                                    $recipient['email'], $subject, $body, $smtpEnc
-                                );
-                            } catch (Throwable $e) {
-                                $errorMsg = $e->getMessage();
+                            $smtpHost = $configData['smtp_host'] ?? '';
+                            $smtpPort = (int)($configData['smtp_port'] ?? 0);
+                            $smtpUser = $configData['smtp_user'] ?? '';
+                            $smtpPass = $configData['smtp_pass'] ?? '';
+                            $smtpFromEmail = $configData['smtp_from_email'] ?? '';
+                            $smtpFromName = $configData['smtp_from_name'] ?? '';
+                            $smtpEnc = $configData['smtp_encryption'] ?? 'none';
+
+                            if (!$smtpHost || !$smtpFromEmail) {
+                                $errorMsg = 'SMTP settings are incomplete.';
+                            } else if (!$recipient['email']) {
+                                $errorMsg = 'No email address provided for recipient.';
+                            } else {
+                                try {
+                                    $sendSuccess = dm_send_smtp_email(
+                                        $smtpHost, $smtpPort, $smtpUser, $smtpPass,
+                                        $smtpFromEmail, $smtpFromName,
+                                        $recipient['email'], $subject, $body, $smtpEnc
+                                    );
+                                } catch (Throwable $e) {
+                                    $errorMsg = $e->getMessage();
+                                }
                             }
                         }
                     } else {
-                        $waUrl = dm_get_system_setting($conn, $tenantPrefix, 'whatsapp_api_url', '');
-                        $waToken = dm_get_system_setting($conn, $tenantPrefix, 'whatsapp_access_token', '');
+                        $configData = null;
+                        if (!empty($campaign['communication_config_id'])) {
+                            $cStmt = $conn->prepare("SELECT config_data FROM {$tenantPrefix}communication_configs WHERE id = ? AND type = 'whatsapp'");
+                            $cStmt->execute([$campaign['communication_config_id']]);
+                            $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+                            if ($cRow && $cRow['config_data']) {
+                                $configData = json_decode($cRow['config_data'], true);
+                            }
+                        }
+                        if (!$configData) {
+                            $cStmt = $conn->query("SELECT config_data FROM {$tenantPrefix}communication_configs WHERE type = 'whatsapp' AND is_default = 1 LIMIT 1");
+                            $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+                            if ($cRow && $cRow['config_data']) {
+                                $configData = json_decode($cRow['config_data'], true);
+                            }
+                        }
 
-                        if (!$waUrl || !$waToken) {
-                            $errorMsg = 'WhatsApp credentials not configured. Save them under Modules > Configuration rules.';
-                        } else if (!$recipient['phone']) {
-                            $errorMsg = 'No phone number provided for recipient.';
+                        if (!$configData) {
+                            $errorMsg = 'WhatsApp configuration is missing. Add one in Settings > Communications.';
                         } else {
-                            try {
-                                $sendSuccess = dm_send_whatsapp_message($waUrl, $waToken, $recipient['phone'], $body);
-                            } catch (Throwable $e) {
-                                $errorMsg = $e->getMessage();
+                            $waUrl = $configData['wa_url'] ?? '';
+                            $waToken = $configData['wa_token'] ?? '';
+
+                            if (!$waUrl || !$waToken) {
+                                $errorMsg = 'WhatsApp credentials are incomplete.';
+                            } else if (!$recipient['phone']) {
+                                $errorMsg = 'No phone number provided for recipient.';
+                            } else {
+                                try {
+                                    $sendSuccess = dm_send_whatsapp_message($waUrl, $waToken, $recipient['phone'], $body);
+                                } catch (Throwable $e) {
+                                    $errorMsg = $e->getMessage();
+                                }
                             }
                         }
                     }

@@ -56,6 +56,12 @@ try {
     }
 } catch (Exception $e) {}
 
+$commConfigs = [];
+try {
+    $stmt = $conn->query("SELECT id, name, type, is_default FROM {$prefix}communication_configs ORDER BY type ASC, name ASC");
+    $commConfigs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
+
 
 ?>
 <!DOCTYPE html>
@@ -694,11 +700,17 @@ try {
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
                     <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
                         <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Action *</label>
-                        <select id="workflowActionType" class="form-control" onchange="onWorkflowActionTypeChange()" style="width:100%;">
+                        <select id="workflowActionType" class="form-control" onchange="onWorkflowActionTypeChange()" style="width:100%; margin-bottom:8px;">
                             <option value="email">Send Email</option>
                             <option value="whatsapp">Send WhatsApp Message</option>
                             <option value="push">Send Push Notification</option>
                         </select>
+                        <div id="workflowConfigContainer" style="display:block;">
+                            <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Send From Config</label>
+                            <select id="workflowCommConfig" class="form-control" style="width:100%;">
+                                <option value="">-- Use Default --</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
                         <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text);">Recipient *</label>
@@ -851,6 +863,7 @@ try {
         const ALL_COUNTRIES = <?= json_encode(dm_get_countries()) ?>;
         const ALL_STATES = <?= json_encode(dm_get_states()) ?>;
         const ALL_DISTRICTS = <?= json_encode(dm_get_districts()) ?>;
+        const commConfigs = <?= json_encode($commConfigs) ?>;
         
         <?php if ($editModule): ?>
         const MODULE_PERMS = {
@@ -1589,6 +1602,11 @@ try {
             
             document.getElementById('workflowActionType').value = editData ? editData.action_type : 'email';
             onWorkflowActionTypeChange();
+            if (editData && editData.communication_config_id) {
+                document.getElementById('workflowCommConfig').value = editData.communication_config_id;
+            } else {
+                document.getElementById('workflowCommConfig').value = '';
+            }
             
             recipientSelect.value = editData ? (editData.recipient_field_id || '') : '';
             document.getElementById('workflowRecipientCustom').value = editData ? (editData.recipient_custom || '') : '';
@@ -1654,6 +1672,19 @@ try {
         function onWorkflowActionTypeChange() {
             const actionType = document.getElementById('workflowActionType').value;
             const subjectGroup = document.getElementById('workflowSubjectGroup');
+            const configType = actionType === 'email' ? 'smtp' : (actionType === 'whatsapp' ? 'whatsapp' : '');
+            
+            const configSelect = document.getElementById('workflowCommConfig');
+            configSelect.innerHTML = '<option value="">-- Use Default --</option>';
+            if (configType) {
+                document.getElementById('workflowConfigContainer').style.display = 'block';
+                commConfigs.filter(c => c.type === configType).forEach(c => {
+                    configSelect.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)}${c.is_default == 1 ? ' (Default)' : ''}</option>`;
+                });
+            } else {
+                document.getElementById('workflowConfigContainer').style.display = 'none';
+            }
+            
             if (actionType === 'email') {
                 subjectGroup.style.display = 'flex';
             } else {
@@ -1706,6 +1737,7 @@ try {
             const recipientCustom = document.getElementById('workflowRecipientCustom').value.trim();
             const templateSubject = document.getElementById('workflowSubject').value.trim();
             const templateBody = document.getElementById('workflowBody').value.trim();
+            const commConfigId = document.getElementById('workflowCommConfig').value || null;
             
             if (!name) {
                 vyToast('Rule name is required.', 'error');
@@ -1745,6 +1777,7 @@ try {
                 recipient_custom: recipientCustom || null,
                 template_subject: templateSubject || null,
                 template_body: templateBody,
+                communication_config_id: commConfigId,
                 status: 'active'
             };
             

@@ -92,18 +92,20 @@ if ($companySlug) {
                     <input type="hidden" name="company" value="<?= htmlspecialchars($companySlug) ?>">
                     <div class="form-group">
                         <label class="form-label">Username or Email</label>
-                        <input type="text" class="form-control" name="username" placeholder="admin" value="admin" required>
+                        <input type="text" class="form-control" name="username" placeholder="Username or Email" required>
                     </div>
                     <div class="form-group mb-4">
                         <div class="flex justify-between items-center mb-1">
                             <label class="form-label mb-0">Password</label>
                             <a href="#" class="text-sm text-muted">Forgot password?</a>
                         </div>
-                        <input type="password" class="form-control" name="password" placeholder="••••••••" value="admin@123" required>
+                        <div style="position: relative;">
+                            <input type="password" class="form-control" name="password" id="loginPassword" placeholder="••••••••" required style="padding-right: 40px;">
+                            <i class="fa-regular fa-eye" id="togglePassword" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); padding: 5px;"></i>
+                        </div>
                     </div>
 
                     <button type="submit" class="btn-primary" id="loginBtn">Sign In</button>
-                    <p class="text-xs text-muted mt-3 text-center" style="padding-top: 15px;">Default Login: admin / admin@123</p>
                 </form>
             </div>
         </div>
@@ -167,6 +169,14 @@ if ($companySlug) {
                 btn.disabled = false;
                 btn.textContent = "Sign In";
             });
+        });
+
+        document.getElementById('togglePassword').addEventListener('click', function () {
+            const passwordInput = document.getElementById('loginPassword');
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            this.classList.toggle('fa-eye');
+            this.classList.toggle('fa-eye-slash');
         });
     </script>
 </body>

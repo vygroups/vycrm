@@ -568,7 +568,8 @@ try {
             $recipientFieldId = !empty($input['recipient_field_id']) ? (int)$input['recipient_field_id'] : null;
             $recipientCustom = !empty($input['recipient_custom']) ? trim($input['recipient_custom']) : null;
             $templateSubject = !empty($input['template_subject']) ? trim($input['template_subject']) : null;
-            $templateBody = trim($input['template_body'] ?? '');
+            $templateBody = !empty($input['template_body']) ? trim($input['template_body']) : null;
+            $commConfigId = !empty($input['communication_config_id']) ? (int)$input['communication_config_id'] : null;
             $wfStatus = $input['status'] ?? 'active';
 
             if (!$wfModuleId) throw new RuntimeException('Module ID is required');
@@ -581,14 +582,14 @@ try {
                     SET name = ?, trigger_event = ?, condition_type = ?, 
                         trigger_field_id = ?, trigger_value = ?, action_type = ?, 
                         recipient_field_id = ?, recipient_custom = ?, template_subject = ?, 
-                        template_body = ?, status = ?
+                        template_body = ?, communication_config_id = ?, status = ?
                     WHERE id = ?
                 ");
                 $stmt->execute([
                     $wfName, $triggerEvent, $conditionType,
                     $triggerFieldId, $triggerValue, $actionType,
                     $recipientFieldId, $recipientCustom, $templateSubject,
-                    $templateBody, $wfStatus, $wfId
+                    $templateBody, $commConfigId, $wfStatus, $wfId
                 ]);
                 $savedId = $wfId;
             } else {
@@ -596,13 +597,13 @@ try {
                     INSERT INTO {$prefix}module_workflows 
                     (module_id, name, trigger_event, condition_type, 
                      trigger_field_id, trigger_value, action_type, 
-                     recipient_field_id, recipient_custom, template_subject, template_body, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     recipient_field_id, recipient_custom, template_subject, template_body, communication_config_id, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmt->execute([
                     $wfModuleId, $wfName, $triggerEvent, $conditionType,
                     $triggerFieldId, $triggerValue, $actionType,
-                    $recipientFieldId, $recipientCustom, $templateSubject, $templateBody, $wfStatus
+                    $recipientFieldId, $recipientCustom, $templateSubject, $templateBody, $commConfigId, $wfStatus
                 ]);
                 $savedId = $conn->lastInsertId();
             }

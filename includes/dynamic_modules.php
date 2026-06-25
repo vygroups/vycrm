@@ -928,16 +928,33 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
         $errorMsg = null;
 
         if ($w['action_type'] === 'email') {
-            $smtpHost = dm_get_system_setting($conn, $p, 'smtp_host', '');
-            $smtpPort = (int)dm_get_system_setting($conn, $p, 'smtp_port', 0);
-            $smtpUser = dm_get_system_setting($conn, $p, 'smtp_user', '');
-            $smtpPass = dm_get_system_setting($conn, $p, 'smtp_pass', '');
-            $smtpFromEmail = dm_get_system_setting($conn, $p, 'smtp_from_email', '');
-            $smtpFromName = dm_get_system_setting($conn, $p, 'smtp_from_name', '');
-            $smtpEnc = dm_get_system_setting($conn, $p, 'smtp_encryption', 'none');
+            $configData = null;
+            if (!empty($w['communication_config_id'])) {
+                $cStmt = $conn->prepare("SELECT config_data FROM {$p}communication_configs WHERE id = ? AND type = 'smtp'");
+                $cStmt->execute([$w['communication_config_id']]);
+                $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+                if ($cRow && $cRow['config_data']) {
+                    $configData = json_decode($cRow['config_data'], true);
+                }
+            }
+            if (!$configData) {
+                // Fallback to default
+                $cStmt = $conn->query("SELECT config_data FROM {$p}communication_configs WHERE type = 'smtp' AND is_default = 1 LIMIT 1");
+                $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+                if ($cRow && $cRow['config_data']) {
+                    $configData = json_decode($cRow['config_data'], true);
+                }
+            }
 
-            if ($smtpHost && $smtpPort) {
-                // Route email via configured SMTP settings
+            if ($configData) {
+                $smtpHost = $configData['smtp_host'] ?? '';
+                $smtpPort = (int)($configData['smtp_port'] ?? 0);
+                $smtpUser = $configData['smtp_user'] ?? '';
+                $smtpPass = $configData['smtp_pass'] ?? '';
+                $smtpFromEmail = $configData['smtp_from_email'] ?? '';
+                $smtpFromName = $configData['smtp_from_name'] ?? '';
+                $smtpEnc = $configData['smtp_encryption'] ?? 'none';
+                
                 try {
                     dm_send_smtp_email($smtpHost, $smtpPort, $smtpUser, $smtpPass, $smtpFromEmail, $smtpFromName, $recipient, $subject, $body, $smtpEnc);
                 } catch (Throwable $e) {
@@ -957,10 +974,28 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
                 }
             }
         } elseif ($w['action_type'] === 'whatsapp') {
-            $whatsappApiUrl = dm_get_system_setting($conn, $p, 'whatsapp_api_url', '');
-            $whatsappToken = dm_get_system_setting($conn, $p, 'whatsapp_access_token', '');
+            $configData = null;
+            if (!empty($w['communication_config_id'])) {
+                $cStmt = $conn->prepare("SELECT config_data FROM {$p}communication_configs WHERE id = ? AND type = 'whatsapp'");
+                $cStmt->execute([$w['communication_config_id']]);
+                $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+                if ($cRow && $cRow['config_data']) {
+                    $configData = json_decode($cRow['config_data'], true);
+                }
+            }
+            if (!$configData) {
+                // Fallback to default
+                $cStmt = $conn->query("SELECT config_data FROM {$p}communication_configs WHERE type = 'whatsapp' AND is_default = 1 LIMIT 1");
+                $cRow = $cStmt->fetch(PDO::FETCH_ASSOC);
+                if ($cRow && $cRow['config_data']) {
+                    $configData = json_decode($cRow['config_data'], true);
+                }
+            }
 
-            if ($whatsappApiUrl && $whatsappToken) {
+            if ($configData && !empty($configData['wa_url']) && !empty($configData['wa_token'])) {
+                $whatsappApiUrl = $configData['wa_url'];
+                $whatsappToken = $configData['wa_token'];
+
                 // Dispatch via WhatsApp Gateway API URL
                 try {
                     dm_send_whatsapp_message($whatsappApiUrl, $whatsappToken, $recipient, $body);

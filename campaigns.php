@@ -11,6 +11,12 @@ $prefix = $context['prefix'];
 // Ensure campaign tables are present
 dm_ensure_tables($conn, $prefix);
 
+$commConfigs = [];
+try {
+    $stmt = $conn->query("SELECT id, name, type, is_default FROM {$prefix}communication_configs ORDER BY type ASC, name ASC");
+    $commConfigs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
+
 $v = time();
 ?>
 <!DOCTYPE html>
@@ -340,6 +346,13 @@ $v = time();
                 </div>
 
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; margin-top: 15px;">
+                    <label class="form-label">Send From Config</label>
+                    <select id="campaignCommConfig" class="form-control" style="width: 100%;">
+                        <option value="">-- Use Default --</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; margin-top: 15px;">
                     <label class="form-label">Send Mode *</label>
                     <select id="campaignSendMode" class="form-control" style="width: 100%;" onchange="onCampaignSendModeChange()">
                         <option value="immediate">Send Immediately</option>
@@ -372,6 +385,7 @@ $v = time();
 
     <script>
         const API = 'api/campaigns_api.php';
+        const commConfigs = <?= json_encode($commConfigs) ?>;
         let campaignsList = [];
         let templatesList = [];
         let activeCampaign = null;
@@ -472,6 +486,15 @@ $v = time();
                 opt.textContent = t.name;
                 select.appendChild(opt);
             });
+            
+            const configSelect = document.getElementById('campaignCommConfig');
+            configSelect.innerHTML = '<option value="">-- Use Default --</option>';
+            const configType = type === 'email' ? 'smtp' : (type === 'whatsapp' ? 'whatsapp' : '');
+            if (configType) {
+                commConfigs.filter(c => c.type === configType).forEach(c => {
+                    configSelect.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)}${c.is_default == 1 ? ' (Default)' : ''}</option>`;
+                });
+            }
         }
 
         function openCreateModal() {
@@ -479,6 +502,7 @@ $v = time();
             document.getElementById('campaignType').value = 'email';
             document.getElementById('campaignSendMode').value = 'immediate';
             document.getElementById('campaignSendDelay').value = '0';
+            document.getElementById('campaignCommConfig').value = '';
             onCampaignSendModeChange();
             onCampaignTypeChange();
             openModal('createCampaignModal');
@@ -513,6 +537,7 @@ $v = time();
             const send_mode = document.getElementById('campaignSendMode').value;
             const send_delay = parseInt(document.getElementById('campaignSendDelay').value) || 0;
             const scheduled_at = scheduledAtEl.value;
+            const comm_config_id = document.getElementById('campaignCommConfig').value || null;
 
             if (!name) {
                 vyToast('Campaign name is required.', 'error');
@@ -542,7 +567,7 @@ $v = time();
                 const res = await fetch(API, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'save_campaign', name, type, template_id, send_mode, send_delay, scheduled_at })
+                    body: JSON.stringify({ action: 'save_campaign', name, type, template_id, send_mode, send_delay, scheduled_at, communication_config_id: comm_config_id })
                 });
                 const data = await res.json();
                 if (data.success) {

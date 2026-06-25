@@ -9,7 +9,7 @@ $tenant_db = $_SESSION['tenant_db'];
 $prefix = $_SESSION['tenant_prefix'];
 $conn = Database::getTenantConn($tenant_db);
 
-$stmt = $conn->prepare("SELECT * FROM {$prefix}users WHERE id = ?");
+$stmt = $conn->prepare("SELECT u.*, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON u.role_id = r.id WHERE u.id = ?");
 $stmt->execute([$user_id]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -123,10 +123,17 @@ if (!empty($profile_picture)) {
                                     <input type="text" id="last_name" class="form-control" value="<?= htmlspecialchars($user['last_name'] ?? '') ?>" placeholder="e.g. Doe">
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">Username</label>
-                                <input type="text" class="form-control"
-                                    value="<?= htmlspecialchars($user['username']) ?>" readonly style="opacity:0.7;">
+                            <div style="display: flex; gap: 15px;">
+                                <div class="form-group" style="flex: 1;">
+                                    <label class="form-label">Username</label>
+                                    <input type="text" class="form-control"
+                                        value="<?= htmlspecialchars($user['username']) ?>" readonly style="opacity:0.7;">
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label class="form-label">Role</label>
+                                    <input type="text" class="form-control"
+                                        value="<?= htmlspecialchars($user['role_name'] ?? 'No Role Assigned') ?>" readonly style="opacity:0.7;">
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label class="form-label">Email</label>
