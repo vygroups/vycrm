@@ -854,6 +854,11 @@ try {
             // Optimistically update sidebar
             const sidebarEl = document.getElementById(sidebarMap[key]);
             if (sidebarEl) sidebarEl.style.display = enabled ? '' : 'none';
+            
+            if (key === 'billing_enabled') {
+                const invoiceSettingsEl = document.getElementById('sidebar-invoice-settings');
+                if (invoiceSettingsEl) invoiceSettingsEl.style.display = enabled ? '' : 'none';
+            }
 
             api('update_system_setting', { key, value: enabled ? '1' : '0' }).then(r => {
                 if (!r.success) {
@@ -864,6 +869,10 @@ try {
                         if (pill) pill.classList.toggle('active', !enabled);
                     }
                     if (sidebarEl) sidebarEl.style.display = enabled ? 'none' : '';
+                    if (key === 'billing_enabled') {
+                        const invoiceSettingsEl = document.getElementById('sidebar-invoice-settings');
+                        if (invoiceSettingsEl) invoiceSettingsEl.style.display = enabled ? 'none' : '';
+                    }
                     alert(r.error || 'Failed to save setting.');
                 }
             });

@@ -154,8 +154,9 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
                 <a href="profile.php" class="nav-item <?= $currentFile === 'profile.php' ? 'active' : '' ?>">
                     <i class="fa-solid fa-briefcase"></i><span class="nav-text">Business Profile</span>
                 </a>
-                <a href="invoice_settings.php"
-                    class="nav-item <?= $currentFile === 'invoice_settings.php' ? 'active' : '' ?>">
+                <a href="invoice_settings.php" id="sidebar-invoice-settings"
+                    class="nav-item <?= $currentFile === 'invoice_settings.php' ? 'active' : '' ?>"
+                    style="<?= $_sidebarBillingEnabled ? '' : 'display:none;' ?>">
                     <i class="fa-solid fa-print"></i><span class="nav-text">Invoice Settings</span>
                 </a>
                 <a href="module_manager.php" class="nav-item <?= $currentFile === 'module_manager.php' ? 'active' : '' ?>">
