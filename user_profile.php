@@ -16,6 +16,18 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC);
 $time_format = $user['time_format'] ?? '12h';
 $date_format = $user['date_format'] ?? 'd M, Y';
 $profile_picture = $user['profile_picture'] ?? '';
+require_once 'includes/upload_paths.php';
+$profile_picture_url = '';
+if (!empty($profile_picture)) {
+    // If it's a legacy absolute path, just use it, otherwise use UPLOAD_BASE_URL
+    if (strpos($profile_picture, '/') === 0) {
+        $profile_picture_url = UPLOAD_BASE_URL . urlencode(ltrim($profile_picture, '/'));
+    } else {
+        $profile_picture_url = UPLOAD_BASE_URL . urlencode($profile_picture);
+    }
+} else {
+    $profile_picture_url = 'https://ui-avatars.com/api/?name=' . urlencode($user['username']) . '&background=7b5ef0&color=fff';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -92,7 +104,7 @@ $profile_picture = $user['profile_picture'] ?? '';
                         <form id="userProfileForm" onsubmit="saveProfile(event)">
                             <div class="form-group" style="text-align: center;">
                                 <img id="picPreview"
-                                    src="<?= $profile_picture ? $profile_picture : 'https://ui-avatars.com/api/?name=' . urlencode($user['username']) . '&background=7b5ef0&color=fff' ?>"
+                                    src="<?= htmlspecialchars($profile_picture_url) ?>"
                                     class="profile-pic-preview">
                                 <br>
                                 <label for="profile_pic" class="btn-primary"

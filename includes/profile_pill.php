@@ -1,11 +1,22 @@
 <?php
 // includes/profile_pill.php
+require_once __DIR__ . '/upload_paths.php';
+
 $username = $_SESSION['username'] ?? 'User';
 $first_name = $_SESSION['first_name'] ?? '';
 $last_name = $_SESSION['last_name'] ?? '';
 $display_name = trim("$first_name $last_name") ?: $username;
 
-$profile_pic = !empty($_SESSION['profile_picture']) ? htmlspecialchars($_SESSION['profile_picture']) : "https://ui-avatars.com/api/?name=" . urlencode($display_name) . "&background=7b5ef0&color=fff";
+$profile_pic = '';
+if (!empty($_SESSION['profile_picture'])) {
+    if (strpos($_SESSION['profile_picture'], '/') === 0) {
+        $profile_pic = UPLOAD_BASE_URL . urlencode(ltrim($_SESSION['profile_picture'], '/'));
+    } else {
+        $profile_pic = UPLOAD_BASE_URL . urlencode($_SESSION['profile_picture']);
+    }
+} else {
+    $profile_pic = "https://ui-avatars.com/api/?name=" . urlencode($display_name) . "&background=7b5ef0&color=fff";
+}
 ?>
 <div class="profile-pill" onclick="toggleProfileDropdown(event)">
     <img src="<?= $profile_pic ?>"

@@ -61,12 +61,14 @@ try {
             $slug = upload_normalize_company_slug($_SESSION['tenant_slug']);
             $basename = 'user_' . $user_id;
             $rel_dir = upload_company_asset_dir($slug, 'profiles');
-            upload_clean_existing_files('../' . $rel_dir, $basename);
-            upload_ensure_dir('../' . $rel_dir);
-            $dest = $rel_dir . $basename . '.' . $ext;
+            $physicalDir = UPLOAD_BASE_DIR . $rel_dir;
+            upload_clean_existing_files($physicalDir, $basename);
+            upload_ensure_dir($physicalDir);
+            $logicalDest = $rel_dir . $basename . '.' . $ext;
+            $physicalDest = UPLOAD_BASE_DIR . $logicalDest;
 
-            if (file_put_contents('../' . $dest, $data)) {
-                $profile_picture = '/' . $dest;
+            if (file_put_contents($physicalDest, $data)) {
+                $profile_picture = $logicalDest;
             } else {
                 echo json_encode(['success' => false, 'message' => 'Failed to write image file to disk.']);
                 exit;
