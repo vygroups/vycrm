@@ -195,9 +195,11 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
     $fields = $fStmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Get record IDs with Visibility Filtering
-    $mStmt = $conn->prepare("SELECT visibility_rule FROM {$p}modules WHERE id = ?");
+    $mStmt = $conn->prepare("SELECT * FROM {$p}modules WHERE id = ?");
     $mStmt->execute([$moduleId]);
-    $rule = $mStmt->fetchColumn() ?: 'all';
+    $module = $mStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$module) return ['fields' => [], 'records' => [], 'total' => 0];
+    $rule = $module['visibility_rule'] ?: 'all';
 
     $baseSql = " FROM {$p}module_records r WHERE r.module_id = ?";
     $params = [$moduleId];
@@ -238,7 +240,8 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                 $prStmt->execute([$currentUserRole]);
                 $parentRoles = $prStmt->fetchAll(PDO::FETCH_COLUMN);
             }
-            $vConditions[] = "r.created_by IN (SELECT id FROM {$p}users WHERE role_id IN (" . implode(',', array_map('intval', $parentRoles ?: [0])) . "))";
+            $vConditions[] = "(r.created_by = ? OR r.created_by IN (SELECT id FROM {$p}users WHERE role_id IN (" . implode(',', array_map('intval', $parentRoles ?: [0])) . ")))";
+            $params[] = $currentUserId;
         }
 
         // Add "Assigned To Me" exception
@@ -398,6 +401,9 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
             $rec['values'][$sysFieldMap['sys_updated_by']] = $userMap[$rec['updated_by']] ?? ($rec['updated_by'] ? "User #" . $rec['updated_by'] : "");
         if (isset($sysFieldMap['sys_updated_at']))
             $rec['values'][$sysFieldMap['sys_updated_at']] = $rec['updated_at'];
+            
+        $rec['can_edit'] = dm_can_edit_record($conn, $p, $module, $rec['created_by'], $currentUserId, $currentUserRole, $isAdmin);
+        $rec['can_delete'] = dm_can_delete_record($conn, $p, $module, $rec['created_by'], $currentUserId, $currentUserRole, $isAdmin);
     }
     unset($rec);
 
@@ -690,6 +696,9 @@ function dm_get_visible_user_ids(PDO $conn, string $p, int $userId, ?int $roleId
             $inClause = implode(',', array_map('intval', $parentRoles));
             $uStmt = $conn->query("SELECT id FROM {$p}users WHERE role_id IN ($inClause)");
             $allowedUserIds = array_merge($allowedUserIds, $uStmt->fetchAll(PDO::FETCH_COLUMN));
+        }
+        if (!in_array($userId, $allowedUserIds)) {
+            $allowedUserIds[] = $userId;
         }
     }
 
@@ -1180,4 +1189,30 @@ function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, str
         throw new Exception("WhatsApp API returned HTTP $httpCode: $response");
     }
     return true;
+}
+
+function dm_can_edit_record($conn, $p, $module, $recordOwnerId, $userId, $userRoleId, $isAdmin = false) {
+    if ($isAdmin) return true;
+    $rule = $module['edit_rule'] ?? 'all';
+    if ($rule === 'all') return true;
+    if ($rule === 'specific_roles') {
+        $rolesStr = $module['edit_roles'] ?? '';
+        $roles = array_filter(array_map('trim', explode(',', $rolesStr)));
+        return in_array((string)$userRoleId, $roles, true);
+    }
+    $allowedIds = dm_get_visible_user_ids($conn, $p, $userId, $userRoleId, $rule);
+    return in_array((int)$recordOwnerId, $allowedIds, true);
+}
+
+function dm_can_delete_record($conn, $p, $module, $recordOwnerId, $userId, $userRoleId, $isAdmin = false) {
+    if ($isAdmin) return true;
+    $rule = $module['delete_rule'] ?? 'all';
+    if ($rule === 'all') return true;
+    if ($rule === 'specific_roles') {
+        $rolesStr = $module['delete_roles'] ?? '';
+        $roles = array_filter(array_map('trim', explode(',', $rolesStr)));
+        return in_array((string)$userRoleId, $roles, true);
+    }
+    $allowedIds = dm_get_visible_user_ids($conn, $p, $userId, $userRoleId, $rule);
+    return in_array((int)$recordOwnerId, $allowedIds, true);
 }

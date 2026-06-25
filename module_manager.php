@@ -46,9 +46,16 @@ try {
             'name' => $fullName ?: $u['username']
         ];
     }
-} catch (Exception $e) {
-    // Fallback if table doesn't exist
-}
+} catch (Exception $e) {}
+
+$rolesList = [];
+try {
+    $rolesQuery = $conn->query("SELECT id, name FROM {$prefix}roles ORDER BY name ASC");
+    while ($r = $rolesQuery->fetch(PDO::FETCH_ASSOC)) {
+        $rolesList[] = $r;
+    }
+} catch (Exception $e) {}
+
 
 ?>
 <!DOCTYPE html>
@@ -144,16 +151,9 @@ try {
                                         class="fa-solid fa-pencil"></i></button>
                             </div>
                             <div class="mm-editor-actions">
-                                <select class="mm-btn mm-btn-outline" onchange="updateVisibility(this.value)"
-                                    style="padding:8px 12px; font-size:13px;">
-                                    <option value="all" <?= $editModule['visibility_rule'] === 'all' ? 'selected' : '' ?>>Show
-                                        to all</option>
-                                    <option value="owner" <?= $editModule['visibility_rule'] === 'owner' ? 'selected' : '' ?>>
-                                        Owner Only</option>
-                                    <option value="role_down" <?= $editModule['visibility_rule'] === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
-                                    <option value="role_equal_down" <?= $editModule['visibility_rule'] === 'role_equal_down' ? 'selected' : '' ?>>Equal & Lower</option>
-                                    <option value="role_up" <?= $editModule['visibility_rule'] === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
-                                </select>
+                                <button class="mm-btn mm-btn-outline" onclick="openPermissionsModal()" title="Configure module permissions">
+                                    <i class="fa-solid fa-shield-halved"></i> Permissions
+                                </button>
                                 <button class="mm-btn mm-btn-outline" onclick="addBlock()"><i
                                         class="fa-solid fa-layer-group"></i> Add Block</button>
                                 <a href="module_view.php?module=<?= $editModule['id'] ?>" class="mm-btn mm-btn-primary"><i
@@ -783,15 +783,84 @@ try {
         </div>
     </div>
 
+    <div class="mm-modal-overlay" id="permissionsModal">
+        <div class="mm-modal" style="width:500px; border-radius:12px; box-shadow:var(--shadow-lg);">
+            <div class="mm-modal-header" style="padding:20px; border-bottom:1px solid var(--border);">
+                <h3><i class="fa-solid fa-shield-halved" style="color:var(--primary); margin-right:8px;"></i> Module Permissions</h3>
+                <button class="mm-icon-btn" onclick="closeModal('permissionsModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mm-modal-body" style="padding:20px; overflow-y:visible;">
+                <div class="form-group" style="margin-bottom:20px;">
+                    <label class="form-label" style="font-weight:600; color:var(--text-main);">View Visibility</label>
+                    <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px 0;">Who can see the records?</p>
+                    <select id="permVisibility" class="form-control">
+                        <option value="all">Show to all</option>
+                        <option value="owner">Creator Only</option>
+                        <option value="role_down">Creator & Upper Roles (Managers)</option>
+                        <option value="role_equal_down">Creator, Peers & Upper Roles</option>
+                        <option value="role_up">Creator & Lower Roles (Subordinates)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom:20px; border-top:1px solid var(--border); padding-top:16px;">
+                    <label class="form-label" style="font-weight:600; color:var(--text-main);">Edit Permission</label>
+                    <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px 0;">Who can edit existing records?</p>
+                    <select id="permEditRule" class="form-control" onchange="toggleSpecificRoles('edit')">
+                        <option value="all">Anyone who can view</option>
+                        <option value="owner">Creator Only</option>
+                        <option value="role_down">Creator & Upper Roles</option>
+                        <option value="role_equal_down">Creator, Peers & Upper Roles</option>
+                        <option value="role_up">Creator & Lower Roles</option>
+                        <option value="specific_roles">Specific Roles...</option>
+                    </select>
+                    <div id="permEditRolesContainer" style="display:none; margin-top:10px; background:var(--surface); padding:10px; border:1px solid var(--border); border-radius:8px; max-height:150px; overflow-y:auto;">
+                        <!-- Checkboxes populated via JS -->
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:20px; border-top:1px solid var(--border); padding-top:16px;">
+                    <label class="form-label" style="font-weight:600; color:var(--text-main);">Delete Permission</label>
+                    <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px 0;">Who can delete records?</p>
+                    <select id="permDeleteRule" class="form-control" onchange="toggleSpecificRoles('delete')">
+                        <option value="all">Anyone who can view</option>
+                        <option value="owner">Creator Only</option>
+                        <option value="role_down">Creator & Upper Roles</option>
+                        <option value="role_equal_down">Creator, Peers & Upper Roles</option>
+                        <option value="role_up">Creator & Lower Roles</option>
+                        <option value="specific_roles">Specific Roles...</option>
+                    </select>
+                    <div id="permDeleteRolesContainer" style="display:none; margin-top:10px; background:var(--surface); padding:10px; border:1px solid var(--border); border-radius:8px; max-height:150px; overflow-y:auto;">
+                        <!-- Checkboxes populated via JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="mm-modal-footer" style="padding:20px; border-top:1px solid var(--border);">
+                <button class="mm-btn" onclick="closeModal('permissionsModal')">Cancel</button>
+                <button class="mm-btn mm-btn-primary" onclick="savePermissions()"><i class="fa-solid fa-check"></i> Save Permissions</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API = '/api/modules.php';
         const MODULE_ID = <?= $editModule ? $editModule['id'] : 'null' ?>;
         const ALL_FIELD_TYPES = <?= json_encode($fieldTypes) ?>;
         const EDIT_MODULE_FIELDS = <?= json_encode($jsFields) ?>;
         const ALL_USERS = <?= json_encode($usersList) ?>;
+        const ALL_ROLES = <?= json_encode($rolesList) ?>;
         const ALL_COUNTRIES = <?= json_encode(dm_get_countries()) ?>;
         const ALL_STATES = <?= json_encode(dm_get_states()) ?>;
         const ALL_DISTRICTS = <?= json_encode(dm_get_districts()) ?>;
+        
+        <?php if ($editModule): ?>
+        const MODULE_PERMS = {
+            visibility: <?= json_encode($editModule['visibility_rule'] ?? 'all') ?>,
+            edit_rule: <?= json_encode($editModule['edit_rule'] ?? 'all') ?>,
+            edit_roles: <?= json_encode(explode(',', $editModule['edit_roles'] ?? '')) ?>,
+            delete_rule: <?= json_encode($editModule['delete_rule'] ?? 'all') ?>,
+            delete_roles: <?= json_encode(explode(',', $editModule['delete_roles'] ?? '')) ?>
+        };
+        <?php endif; ?>
 
 
         function api(action, data = {}) {
@@ -825,11 +894,7 @@ try {
             if (!name) return;
             api('update', { id: MODULE_ID, name }).then(r => { if (r.success) el.textContent = name; else alert(r.error); });
         }
-        function updateVisibility(val) {
-            api('update', { id: MODULE_ID, visibility_rule: val }).then(r => {
-                if (!r.success) alert(r.error);
-            });
-        }
+
         function toggleModuleStatus(id, currentStatus) {
             const status = currentStatus === 'active' ? 'inactive' : 'active';
             api('update', { id, status }).then(r => {
@@ -2036,6 +2101,79 @@ try {
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
+        }
+
+        function buildRolesCheckboxes(containerId, selectedRoles) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            if (!ALL_ROLES || ALL_ROLES.length === 0) {
+                container.innerHTML = '<div style="color:var(--text-muted); font-size:12px;">No roles available.</div>';
+                return;
+            }
+            ALL_ROLES.forEach(r => {
+                const checked = selectedRoles.includes(r.id.toString()) ? 'checked' : '';
+                container.innerHTML += `
+                    <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer; font-size:13px; color:var(--text-main);">
+                        <input type="checkbox" value="${r.id}" ${checked}> ${escapeHtml(r.name)}
+                    </label>
+                `;
+            });
+        }
+
+        function openPermissionsModal() {
+            document.getElementById('permVisibility').value = MODULE_PERMS.visibility;
+            document.getElementById('permEditRule').value = MODULE_PERMS.edit_rule;
+            document.getElementById('permDeleteRule').value = MODULE_PERMS.delete_rule;
+            
+            buildRolesCheckboxes('permEditRolesContainer', MODULE_PERMS.edit_roles);
+            buildRolesCheckboxes('permDeleteRolesContainer', MODULE_PERMS.delete_roles);
+            
+            toggleSpecificRoles('edit');
+            toggleSpecificRoles('delete');
+            
+            openModal('permissionsModal');
+        }
+
+        function toggleSpecificRoles(type) {
+            const rule = document.getElementById(type === 'edit' ? 'permEditRule' : 'permDeleteRule').value;
+            const container = document.getElementById(type === 'edit' ? 'permEditRolesContainer' : 'permDeleteRolesContainer');
+            container.style.display = rule === 'specific_roles' ? 'block' : 'none';
+        }
+
+        function savePermissions() {
+            const visibility = document.getElementById('permVisibility').value;
+            const edit_rule = document.getElementById('permEditRule').value;
+            const delete_rule = document.getElementById('permDeleteRule').value;
+            
+            const edit_roles = [];
+            if (edit_rule === 'specific_roles') {
+                document.querySelectorAll('#permEditRolesContainer input:checked').forEach(cb => edit_roles.push(cb.value));
+            }
+            const delete_roles = [];
+            if (delete_rule === 'specific_roles') {
+                document.querySelectorAll('#permDeleteRolesContainer input:checked').forEach(cb => delete_roles.push(cb.value));
+            }
+            
+            api('update', {
+                id: MODULE_ID,
+                visibility_rule: visibility,
+                edit_rule: edit_rule,
+                edit_roles: edit_roles.join(','),
+                delete_rule: delete_rule,
+                delete_roles: delete_roles.join(',')
+            }).then(r => {
+                if (r.success) {
+                    MODULE_PERMS.visibility = visibility;
+                    MODULE_PERMS.edit_rule = edit_rule;
+                    MODULE_PERMS.edit_roles = edit_roles;
+                    MODULE_PERMS.delete_rule = delete_rule;
+                    MODULE_PERMS.delete_roles = delete_roles;
+                    vyToast('Permissions updated successfully.', 'success');
+                    closeModal('permissionsModal');
+                } else {
+                    vyToast('Failed to update permissions: ' + r.error, 'error');
+                }
+            }).catch(e => vyToast('Error: ' + e.message, 'error'));
         }
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }

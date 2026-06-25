@@ -35,6 +35,27 @@ $record = $recordId ? dm_fetch_record($conn, $prefix, $recordId) : null;
 $isEdit = !!$record;
 $isViewOnly = !empty($_GET['view']);
 
+$userId = (int)($_SESSION['user_id'] ?? 0);
+$userRole = (int)($_SESSION['role_id'] ?? 0);
+$isAdmin = !empty($_SESSION['is_admin']);
+
+if (!$userRole) {
+    try {
+        $uStmt = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
+        $uStmt->execute([$userId]);
+        if ($u = $uStmt->fetch(PDO::FETCH_ASSOC)) {
+            $userRole = (int)$u['role_id'];
+            $isAdmin = (bool)$u['is_admin'];
+        }
+    } catch (Exception $e) {}
+}
+
+if ($isEdit && !$isViewOnly) {
+    if (!dm_can_edit_record($conn, $prefix, $module, $record['created_by'], $userId, $userRole, $isAdmin)) {
+        $isViewOnly = true;
+    }
+}
+
 $users = dm_fetch_users($conn, $prefix);
 $countries = dm_get_countries();
 $states = dm_get_states();

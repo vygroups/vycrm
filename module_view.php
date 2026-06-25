@@ -352,9 +352,13 @@ if (!$hasUpdatedAt) {
                                     <td class="sticky-actions-td">
                                         <div style="display:flex;gap:4px;">
                                             <a href="module_record.php?module=<?= $moduleId ?>&record=<?= $rec['id'] ?>&view=1" class="mm-icon-btn" title="View"><i class="fa-solid fa-eye"></i></a>
+                                            <?php if ($rec['can_edit'] ?? false): ?>
                                             <a href="module_record.php?module=<?= $moduleId ?>&record=<?= $rec['id'] ?>" class="mm-icon-btn" title="Edit"><i class="fa-solid fa-pencil"></i></a>
+                                            <?php endif; ?>
                                             <a href="record_history.php?module=<?= $moduleId ?>&record=<?= $rec['id'] ?>" class="mm-icon-btn" title="History"><i class="fa-solid fa-clock-rotate-left"></i></a>
+                                            <?php if ($rec['can_delete'] ?? false): ?>
                                             <button class="mm-icon-btn mm-icon-danger" onclick="deleteRecord(<?= $rec['id'] ?>)" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
                                 </tr>
@@ -1032,13 +1036,16 @@ function renderRecordsTable(fields, records) {
             html += `<td data-column="created" class="text-muted text-sm" style="white-space: nowrap;">${formatCreatedDate(rec.created_at)}</td>`;
         }
         
+        let editBtn = rec.can_edit ? `<a href="module_record.php?module=${MODULE_ID}&record=${rec.id}" class="mm-icon-btn" title="Edit"><i class="fa-solid fa-pencil"></i></a>` : '';
+        let deleteBtn = rec.can_delete ? `<button class="mm-icon-btn mm-icon-danger" onclick="deleteRecord(${rec.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>` : '';
+
         html += `
             <td class="sticky-actions-td">
                 <div style="display:flex;gap:4px;">
                     <a href="module_record.php?module=${MODULE_ID}&record=${rec.id}&view=1" class="mm-icon-btn" title="View"><i class="fa-solid fa-eye"></i></a>
-                    <a href="module_record.php?module=${MODULE_ID}&record=${rec.id}" class="mm-icon-btn" title="Edit"><i class="fa-solid fa-pencil"></i></a>
+                    ${editBtn}
                     <a href="record_history.php?module=${MODULE_ID}&record=${rec.id}" class="mm-icon-btn" title="History"><i class="fa-solid fa-clock-rotate-left"></i></a>
-                    <button class="mm-icon-btn mm-icon-danger" onclick="deleteRecord(${rec.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                    ${deleteBtn}
                 </div>
             </td>
         `;

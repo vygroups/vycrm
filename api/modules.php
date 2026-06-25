@@ -34,6 +34,17 @@ dm_ensure_tables($conn, $prefix);
 $input = commerce_read_input();
 $action = $_GET['action'] ?? $input['action'] ?? '';
 
+$userRole = null;
+$isAdmin = false;
+try {
+    $uStmt = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
+    $uStmt->execute([$userId]);
+    if ($u = $uStmt->fetch(PDO::FETCH_ASSOC)) {
+        $userRole = $u['role_id'];
+        $isAdmin = (bool)$u['is_admin'];
+    }
+} catch (Exception $e) {}
+
 try {
     switch ($action) {
 
@@ -101,7 +112,7 @@ try {
             if (!$id) throw new RuntimeException('Module ID required');
             $sets = [];
             $params = [];
-            foreach (['name', 'icon', 'description', 'status', 'visibility_rule'] as $col) {
+            foreach (['name', 'icon', 'description', 'status', 'visibility_rule', 'edit_rule', 'edit_roles', 'delete_rule', 'delete_roles'] as $col) {
                 if (isset($input[$col])) {
                     $sets[] = "$col = ?";
                     $params[] = $input[$col];
@@ -363,6 +374,13 @@ try {
             $conn->beginTransaction();
             try {
                 if ($recordId) {
+                    $recStmt = $conn->prepare("SELECT created_by FROM {$prefix}module_records WHERE id = ?");
+                    $recStmt->execute([$recordId]);
+                    $recordOwnerId = $recStmt->fetchColumn();
+                    $moduleInfo = dm_fetch_module_full($conn, $prefix, $moduleId);
+                    if (!dm_can_edit_record($conn, $prefix, $moduleInfo, $recordOwnerId, $userId, $userRole, $isAdmin)) {
+                        throw new RuntimeException('You do not have permission to edit this record.');
+                    }
                     // Update existing
                     $conn->prepare("UPDATE {$prefix}module_records SET updated_at = NOW(), updated_by = ? WHERE id = ?")->execute([$userId, $recordId]);
                 } else {
@@ -462,6 +480,15 @@ try {
         case 'delete_record':
             $id = (int)($input['id'] ?? 0);
             if (!$id) throw new RuntimeException('Record ID required');
+            $recStmt = $conn->prepare("SELECT module_id, created_by FROM {$prefix}module_records WHERE id = ?");
+            $recStmt->execute([$id]);
+            $recInfo = $recStmt->fetch(PDO::FETCH_ASSOC);
+            if ($recInfo) {
+                $moduleInfo = dm_fetch_module_full($conn, $prefix, $recInfo['module_id']);
+                if (!dm_can_delete_record($conn, $prefix, $moduleInfo, $recInfo['created_by'], $userId, $userRole, $isAdmin)) {
+                    throw new RuntimeException('You do not have permission to delete this record.');
+                }
+            }
             $conn->prepare("DELETE FROM {$prefix}module_records WHERE id = ?")->execute([$id]);
             commerce_json_response(['success' => true]);
 

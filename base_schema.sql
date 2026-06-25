@@ -268,6 +268,10 @@ CREATE TABLE IF NOT EXISTS modules (
     status ENUM('active','inactive') NOT NULL DEFAULT 'active',
     sort_order INT NOT NULL DEFAULT 0,
     visibility_rule ENUM('all','owner','role_down','role_equal_down','role_up') NOT NULL DEFAULT 'all',
+    edit_rule VARCHAR(50) NOT NULL DEFAULT 'all',
+    edit_roles TEXT NULL,
+    delete_rule VARCHAR(50) NOT NULL DEFAULT 'all',
+    delete_roles TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_modules_status (status)
