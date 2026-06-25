@@ -12,6 +12,13 @@ $prefix = $_SESSION['tenant_prefix'];
 $conn = Database::getTenantConn($dbName);
 $dashboardModules = vycrm_module_config();
 commerce_ensure_tables($conn, $prefix);
+require_once 'includes/dynamic_modules.php';
+
+$billingEnabled = dm_get_system_setting($conn, $prefix, 'billing_enabled', '1') === '1';
+$attendanceEnabled = dm_get_system_setting($conn, $prefix, 'attendance_enabled', '1') === '1';
+
+if (!$billingEnabled) unset($dashboardModules['billing']);
+if (!$attendanceEnabled) unset($dashboardModules['hr_operations']);
 
 // Fetch dashboard data
 $dashboardStats = [
@@ -27,17 +34,91 @@ $dashboardStats = [
     ],
 ];
 
-try {
-    $dashboardStats['billing'][0]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}customers")->fetchColumn();
-    $dashboardStats['billing'][1]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}invoices")->fetchColumn();
-    $dashboardStats['billing'][2]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}products WHERE status = 'active'")->fetchColumn();
+if (!$billingEnabled) unset($dashboardStats['billing']);
+if (!$attendanceEnabled) unset($dashboardStats['hr_operations']);
 
-    $today = date('Y-m-d');
-    $attendanceStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}attendance WHERE date = ?");
-    $attendanceStmt->execute([$today]);
-    $dashboardStats['hr_operations'][0]['value'] = (int) $attendanceStmt->fetchColumn();
-    $dashboardStats['hr_operations'][1]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}leaves WHERE status = 'pending'")->fetchColumn();
-    $dashboardStats['hr_operations'][2]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}permissions WHERE status = 'pending'")->fetchColumn();
+// Append dynamic modules
+$dynModules = dm_fetch_active_modules($conn, $prefix);
+foreach ($dynModules as $dm) {
+    $dashboardModules['dyn_' . $dm['slug']] = [
+        'title' => $dm['name'],
+        'section_label' => $dm['name'],
+        'icon' => $dm['icon'],
+        'description' => $dm['description'],
+        'links' => [
+            ['label' => 'View ' . $dm['name'], 'href' => 'module_view.php?module=' . urlencode($dm['slug'])]
+        ]
+    ];
+    $dashboardStats['dyn_' . $dm['slug']] = [
+        ['label' => 'Total Records', 'value' => 0, 'icon' => 'fa-solid fa-database', 'desc' => 'Total records in ' . $dm['name']]
+    ];
+}
+
+try {
+    if ($billingEnabled) {
+        $dashboardStats['billing'][0]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}customers")->fetchColumn();
+        $dashboardStats['billing'][1]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}invoices")->fetchColumn();
+        $dashboardStats['billing'][2]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}products WHERE status = 'active'")->fetchColumn();
+    }
+
+    if ($attendanceEnabled) {
+        $today = date('Y-m-d');
+        $attendanceStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}attendance WHERE date = ?");
+        $attendanceStmt->execute([$today]);
+        $dashboardStats['hr_operations'][0]['value'] = (int) $attendanceStmt->fetchColumn();
+        $dashboardStats['hr_operations'][1]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}leaves WHERE status = 'pending'")->fetchColumn();
+        $dashboardStats['hr_operations'][2]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}permissions WHERE status = 'pending'")->fetchColumn();
+    }
+
+    foreach ($dynModules as $dm) {
+        $stmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ?");
+        $stmt->execute([$dm['id']]);
+        $total = (int) $stmt->fetchColumn();
+        
+        $todayStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND DATE(created_at) = CURDATE()");
+        $todayStmt->execute([$dm['id']]);
+        $today = (int) $todayStmt->fetchColumn();
+
+        $weekStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)");
+        $weekStmt->execute([$dm['id']]);
+        $week = (int) $weekStmt->fetchColumn();
+
+        $monthStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())");
+        $monthStmt->execute([$dm['id']]);
+        $month = (int) $monthStmt->fetchColumn();
+
+        $trendStmt = $conn->prepare("
+            SELECT DATE(created_at) as d, COUNT(*) as c 
+            FROM {$prefix}module_records 
+            WHERE module_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            GROUP BY DATE(created_at)
+        ");
+        $trendStmt->execute([$dm['id']]);
+        $trendRows = $trendStmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $trendData = [];
+        $trendLabels = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $date = date('Y-m-d', strtotime("-$i days"));
+            $displayDate = date('M d', strtotime("-$i days"));
+            $trendData[$date] = 0;
+            $trendLabels[$date] = $displayDate;
+        }
+        foreach ($trendRows as $r) {
+            if (isset($trendData[$r['d']])) {
+                $trendData[$r['d']] = (int) $r['c'];
+            }
+        }
+
+        $dashboardStats['dyn_' . $dm['slug']][0]['value'] = $total;
+        $dashboardModules['dyn_' . $dm['slug']]['chart_data'] = [
+            'today' => $today,
+            'week' => $week,
+            'month' => $month,
+            'trend_labels' => array_values($trendLabels),
+            'trend_data' => array_values($trendData)
+        ];
+    }
 } catch (Exception $e) {
     // Keep default zero-state cards on dashboard.
 }
@@ -49,6 +130,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars(brand_page_title('Dashboard')) ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
@@ -145,6 +227,58 @@ try {
         .stats-panel {
             margin-bottom:28px;
         }
+        .dyn-chart-card {
+            grid-column: 1 / -1; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px;
+        }
+        .dyn-stats-header {
+            display: flex; 
+            gap: 20px; 
+            flex-wrap: wrap;
+        }
+        .dyn-stat-pill {
+            flex: 1;
+            min-width: 150px;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .dyn-stat-pill span {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .dyn-stat-pill strong {
+            color: var(--text);
+            font-size: 24px;
+        }
+        .dyn-chart-container {
+            width: 100%;
+            height: 300px;
+            position: relative;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        .dyn-charts-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .dyn-charts-wrapper {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -179,20 +313,57 @@ try {
                 <?php endforeach; ?>
             </div>
             <div class="card-grid stats-panel" id="statsPanel">
-                <?php foreach ($dashboardStats as $moduleKey => $stats): ?>
-                    <?php foreach ($stats as $index => $stat): ?>
-                    <div class="crm-card module-stat-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== 'billing' ? 'style="display:none;"' : '' ?>>
-                        <div class="card-title"><?= htmlspecialchars($stat['label']) ?></div>
-                        <div class="card-value"><?= (int) $stat['value'] ?> <i class="<?= htmlspecialchars($stat['icon']) ?>"></i></div>
-                        <div class="card-desc"><?= htmlspecialchars($stat['desc']) ?></div>
-                    </div>
-                    <?php endforeach; ?>
+                <?php 
+                $firstModuleKey = array_key_first($dashboardModules);
+                foreach ($dashboardStats as $moduleKey => $stats): ?>
+                    <?php if (strpos($moduleKey, 'dyn_') === 0): 
+                        $dynChart = $dashboardModules[$moduleKey]['chart_data'] ?? ['today'=>0, 'week'=>0, 'month'=>0];
+                    ?>
+                        <div class="crm-card module-stat-card dyn-chart-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
+                            <div class="dyn-stats-header">
+                                <div class="dyn-stat-pill">
+                                    <span>Total Records</span>
+                                    <strong><?= (int) $stats[0]['value'] ?></strong>
+                                </div>
+                                <div class="dyn-stat-pill">
+                                    <span>Added Today</span>
+                                    <strong><?= (int) $dynChart['today'] ?></strong>
+                                </div>
+                                <div class="dyn-stat-pill">
+                                    <span>Added This Week</span>
+                                    <strong><?= (int) $dynChart['week'] ?></strong>
+                                </div>
+                                <div class="dyn-stat-pill">
+                                    <span>Added This Month</span>
+                                    <strong><?= (int) $dynChart['month'] ?></strong>
+                                </div>
+                            </div>
+                            <div class="dyn-charts-wrapper">
+                                <div class="dyn-chart-container">
+                                    <h4 style="margin-bottom:15px; color:var(--text); font-size:15px; text-align:center;">Creation Overview</h4>
+                                    <canvas id="chart_bar_<?= htmlspecialchars($moduleKey) ?>"></canvas>
+                                </div>
+                                <div class="dyn-chart-container">
+                                    <h4 style="margin-bottom:15px; color:var(--text); font-size:15px; text-align:center;">7-Day Trend</h4>
+                                    <canvas id="chart_line_<?= htmlspecialchars($moduleKey) ?>"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <?php foreach ($stats as $index => $stat): ?>
+                        <div class="crm-card module-stat-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
+                            <div class="card-title"><?= htmlspecialchars($stat['label']) ?></div>
+                            <div class="card-value"><?= (int) $stat['value'] ?> <i class="<?= htmlspecialchars($stat['icon']) ?>"></i></div>
+                            <div class="card-desc"><?= htmlspecialchars($stat['desc']) ?></div>
+                        </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 <?php endforeach; ?>
             </div>
             <h3 class="pipeline-header">CONFIGURABLE MODULES</h3>
             <div class="module-shortcuts">
                 <?php foreach ($dashboardModules as $moduleKey => $module): ?>
-                <div class="module-shortcut module-shortcut-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== 'billing' ? 'style="display:none;"' : '' ?>>
+                <div class="module-shortcut module-shortcut-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
                     <i class="<?= htmlspecialchars($module['icon']) ?>"></i>
                     <h4><?= htmlspecialchars($module['title']) ?></h4>
                     <p><?= htmlspecialchars($module['description']) ?></p>
@@ -216,36 +387,47 @@ try {
                     <table class="crm-table">
                         <thead><tr><th>Area</th><th>Purpose</th><th>Primary Action</th></tr></thead>
                         <tbody id="dashboardGuideBody">
-                            <tr data-module="billing">
+                            <?php if ($billingEnabled): ?>
+                            <tr data-module="billing" <?= 'billing' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
                                 <td class="text-bold">Customers</td>
                                 <td>Manage customer master data used during billing.</td>
                                 <td><a href="customers.php">Open Customers</a></td>
                             </tr>
-                            <tr data-module="billing">
+                            <tr data-module="billing" <?= 'billing' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
                                 <td class="text-bold">Invoices</td>
                                 <td>Create and manage sale invoices and totals.</td>
                                 <td><a href="invoices.php">Open Invoices</a></td>
                             </tr>
-                            <tr data-module="billing">
+                            <tr data-module="billing" <?= 'billing' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
                                 <td class="text-bold">Products / Service</td>
                                 <td>Keep sellable items and pricing ready for transactions.</td>
                                 <td><a href="products.php">Open Products</a></td>
                             </tr>
-                            <tr data-module="hr_operations" style="display:none;">
+                            <?php endif; ?>
+                            <?php if ($attendanceEnabled): ?>
+                            <tr data-module="hr_operations" <?= 'hr_operations' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
                                 <td class="text-bold">Attendance</td>
                                 <td>Track punch-in, punch-out, and employee work sessions.</td>
                                 <td><a href="attendance.php">Open Attendance</a></td>
                             </tr>
-                            <tr data-module="hr_operations" style="display:none;">
+                            <tr data-module="hr_operations" <?= 'hr_operations' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
                                 <td class="text-bold">Attendance Report</td>
                                 <td>Review attendance summaries and date-based reporting.</td>
                                 <td><a href="attendance_report.php">Open Report</a></td>
                             </tr>
-                            <tr data-module="hr_operations" style="display:none;">
+                            <tr data-module="hr_operations" <?= 'hr_operations' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
                                 <td class="text-bold">Approvals</td>
                                 <td>Approve leave and permission requests from employees.</td>
                                 <td><a href="manage_requests.php">Open Approvals</a></td>
                             </tr>
+                            <?php endif; ?>
+                            <?php foreach ($dynModules as $dm): ?>
+                            <tr data-module="dyn_<?= htmlspecialchars($dm['slug']) ?>" <?= 'dyn_' . $dm['slug'] !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
+                                <td class="text-bold">Manage <?= htmlspecialchars($dm['name']) ?></td>
+                                <td>Access data and automation for <?= htmlspecialchars($dm['name']) ?>.</td>
+                                <td><a href="module_view.php?module=<?= urlencode($dm['slug']) ?>">Open Module</a></td>
+                            </tr>
+                            <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
@@ -272,7 +454,10 @@ const DASHBOARD_MODULE_KEY = 'vycrm_dashboard_module_' + <?= json_encode((string
 const dashboardModules = <?= json_encode($dashboardModules, JSON_UNESCAPED_SLASHES) ?>;
 
 function setActiveDashboardModule(moduleKey) {
-    const safeKey = dashboardModules[moduleKey] ? moduleKey : 'billing';
+    const defaultKey = Object.keys(dashboardModules)[0] || '';
+    const safeKey = dashboardModules[moduleKey] ? moduleKey : defaultKey;
+    if (!safeKey) return;
+    
     document.querySelectorAll('#moduleSelector button').forEach((button) => {
         button.classList.toggle('active', button.dataset.module === safeKey);
     });
@@ -290,7 +475,8 @@ document.querySelectorAll('#moduleSelector button').forEach((button) => {
     button.addEventListener('click', () => setActiveDashboardModule(button.dataset.module));
 });
 
-setActiveDashboardModule(localStorage.getItem(DASHBOARD_MODULE_KEY) || 'billing');
+const defaultModule = Object.keys(dashboardModules)[0] || '';
+setActiveDashboardModule(localStorage.getItem(DASHBOARD_MODULE_KEY) || defaultModule);
 
 // Attendance Timer Logic
 const PUNCH_KEY = 'vycrm_punch_start';
@@ -349,6 +535,82 @@ window.onclick = function(event) {
         for (let i = 0; i < dropdowns.length; i++) { dropdowns[i].classList.remove('show'); }
     }
 }
+
+// Initialize Dynamic Module Charts
+document.addEventListener('DOMContentLoaded', function() {
+    const themeColor = '#7b5ef0';
+    for (const [key, module] of Object.entries(dashboardModules)) {
+        if (key.startsWith('dyn_') && module.chart_data) {
+            const ctxBar = document.getElementById('chart_bar_' + key);
+            const ctxLine = document.getElementById('chart_line_' + key);
+            
+            if (ctxBar) {
+                new Chart(ctxBar, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Today', 'This Week', 'This Month'],
+                        datasets: [{
+                            label: 'Records Created',
+                            data: [module.chart_data.today, module.chart_data.week, module.chart_data.month],
+                            backgroundColor: [
+                                'rgba(123, 94, 240, 0.7)',
+                                'rgba(123, 94, 240, 0.85)',
+                                'rgba(123, 94, 240, 1)'
+                            ],
+                            borderRadius: 6,
+                            barPercentage: 0.5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { precision: 0 } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            }
+
+            if (ctxLine) {
+                new Chart(ctxLine, {
+                    type: 'line',
+                    data: {
+                        labels: module.chart_data.trend_labels,
+                        datasets: [{
+                            label: 'Records',
+                            data: module.chart_data.trend_data,
+                            borderColor: themeColor,
+                            backgroundColor: 'rgba(123, 94, 240, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#ffffff',
+                            pointBorderColor: themeColor,
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { precision: 0 } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            }
+        }
+    }
+});
 </script>
 </body>
 </html>

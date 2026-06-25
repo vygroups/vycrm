@@ -85,27 +85,45 @@ if ($companySlug) {
                 <div class="brand-logo">
                     <img src="<?= $companyLogo ?><?= $cacheBuster ?>" alt="<?= $companyName ?>">
                 </div>
-                <h2 class="login-title">Welcome Back</h2>
-                <p class="login-subtitle">Access your <strong><?= $companyName ?></strong> workspace</p>
+                <h2 class="login-title">Reset Password</h2>
+                <p class="login-subtitle">We will send a 6-digit OTP to your registered email.</p>
 
-                <form id="loginForm">
-                    <input type="hidden" name="company" value="<?= htmlspecialchars($companySlug) ?>">
+                <!-- STEP 1: Request OTP -->
+                <form id="requestOtpForm">
                     <div class="form-group">
-                        <label class="form-label">Username or Email</label>
-                        <input type="text" class="form-control" name="username" placeholder="Username or Email" required>
+                        <label class="form-label">Company Slug</label>
+                        <input type="text" class="form-control" name="company" placeholder="Company Slug" required value="<?= htmlspecialchars($companySlug) ?>">
                     </div>
                     <div class="form-group mb-4">
-                        <div class="flex justify-between items-center mb-1">
-                            <label class="form-label mb-0">Password</label>
-                            <a href="forgot_password.php" class="text-sm text-muted" style="text-decoration:none;">Forgot password?</a>
-                        </div>
+                        <label class="form-label">Username or Email</label>
+                        <input type="text" class="form-control" name="username" id="fpUsername" placeholder="Username or Email" required>
+                    </div>
+                    <button type="submit" class="btn-primary" id="requestOtpBtn">Send OTP</button>
+                    <div style="text-align:center; margin-top:15px;">
+                        <a href="index.php" class="text-sm text-muted" style="text-decoration:none;">Back to Login</a>
+                    </div>
+                </form>
+
+                <!-- STEP 2: Verify OTP & Reset -->
+                <form id="resetPwdForm" style="display:none;">
+                    <input type="hidden" name="company" id="resetCompany">
+                    <input type="hidden" name="username" id="resetUsername">
+                    
+                    <div class="form-group">
+                        <label class="form-label">6-Digit OTP</label>
+                        <input type="text" class="form-control" name="otp" placeholder="Enter OTP" required maxlength="6" style="text-align:center; letter-spacing:8px; font-size:20px;">
+                    </div>
+                    <div class="form-group mb-4">
+                        <label class="form-label">New Password</label>
                         <div style="position: relative;">
-                            <input type="password" class="form-control" name="password" id="loginPassword" placeholder="••••••••" required style="padding-right: 40px;">
+                            <input type="password" class="form-control" name="new_password" id="newPassword" placeholder="••••••••" required style="padding-right: 40px;">
                             <i class="fa-regular fa-eye" id="togglePassword" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); padding: 5px;"></i>
                         </div>
                     </div>
-
-                    <button type="submit" class="btn-primary" id="loginBtn">Sign In</button>
+                    <button type="submit" class="btn-primary" id="resetPwdBtn">Reset Password</button>
+                    <div style="text-align:center; margin-top:15px;">
+                        <a href="index.php" class="text-sm text-muted" style="text-decoration:none;">Cancel</a>
+                    </div>
                 </form>
             </div>
         </div>
@@ -141,38 +159,74 @@ if ($companySlug) {
             setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
         }
 
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
+        document.getElementById('requestOtpForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const btn = document.getElementById('loginBtn');
+            const btn = document.getElementById('requestOtpBtn');
             const formData = new FormData(this);
+            formData.append('action', 'request_otp');
             
             btn.disabled = true;
-            btn.textContent = "Authenticating...";
+            btn.textContent = "Sending...";
 
-            fetch('/api/login.php', {
+            fetch('/api/forgot_password_api.php', {
                 method: 'POST',
                 body: formData
             })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    vyToast('Login Successful! Redirecting...', 'success');
-                    setTimeout(() => window.location.href = data.redirect, 1000);
+                    vyToast('OTP sent to your email!', 'success');
+                    document.getElementById('resetCompany').value = formData.get('company');
+                    document.getElementById('resetUsername').value = formData.get('username');
+                    
+                    document.getElementById('requestOtpForm').style.display = 'none';
+                    document.getElementById('resetPwdForm').style.display = 'block';
                 } else {
                     vyToast(data.message);
-                    btn.disabled = false;
-                    btn.textContent = "Sign In";
                 }
             })
             .catch(err => {
                 vyToast('A network error occurred');
+            })
+            .finally(() => {
                 btn.disabled = false;
-                btn.textContent = "Sign In";
+                btn.textContent = "Send OTP";
+            });
+        });
+
+        document.getElementById('resetPwdForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('resetPwdBtn');
+            const formData = new FormData(this);
+            formData.append('action', 'reset_password');
+            
+            btn.disabled = true;
+            btn.textContent = "Resetting...";
+
+            fetch('/api/forgot_password_api.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    vyToast('Password reset successful! Redirecting...', 'success');
+                    setTimeout(() => window.location.href = 'index.php', 1500);
+                } else {
+                    vyToast(data.message);
+                }
+            })
+            .catch(err => {
+                vyToast('A network error occurred');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = "Reset Password";
             });
         });
 
         document.getElementById('togglePassword').addEventListener('click', function () {
-            const passwordInput = document.getElementById('loginPassword');
+            const passwordInput = document.getElementById('newPassword');
             const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
             passwordInput.setAttribute('type', type);
             this.classList.toggle('fa-eye');

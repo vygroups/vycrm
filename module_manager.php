@@ -801,17 +801,22 @@ try {
                 <h3><i class="fa-solid fa-shield-halved" style="color:var(--primary); margin-right:8px;"></i> Module Permissions</h3>
                 <button class="mm-icon-btn" onclick="closeModal('permissionsModal')"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="mm-modal-body" style="padding:20px; overflow-y:visible;">
+            <div class="mm-modal-body" style="padding:20px; max-height:70vh; overflow-y:auto;">
                 <div class="form-group" style="margin-bottom:20px;">
                     <label class="form-label" style="font-weight:600; color:var(--text-main);">View Visibility</label>
                     <p style="font-size:12px; color:var(--text-muted); margin:0 0 8px 0;">Who can see the records?</p>
-                    <select id="permVisibility" class="form-control">
+                    <select id="permVisibility" class="form-control" onchange="toggleSpecificRoles('view')">
                         <option value="all">Show to all</option>
                         <option value="owner">Creator Only</option>
                         <option value="role_down">Creator & Upper Roles (Managers)</option>
                         <option value="role_equal_down">Creator, Peers & Upper Roles</option>
                         <option value="role_up">Creator & Lower Roles (Subordinates)</option>
+                        <option value="specific_roles">Specific Roles...</option>
                     </select>
+                    <div id="permViewRolesContainer" style="display:none; margin-top:10px; background:var(--surface); padding:10px; border:1px solid var(--border); border-radius:8px; max-height:180px; overflow-y:auto;">
+                        <!-- Checkboxes populated via JS -->
+                    </div>
+                    <button type="button" id="permViewRolesDoneBtn" style="display:none; margin-top:6px; padding:6px 16px; font-size:12px; font-weight:600; background:var(--primary); color:#fff; border:none; border-radius:6px; cursor:pointer;" onclick="document.getElementById('permViewRolesContainer').style.display='none'; this.style.display='none';">Done</button>
                 </div>
 
                 <div class="form-group" style="margin-bottom:20px; border-top:1px solid var(--border); padding-top:16px;">
@@ -825,9 +830,10 @@ try {
                         <option value="role_up">Creator & Lower Roles</option>
                         <option value="specific_roles">Specific Roles...</option>
                     </select>
-                    <div id="permEditRolesContainer" style="display:none; margin-top:10px; background:var(--surface); padding:10px; border:1px solid var(--border); border-radius:8px; max-height:150px; overflow-y:auto;">
+                    <div id="permEditRolesContainer" style="display:none; margin-top:10px; background:var(--surface); padding:10px; border:1px solid var(--border); border-radius:8px; max-height:180px; overflow-y:auto;">
                         <!-- Checkboxes populated via JS -->
                     </div>
+                    <button type="button" id="permEditRolesDoneBtn" style="display:none; margin-top:6px; padding:6px 16px; font-size:12px; font-weight:600; background:var(--primary); color:#fff; border:none; border-radius:6px; cursor:pointer;" onclick="document.getElementById('permEditRolesContainer').style.display='none'; this.style.display='none';">Done</button>
                 </div>
 
                 <div class="form-group" style="margin-bottom:20px; border-top:1px solid var(--border); padding-top:16px;">
@@ -840,10 +846,13 @@ try {
                         <option value="role_equal_down">Creator, Peers & Upper Roles</option>
                         <option value="role_up">Creator & Lower Roles</option>
                         <option value="specific_roles">Specific Roles...</option>
+                        <option value="admin_only">Only Admin</option>
+                        <option value="upper_role_only">Only Upper Role</option>
                     </select>
-                    <div id="permDeleteRolesContainer" style="display:none; margin-top:10px; background:var(--surface); padding:10px; border:1px solid var(--border); border-radius:8px; max-height:150px; overflow-y:auto;">
+                    <div id="permDeleteRolesContainer" style="display:none; margin-top:10px; background:var(--surface); padding:10px; border:1px solid var(--border); border-radius:8px; max-height:180px; overflow-y:auto;">
                         <!-- Checkboxes populated via JS -->
                     </div>
+                    <button type="button" id="permDeleteRolesDoneBtn" style="display:none; margin-top:6px; padding:6px 16px; font-size:12px; font-weight:600; background:var(--primary); color:#fff; border:none; border-radius:6px; cursor:pointer;" onclick="document.getElementById('permDeleteRolesContainer').style.display='none'; this.style.display='none';">Done</button>
                 </div>
             </div>
             <div class="mm-modal-footer" style="padding:20px; border-top:1px solid var(--border);">
@@ -2158,9 +2167,11 @@ try {
             document.getElementById('permEditRule').value = MODULE_PERMS.edit_rule;
             document.getElementById('permDeleteRule').value = MODULE_PERMS.delete_rule;
             
+            buildRolesCheckboxes('permViewRolesContainer', MODULE_PERMS.visibility_roles || []);
             buildRolesCheckboxes('permEditRolesContainer', MODULE_PERMS.edit_roles);
             buildRolesCheckboxes('permDeleteRolesContainer', MODULE_PERMS.delete_roles);
             
+            toggleSpecificRoles('view');
             toggleSpecificRoles('edit');
             toggleSpecificRoles('delete');
             
@@ -2168,9 +2179,23 @@ try {
         }
 
         function toggleSpecificRoles(type) {
-            const rule = document.getElementById(type === 'edit' ? 'permEditRule' : 'permDeleteRule').value;
-            const container = document.getElementById(type === 'edit' ? 'permEditRolesContainer' : 'permDeleteRolesContainer');
-            container.style.display = rule === 'specific_roles' ? 'block' : 'none';
+            let rule, container, doneBtn;
+            if (type === 'view') {
+                rule = document.getElementById('permVisibility').value;
+                container = document.getElementById('permViewRolesContainer');
+                doneBtn = document.getElementById('permViewRolesDoneBtn');
+            } else if (type === 'edit') {
+                rule = document.getElementById('permEditRule').value;
+                container = document.getElementById('permEditRolesContainer');
+                doneBtn = document.getElementById('permEditRolesDoneBtn');
+            } else {
+                rule = document.getElementById('permDeleteRule').value;
+                container = document.getElementById('permDeleteRolesContainer');
+                doneBtn = document.getElementById('permDeleteRolesDoneBtn');
+            }
+            const show = rule === 'specific_roles';
+            container.style.display = show ? 'block' : 'none';
+            if (doneBtn) doneBtn.style.display = show ? 'inline-block' : 'none';
         }
 
         function savePermissions() {
@@ -2178,6 +2203,10 @@ try {
             const edit_rule = document.getElementById('permEditRule').value;
             const delete_rule = document.getElementById('permDeleteRule').value;
             
+            const view_roles = [];
+            if (visibility === 'specific_roles') {
+                document.querySelectorAll('#permViewRolesContainer input:checked').forEach(cb => view_roles.push(cb.value));
+            }
             const edit_roles = [];
             if (edit_rule === 'specific_roles') {
                 document.querySelectorAll('#permEditRolesContainer input:checked').forEach(cb => edit_roles.push(cb.value));
@@ -2190,6 +2219,7 @@ try {
             api('update', {
                 id: MODULE_ID,
                 visibility_rule: visibility,
+                visibility_roles: view_roles.join(','),
                 edit_rule: edit_rule,
                 edit_roles: edit_roles.join(','),
                 delete_rule: delete_rule,
@@ -2197,6 +2227,7 @@ try {
             }).then(r => {
                 if (r.success) {
                     MODULE_PERMS.visibility = visibility;
+                    MODULE_PERMS.visibility_roles = view_roles;
                     MODULE_PERMS.edit_rule = edit_rule;
                     MODULE_PERMS.edit_roles = edit_roles;
                     MODULE_PERMS.delete_rule = delete_rule;

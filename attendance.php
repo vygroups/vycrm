@@ -490,8 +490,7 @@ require_once 'includes/brand.php';
         <div class="modal-content" style="max-width:500px;">
             <div class="flex justify-between items-center mb-4">
                 <h3 style="margin:0;">Detailed History</h3>
-                <button class="btn-icon" style="background:none;border:none;cursor:pointer;font-size:20px;"
-                    onclick="closeModal('attendanceHistoryModal')"><i class="fa-solid fa-xmark"></i></button>
+                <button onclick="closeModal('attendanceHistoryModal')" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--text-muted);"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div id="historyModalBody" style="font-size:14px;">
                 <!-- dynamic -->

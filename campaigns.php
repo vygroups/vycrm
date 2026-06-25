@@ -373,6 +373,15 @@ $v = time();
                         <option value="2">2 Seconds</option>
                         <option value="5">5 Seconds</option>
                         <option value="10">10 Seconds</option>
+                        <option value="15">15 Seconds</option>
+                        <option value="30">30 Seconds</option>
+                        <option value="60">1 Minute</option>
+                        <option value="120">2 Minutes</option>
+                        <option value="300">5 Minutes</option>
+                        <option value="600">10 Minutes</option>
+                        <option value="900">15 Minutes</option>
+                        <option value="1200">20 Minutes</option>
+                        <option value="1800">30 Minutes</option>
                     </select>
                 </div>
             </div>

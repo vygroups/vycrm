@@ -112,7 +112,7 @@ try {
             if (!$id) throw new RuntimeException('Module ID required');
             $sets = [];
             $params = [];
-            foreach (['name', 'icon', 'description', 'status', 'visibility_rule', 'edit_rule', 'edit_roles', 'delete_rule', 'delete_roles'] as $col) {
+            foreach (['name', 'icon', 'description', 'status', 'visibility_rule', 'visibility_roles', 'edit_rule', 'edit_roles', 'delete_rule', 'delete_roles'] as $col) {
                 if (isset($input[$col])) {
                     $sets[] = "$col = ?";
                     $params[] = $input[$col];

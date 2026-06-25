@@ -242,6 +242,14 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
             }
             $vConditions[] = "(r.created_by = ? OR r.created_by IN (SELECT id FROM {$p}users WHERE role_id IN (" . implode(',', array_map('intval', $parentRoles ?: [0])) . ")))";
             $params[] = $currentUserId;
+        } elseif ($rule === 'specific_roles') {
+            $rolesStr = $module['visibility_roles'] ?? '';
+            $roles = array_filter(array_map('trim', explode(',', $rolesStr)));
+            if (!in_array((string)$currentUserRole, $roles, true)) {
+                // If not in the specific roles, can only see own records
+                $vConditions[] = "r.created_by = ?";
+                $params[] = $currentUserId;
+            }
         }
 
         // Add "Assigned To Me" exception
@@ -1242,12 +1250,22 @@ function dm_can_edit_record($conn, $p, $module, $recordOwnerId, $userId, $userRo
 function dm_can_delete_record($conn, $p, $module, $recordOwnerId, $userId, $userRoleId, $isAdmin = false) {
     if ($isAdmin) return true;
     $rule = $module['delete_rule'] ?? 'all';
+    
+    if ($rule === 'admin_only') return false;
+    
     if ($rule === 'all') return true;
     if ($rule === 'specific_roles') {
         $rolesStr = $module['delete_roles'] ?? '';
         $roles = array_filter(array_map('trim', explode(',', $rolesStr)));
         return in_array((string)$userRoleId, $roles, true);
     }
+    
+    if ($rule === 'upper_role_only') {
+        // Can only delete if record is owned by a lower role, and user is not the owner
+        $allowedIds = dm_get_visible_user_ids($conn, $p, $userId, $userRoleId, 'role_down');
+        return in_array((int)$recordOwnerId, $allowedIds, true) && ((int)$recordOwnerId !== (int)$userId);
+    }
+    
     $allowedIds = dm_get_visible_user_ids($conn, $p, $userId, $userRoleId, $rule);
     return in_array((int)$recordOwnerId, $allowedIds, true);
 }

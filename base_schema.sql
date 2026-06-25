@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
     time_format VARCHAR(10) DEFAULT '12h',
     date_format VARCHAR(20) DEFAULT 'd M, Y',
     profile_picture TEXT DEFAULT NULL,
+    reset_otp VARCHAR(10) DEFAULT NULL,
+    reset_otp_expires DATETIME DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -267,7 +269,8 @@ CREATE TABLE IF NOT EXISTS modules (
     description TEXT DEFAULT NULL,
     status ENUM('active','inactive') NOT NULL DEFAULT 'active',
     sort_order INT NOT NULL DEFAULT 0,
-    visibility_rule ENUM('all','owner','role_down','role_equal_down','role_up') NOT NULL DEFAULT 'all',
+    visibility_rule VARCHAR(50) NOT NULL DEFAULT 'all',
+    visibility_roles TEXT NULL,
     edit_rule VARCHAR(50) NOT NULL DEFAULT 'all',
     edit_roles TEXT NULL,
     delete_rule VARCHAR(50) NOT NULL DEFAULT 'all',
