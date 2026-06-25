@@ -147,14 +147,40 @@ $profile_picture = $user['profile_picture'] ?? '';
                             </div>
 
                             <div class="form-group mt-4 text-right">
-                                <button type="submit" class="btn-primary save-btn" style="width:auto;"><i
-                                        class="fa-solid fa-save"></i> Save Settings</button>
+                                <button type="button" class="btn-primary" style="background:#4b5563; width:auto; margin-right:10px;" onclick="openPasswordModal()"><i class="fa-solid fa-lock"></i> Change Password</button>
+                                <button type="submit" class="btn-primary save-btn" style="width:auto;"><i class="fa-solid fa-save"></i> Save Settings</button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Password Modal -->
+    <div class="modal" id="pwdModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="modal-content" style="background:white; padding:30px; border-radius:20px; width:100%; max-width:400px; box-shadow:var(--shadow-lg);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="margin:0;"><i class="fa-solid fa-lock" style="color:var(--primary);"></i> Change Password</h3>
+                <button type="button" class="btn-icon" onclick="closePasswordModal()" style="background:none; border:none; cursor:pointer; font-size:18px;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Old Password</label>
+                <input type="password" id="old_pwd" class="form-control" placeholder="Enter current password">
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input type="password" id="new_pwd" class="form-control" placeholder="Enter new password">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm New Password</label>
+                <input type="password" id="confirm_pwd" class="form-control" placeholder="Confirm new password">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                <button type="button" class="btn-primary" style="background:#9ca3af; width:auto;" onclick="closePasswordModal()">Cancel</button>
+                <button type="button" class="btn-primary" style="width:auto;" onclick="submitPasswordChange(this)">Update Password</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -211,6 +237,57 @@ $profile_picture = $user['profile_picture'] ?? '';
             const o = document.getElementById('sidebarOverlay');
             s.classList.toggle('mobile-open');
             o.style.display = s.classList.contains('mobile-open') ? 'block' : 'none';
+        }
+
+        function openPasswordModal() {
+            document.getElementById('pwdModal').style.display = 'flex';
+        }
+
+        function closePasswordModal() {
+            document.getElementById('pwdModal').style.display = 'none';
+            document.getElementById('old_pwd').value = '';
+            document.getElementById('new_pwd').value = '';
+            document.getElementById('confirm_pwd').value = '';
+        }
+
+        async function submitPasswordChange(btn) {
+            const old_pwd = document.getElementById('old_pwd').value;
+            const new_pwd = document.getElementById('new_pwd').value;
+            const confirm_pwd = document.getElementById('confirm_pwd').value;
+
+            if (!old_pwd || !new_pwd || !confirm_pwd) {
+                alert("Please fill all fields");
+                return;
+            }
+            if (new_pwd !== confirm_pwd) {
+                alert("New passwords do not match");
+                return;
+            }
+
+            const fd = new FormData();
+            fd.append('action', 'change_password');
+            fd.append('old_password', old_pwd);
+            fd.append('new_password', new_pwd);
+
+            const prevHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/user_profile.php', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (data.success) {
+                    alert("Password updated successfully!");
+                    closePasswordModal();
+                } else {
+                    alert(data.message || "Failed to update password");
+                }
+            } catch(e) {
+                alert("Error updating password");
+            }
+
+            btn.innerHTML = prevHtml;
+            btn.disabled = false;
         }
     </script>
 </body>

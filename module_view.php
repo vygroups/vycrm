@@ -409,6 +409,8 @@ function deleteRecord(id) {
         } 
     }).catch(e => vyToast('Error: ' + e.message, 'error'));
 }
+
+
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
 
 // Column Configurator Logic

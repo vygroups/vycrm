@@ -21,7 +21,7 @@ $username = $_SESSION['username'];
 // Get Tenant Connection
 $tenantDb = Database::getTenantConn($tenant_db);
 if (!$tenantDb) {
-    die("Error: Could not establish tenant connection.");
+    die("Error: Could not establish tenant connection. DB: " . htmlspecialchars($tenant_db));
 }
 
 try {

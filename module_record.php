@@ -42,9 +42,15 @@ $allModules = dm_fetch_active_modules($conn, $prefix);
 $convertFromModuleId = (int)($_GET['convert_from_module'] ?? 0);
 $convertFromRecordId = (int)($_GET['convert_from_record'] ?? 0);
 $convertRuleId = (int)($_GET['convert_rule'] ?? 0);
+$duplicateFromId = (int)($_GET['duplicate_from'] ?? 0);
 
 $prefilledValues = [];
-if ($convertFromModuleId && $convertFromRecordId && $convertRuleId) {
+if ($duplicateFromId) {
+    $dupRecord = dm_fetch_record($conn, $prefix, $duplicateFromId);
+    if ($dupRecord) {
+        $prefilledValues = $dupRecord['values'];
+    }
+} elseif ($convertFromModuleId && $convertFromRecordId && $convertRuleId) {
     // Fetch conversion rule
     $ruleStmt = $conn->prepare("SELECT * FROM {$prefix}module_conversion_rules WHERE id = ? AND source_module_id = ? AND target_module_id = ?");
     $ruleStmt->execute([$convertRuleId, $convertFromModuleId, $moduleId]);
@@ -132,6 +138,7 @@ foreach ($module['blocks'] as $block) {
                 <?php endif; ?>
                 <a href="module_view.php?module=<?= $moduleId ?>" class="mm-btn"><i class="fa-solid fa-arrow-left"></i> Back</a>
                 <?php if($isViewOnly): ?>
+                    <a href="module_record.php?module=<?= $moduleId ?>&duplicate_from=<?= $recordId ?>" class="mm-btn" style="color:var(--primary);"><i class="fa-solid fa-copy"></i> Duplicate</a>
                     <!-- Conversion actions -->
                     <?php
                     $convStmt = $conn->prepare("
@@ -186,6 +193,13 @@ foreach ($module['blocks'] as $block) {
                             <a href="module_record.php?module=<?= $dest['module_id'] ?>&record=<?= $dest['id'] ?>&view=1" style="color:#10b981; text-decoration:none;">Record #<?= $dest['id'] ?></a>
                         </div>
                     <?php endforeach; ?>
+                <?php endif; ?>
+
+                <?php if ($duplicateFromId): ?>
+                    <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2); border-radius:12px; padding:14px 20px; margin-bottom:20px; font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px; box-shadow:var(--shadow-sm);">
+                        <i class="fa-solid fa-copy" style="color:#3b82f6; font-size:16px;"></i>
+                        <span style="color:var(--text-main);">Duplicating Record #<?= $duplicateFromId ?>. Make necessary changes and save.</span>
+                    </div>
                 <?php endif; ?>
 
                 <?php if ($convertFromModuleId && $convertFromRecordId && $convertRuleId): 

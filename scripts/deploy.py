@@ -55,7 +55,7 @@ def upload_dir(ftp, local_dir, remote_dir):
                 continue
             upload_dir(ftp, local_path, remote_path)
         else:
-            if item in EXCLUDE_FILES or item.startswith("."):
+            if item in EXCLUDE_FILES or (item.startswith(".") and item != ".htaccess"):
                 continue
             
             print(f"Uploading: {local_path} -> {remote_path}")

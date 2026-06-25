@@ -21,6 +21,27 @@ $conn = Database::getTenantConn($tenant_db);
 
 require_once '../includes/upload_paths.php';
 
+if (isset($_POST['action']) && $_POST['action'] === 'change_password') {
+    $old_password = $_POST['old_password'] ?? '';
+    $new_password = $_POST['new_password'] ?? '';
+    
+    $stmt = $conn->prepare("SELECT password FROM {$prefix}users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user || !password_verify($old_password, $user['password'])) {
+        echo json_encode(['success' => false, 'message' => 'Incorrect old password']);
+        exit;
+    }
+    
+    $hashed = password_hash($new_password, PASSWORD_DEFAULT);
+    $pwStmt = $conn->prepare("UPDATE {$prefix}users SET password = ? WHERE id = ?");
+    $pwStmt->execute([$hashed, $user_id]);
+    
+    echo json_encode(['success' => true]);
+    exit;
+}
+
 $first_name = $_POST['first_name'] ?? '';
 $last_name = $_POST['last_name'] ?? '';
 $time_format = $_POST['time_format'] ?? '12h';
@@ -64,6 +85,8 @@ try {
         $stmt = $conn->prepare("UPDATE {$prefix}users SET first_name = ?, last_name = ?, time_format = ?, date_format = ? WHERE id = ?");
         $stmt->execute([$first_name, $last_name, $time_format, $date_format, $user_id]);
     }
+
+
 
     $_SESSION['first_name'] = $first_name;
     $_SESSION['last_name'] = $last_name;

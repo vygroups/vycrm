@@ -459,6 +459,43 @@ try {
             $conn->prepare("DELETE FROM {$prefix}module_records WHERE id = ?")->execute([$id]);
             commerce_json_response(['success' => true]);
 
+        case 'duplicate_record':
+            $id = (int)($input['id'] ?? 0);
+            $moduleId = (int)($input['module_id'] ?? 0);
+            if (!$id || !$moduleId) throw new RuntimeException('Record ID and Module ID required');
+
+            $conn->beginTransaction();
+            try {
+                // Fetch original record
+                $stmt = $conn->prepare("SELECT * FROM {$prefix}module_records WHERE id = ?");
+                $stmt->execute([$id]);
+                $orig = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!$orig) throw new RuntimeException('Original record not found');
+
+                // Insert new record
+                $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by) VALUES (?, ?)")->execute([$moduleId, $userId]);
+                $newId = (int)$conn->lastInsertId();
+
+                // Fetch original values
+                $valStmt = $conn->prepare("SELECT field_id, value FROM {$prefix}module_record_values WHERE record_id = ?");
+                $valStmt->execute([$id]);
+                $values = $valStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                // Insert new values
+                if (!empty($values)) {
+                    $upsertStmt = $conn->prepare("INSERT INTO {$prefix}module_record_values (record_id, field_id, value) VALUES (?, ?, ?)");
+                    foreach ($values as $val) {
+                        $upsertStmt->execute([$newId, $val['field_id'], $val['value']]);
+                    }
+                }
+
+                $conn->commit();
+                commerce_json_response(['success' => true, 'new_record_id' => $newId]);
+            } catch (Throwable $e) {
+                $conn->rollBack();
+                throw $e;
+            }
+
         /* ════════════════ WORKFLOW AUTOMATION ACTIONS ════════════════ */
         case 'list_workflows':
             $wfModuleId = (int)($input['module_id'] ?? $_GET['module_id'] ?? 0);
