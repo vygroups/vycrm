@@ -18,10 +18,14 @@ if ($companySlug) {
         
         if ($company) {
             $companyName = htmlspecialchars($company['name']);
-            if ($company['logo']) $companyLogo = htmlspecialchars($company['logo']);
+            if ($company['logo']) {
+                require_once 'includes/upload_paths.php';
+                $companyLogo = UPLOAD_BASE_URL . implode('/', array_map('urlencode', explode('/', ltrim($company['logo'], '/'))));
+            }
         }
     } catch (Exception $e) {}
 }
+$cacheBuster = (strpos($companyLogo, '?') !== false ? '&' : '?') . 'v=' . $v;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -30,8 +34,8 @@ if ($companySlug) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure Login - <?= $companyName ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link rel="icon" href="<?= $companyLogo ?>?v=<?= $v ?>">
-    <link rel="shortcut icon" href="<?= $companyLogo ?>?v=<?= $v ?>">
+    <link rel="icon" href="<?= $companyLogo ?><?= $cacheBuster ?>">
+    <link rel="shortcut icon" href="<?= $companyLogo ?><?= $cacheBuster ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <style>
         #vyToastContainer { position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; }
@@ -45,7 +49,7 @@ if ($companySlug) {
         <div class="login-left">
             <div class="login-card">
                 <div class="brand-logo">
-                    <img src="<?= $companyLogo ?>?v=<?= $v ?>" alt="<?= $companyName ?>">
+                    <img src="<?= $companyLogo ?><?= $cacheBuster ?>" alt="<?= $companyName ?>">
                 </div>
                 <h2 class="login-title">Welcome Back</h2>
                 <p class="login-subtitle">Access your <strong><?= $companyName ?></strong> workspace</p>
