@@ -34,7 +34,7 @@ PORT = 21
 REMOTE_PATH = "/"
 
 # Files and directories to exclude
-EXCLUDE_DIRS = {".git", ".vscode", ".idea", "scripts", "__pycache__", "node_modules"}
+EXCLUDE_DIRS = {".git", ".vscode", ".idea", "scripts", "__pycache__", "node_modules", "tcpdf"}
 EXCLUDE_FILES = {".DS_Store", "deploy.py"}
 
 def upload_dir(ftp, local_dir, remote_dir):

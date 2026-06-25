@@ -3,6 +3,7 @@ require_once 'auth_check.php';
 require_once 'includes/commerce.php';
 require_once 'includes/brand.php';
 require_once 'includes/dynamic_modules.php';
+require_once 'includes/upload_paths.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
@@ -408,14 +409,14 @@ foreach ($module['blocks'] as $block) {
                                             ?>
                                             <?php if($isImage): ?>
                                                 <div style="margin-bottom: 12px; position:relative; display:inline-block;">
-                                                    <img src="/<?= htmlspecialchars($val) ?>" alt="Attachment" style="max-width:200px; max-height:200px; border-radius:8px; border:1px solid var(--border); box-shadow:var(--shadow-sm);">
+                                                    <img src="<?= htmlspecialchars(UPLOAD_BASE_URL . urlencode(ltrim($val, '/'))) ?>" alt="Attachment" style="max-width:200px; max-height:200px; border-radius:8px; border:1px solid var(--border); box-shadow:var(--shadow-sm);">
                                                     <?php if(!$isViewOnly): ?>
                                                     <button type="button" class="mm-icon-btn" style="position:absolute; top:-10px; right:-10px; background:white; box-shadow:var(--shadow-md); z-index: 10;" onclick="document.getElementById('file-<?= $fid ?>').click();" title="Edit Image"><i class="fa-solid fa-pencil"></i></button>
                                                     <?php endif; ?>
                                                 </div>
                                             <?php elseif($val): ?>
                                                 <div class="text-sm text-muted" style="margin-bottom:8px;">
-                                                    <i class="fa-solid fa-paperclip"></i> Current: <a href="/<?= htmlspecialchars($val) ?>" target="_blank" style="color:var(--primary);"><?= htmlspecialchars(basename($val)) ?></a>
+                                                    <i class="fa-solid fa-paperclip"></i> Current: <a href="<?= htmlspecialchars(UPLOAD_BASE_URL . urlencode(ltrim($val, '/'))) ?>" target="_blank" style="color:var(--primary);"><?= htmlspecialchars(basename($val)) ?></a>
                                                 </div>
                                             <?php endif; ?>
                                             <input type="file" class="form-control" id="file-<?= $fid ?>" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" <?= ($isImage && $val) || $isViewOnly ? 'style="display:none;"' : '' ?>>
