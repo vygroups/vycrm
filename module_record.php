@@ -259,12 +259,27 @@ foreach ($module['blocks'] as $block) {
                                 </label>
                                 <?php switch($field['field_type']):
                                     case 'text': case 'email': case 'url': case 'number': case 'currency': ?>
+                                        <?php if ($isViewOnly && $field['field_type'] === 'url' && $val): 
+                                            $displayUrl = $val;
+                                            $hrefUrl = $val;
+                                            if (!preg_match('/^https?:\/\//i', $hrefUrl)) {
+                                                $hrefUrl = 'https://' . $hrefUrl;
+                                            }
+                                        ?>
+                                            <div style="padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; min-height: 42px; display: flex; align-items: center;">
+                                                <a href="<?= htmlspecialchars($hrefUrl) ?>" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none; word-break: break-all; display: inline-flex; align-items: center; gap: 6px;">
+                                                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 12px;"></i>
+                                                    <?= htmlspecialchars($displayUrl) ?>
+                                                </a>
+                                            </div>
+                                        <?php else: ?>
                                         <input type="<?= $field['field_type'] === 'email' ? 'email' : ($field['field_type'] === 'url' ? 'url' : ($field['field_type'] === 'number' || $field['field_type'] === 'currency' ? 'number' : 'text')) ?>"
                                                class="form-control dm-field" data-field-id="<?= $fid ?>"
                                                placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
                                                value="<?= htmlspecialchars($val) ?>"
                                                <?= $field['field_type'] === 'currency' ? 'step="0.01"' : '' ?>
                                                <?= $field['is_required'] ? 'required' : '' ?>>
+                                        <?php endif; ?>
                                     <?php break; case 'phone': 
                                         $dialCodes = [
                                             'IN' => '+91', 'US' => '+1', 'GB' => '+44', 'AE' => '+971', 'SA' => '+966',

@@ -723,7 +723,7 @@ try {
             if (!$recId) throw new RuntimeException('Record ID required');
 
             $sql = "
-                SELECT h.*, u.username, u.first_name, u.last_name, f.label as field_label 
+                SELECT h.*, u.username, u.first_name, u.last_name, f.label as field_label, f.field_type, f.config as field_config
                 FROM {$prefix}module_record_history h
                 LEFT JOIN users u ON u.id = h.changed_by
                 LEFT JOIN {$prefix}module_fields f ON f.id = h.field_id
@@ -740,11 +740,49 @@ try {
             $stmt->execute($params);
             $history = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Format human-readable details
+            // Resolve api_call_picker values (record IDs -> display names)
+            $resolveCache = [];
             foreach ($history as &$row) {
                 $displayName = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
                 $row['user_display'] = $displayName ?: ($row['username'] ?? 'System/Unknown');
                 $row['date_display'] = date('Y-m-d H:i:s', strtotime($row['changed_at']));
+
+                // For api_call_picker fields, resolve IDs to display names
+                if (($row['field_type'] ?? '') === 'api_call_picker') {
+                    $fConfig = json_decode($row['field_config'] ?: '{}', true);
+                    $linkedModId = (int)($fConfig['linked_module_id'] ?? 0);
+                    if ($linkedModId) {
+                        foreach (['old_value', 'new_value'] as $valKey) {
+                            $recIdVal = trim((string)($row[$valKey] ?? ''));
+                            if ($recIdVal !== '' && is_numeric($recIdVal)) {
+                                $cacheKey = $linkedModId . '_' . $recIdVal;
+                                if (!isset($resolveCache[$cacheKey])) {
+                                    // Find the title field of the linked module
+                                    $dfStmt = $conn->prepare("SELECT id, field_type, config FROM {$prefix}module_fields WHERE module_id = ? ORDER BY sort_order ASC");
+                                    $dfStmt->execute([$linkedModId]);
+                                    $allLinkedFields = $dfStmt->fetchAll(PDO::FETCH_ASSOC);
+                                    $displayFieldId = null;
+                                    $fallbackFieldId = null;
+                                    foreach ($allLinkedFields as $lf) {
+                                        $lfConf = json_decode($lf['config'] ?: '{}', true);
+                                        if (!empty($lfConf['is_title'])) { $displayFieldId = $lf['id']; break; }
+                                        if (!$fallbackFieldId && in_array($lf['field_type'], ['text','name','email'])) { $fallbackFieldId = $lf['id']; }
+                                    }
+                                    if (!$displayFieldId) $displayFieldId = $fallbackFieldId;
+                                    if ($displayFieldId) {
+                                        $rvStmt = $conn->prepare("SELECT value FROM {$prefix}module_record_values WHERE record_id = ? AND field_id = ?");
+                                        $rvStmt->execute([(int)$recIdVal, $displayFieldId]);
+                                        $resolvedName = $rvStmt->fetchColumn();
+                                        $resolveCache[$cacheKey] = $resolvedName ? trim($resolvedName) : "(Record #$recIdVal)";
+                                    } else {
+                                        $resolveCache[$cacheKey] = "Record #$recIdVal";
+                                    }
+                                }
+                                $row[$valKey] = $resolveCache[$cacheKey];
+                            }
+                        }
+                    }
+                }
             }
             unset($row);
 
