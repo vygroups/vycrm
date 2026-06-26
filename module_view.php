@@ -340,6 +340,27 @@ if (!$hasUpdatedAt) {
                                             } else {
                                                 echo floor($seconds / 3600) . ' hr ' . floor(($seconds % 3600) / 60) . ' min';
                                             }
+                                        } elseif ($f['field_type'] === 'url' && $val) {
+                                            $cleanUrl = trim($val);
+                                            $hrefUrl = $cleanUrl;
+                                            if (!preg_match('/^https?:\/\//i', $hrefUrl) && !preg_match('/^\//', $hrefUrl)) {
+                                                $hrefUrl = 'https://' . $hrefUrl;
+                                            }
+                                            $urlForSegment = $cleanUrl;
+                                            if (substr($urlForSegment, -1) === '/') {
+                                                $urlForSegment = substr($urlForSegment, 0, -1);
+                                            }
+                                            $lastSlash = strrpos($urlForSegment, '/');
+                                            if ($lastSlash !== false) {
+                                                $lastSegment = substr($urlForSegment, $lastSlash + 1);
+                                            } else {
+                                                $lastSegment = $urlForSegment;
+                                            }
+                                            if ($lastSegment === '') {
+                                                $lastSegment = $cleanUrl;
+                                            }
+                                            $display = '.../' . $lastSegment;
+                                            echo '<a href="' . htmlspecialchars($hrefUrl) . '" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-weight: 600; text-decoration: none;"><i class="fa-solid fa-link" style="font-size:11px; margin-right:4px;"></i>' . htmlspecialchars($display) . '</a>';
                                         } else {
                                             $display = mb_strlen($val) > 50 ? mb_substr($val, 0, 50) . '…' : $val;
                                             echo htmlspecialchars($display ?: '-');
@@ -1062,6 +1083,25 @@ function renderRecordsTable(fields, records) {
 function formatFieldValue(val, fieldType, fieldOptions = []) {
     if (val === null || val === undefined) return '-';
     
+    if (fieldType === 'url' && val) {
+        let cleanUrl = val.toString().trim();
+        if (!cleanUrl) return '-';
+        
+        let href = cleanUrl;
+        if (!/^https?:\/\//i.test(cleanUrl) && !/^\//.test(cleanUrl)) {
+            href = 'https://' + cleanUrl;
+        }
+        let urlForSegment = cleanUrl;
+        if (urlForSegment.endsWith('/')) {
+            urlForSegment = urlForSegment.slice(0, -1);
+        }
+        let lastSegment = urlForSegment.substring(urlForSegment.lastIndexOf('/') + 1);
+        if (!lastSegment) {
+            lastSegment = cleanUrl;
+        }
+        let display = '.../' + lastSegment;
+        return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); font-weight:600; text-decoration:none;"><i class="fa-solid fa-link" style="font-size:11px; margin-right:4px;"></i>${escapeHtml(display)}</a>`;
+    }
     if (fieldType === 'checkbox') {
         return val ? '<i class="fa-solid fa-check" style="color:#10b981;"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--text-muted);"></i>';
     }
