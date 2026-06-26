@@ -29,6 +29,7 @@ $v = time();
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
     <style>
         .stats-grid {
@@ -161,8 +162,11 @@ $v = time();
                 <div class="crm-card" style="padding: 24px; margin-bottom: 24px; text-align: left;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px;">
                         <div>
-                            <h3 id="detailName" style="margin: 0 0 4px 0; font-size: 20px; font-weight: 700;">Campaign Name</h3>
-                            <div id="detailMeta" style="font-size: 12px; color: var(--text-muted);">Channel: Email | Template: Welcome</div>
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <h3 id="detailName" style="margin: 0; font-size: 20px; font-weight: 700;">Campaign Name</h3>
+                                <button id="btnEditCampaign" class="mm-btn mm-btn-outline" style="padding: 4px 10px; font-size: 12px; height: 28px; display: inline-flex; align-items: center; gap: 4px;" onclick="openEditModal()"><i class="fa-solid fa-pen"></i> Edit Details</button>
+                            </div>
+                            <div id="detailMeta" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Channel: Email | Template: Welcome</div>
                         </div>
                         <div id="campaignStatusBadge">
                             <span class="status-badge" style="background:#e0f2fe; color:#0369a1;">Completed</span>
@@ -361,8 +365,8 @@ $v = time();
                 </div>
 
                 <div class="form-group" id="scheduleTimeGroup" style="display: none; flex-direction: column; gap: 6px; margin-top: 15px;">
-                    <label class="form-label">Schedule Date & Time (Hourly) *</label>
-                    <input type="datetime-local" id="campaignScheduledAt" class="form-control" onchange="this.value = this.value.substring(0, 14) + '00';" style="width: 100%; box-sizing: border-box;">
+                    <label class="form-label">Schedule Date & Time (5 Min Intervals) *</label>
+                    <input type="text" id="campaignScheduledAt" class="form-control" placeholder="Select date & time..." style="width: 100%; box-sizing: border-box;">
                 </div>
 
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; margin-top: 15px;">
@@ -392,6 +396,7 @@ $v = time();
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script>
         const API = 'api/campaigns_api.php';
         const commConfigs = <?= json_encode($commConfigs) ?>;
@@ -507,6 +512,12 @@ $v = time();
         }
 
         function openCreateModal() {
+            const modalEl = document.getElementById('createCampaignModal');
+            modalEl.querySelector('h3').textContent = 'Start New Campaign';
+            const saveBtn = modalEl.querySelector('.mm-modal-footer button.mm-btn-primary');
+            saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> Create Campaign';
+            modalEl.removeAttribute('data-campaign-id');
+
             document.getElementById('campaignName').value = '';
             document.getElementById('campaignType').value = 'email';
             document.getElementById('campaignSendMode').value = 'immediate';
@@ -517,6 +528,49 @@ $v = time();
             openModal('createCampaignModal');
         }
 
+        function openEditModal() {
+            if (!activeCampaign) return;
+            
+            // Set modal title & button text
+            const modalEl = document.getElementById('createCampaignModal');
+            modalEl.querySelector('h3').textContent = 'Edit Campaign Details';
+            const saveBtn = modalEl.querySelector('.mm-modal-footer button.mm-btn-primary');
+            saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes';
+            
+            // Set campaign id attribute
+            modalEl.setAttribute('data-campaign-id', activeCampaign.id);
+
+            // Populate fields
+            document.getElementById('campaignName').value = activeCampaign.name;
+            document.getElementById('campaignType').value = activeCampaign.type;
+            
+            // Trigger channel change to populate communication configs and templates list
+            onCampaignTypeChange();
+            
+            // Now select template and communication config
+            document.getElementById('campaignTemplateSelect').value = activeCampaign.template_id;
+            document.getElementById('campaignCommConfig').value = activeCampaign.communication_config_id || '';
+            
+            // Scheduled at / Send mode
+            const sendModeSelect = document.getElementById('campaignSendMode');
+            if (activeCampaign.scheduled_at) {
+                sendModeSelect.value = 'schedule';
+                onCampaignSendModeChange(); // Shows the scheduled time input
+                if (fpCampaignSchedule) {
+                    fpCampaignSchedule.setDate(new Date(activeCampaign.scheduled_at.replace(/-/g, '/')));
+                } else {
+                    document.getElementById('campaignScheduledAt').value = activeCampaign.scheduled_at;
+                }
+            } else {
+                sendModeSelect.value = 'immediate';
+                onCampaignSendModeChange(); // Hides the scheduled time input
+            }
+            
+            document.getElementById('campaignSendDelay').value = activeCampaign.send_delay || '0';
+            
+            openModal('createCampaignModal');
+        }
+
         function onCampaignSendModeChange() {
             const mode = document.getElementById('campaignSendMode').value;
             const group = document.getElementById('scheduleTimeGroup');
@@ -524,11 +578,22 @@ $v = time();
                 group.style.display = 'flex';
                 const now = new Date();
                 now.setHours(now.getHours() + 1);
-                const offset = now.getTimezoneOffset() * 60000;
-                const localISOTime = (new Date(now - offset)).toISOString().slice(0, 16);
-                document.getElementById('campaignScheduledAt').value = localISOTime;
+                // Round to the nearest 5 minutes
+                const coeff = 1000 * 60 * 5;
+                const rounded = new Date(Math.round(now.getTime() / coeff) * coeff);
+                
+                if (fpCampaignSchedule) {
+                    fpCampaignSchedule.setDate(rounded);
+                } else {
+                    const offset = rounded.getTimezoneOffset() * 60000;
+                    const localISOTime = (new Date(rounded - offset)).toISOString().slice(0, 16);
+                    document.getElementById('campaignScheduledAt').value = localISOTime;
+                }
             } else {
                 group.style.display = 'none';
+                if (fpCampaignSchedule) {
+                    fpCampaignSchedule.clear();
+                }
             }
         }
 
@@ -566,25 +631,36 @@ $v = time();
             
             if (send_mode === 'schedule' && !scheduled_at) {
                 vyToast('Schedule date and time is required.', 'error');
-                scheduledAtEl.classList.add('is-invalid');
-                scheduledAtEl.style.border = '1px solid #ef4444';
-                scheduledAtEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const targetInput = fpCampaignSchedule ? fpCampaignSchedule.altInput : scheduledAtEl;
+                targetInput.classList.add('is-invalid');
+                targetInput.style.border = '1px solid #ef4444';
+                targetInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
-            } else { scheduledAtEl.style.border = ''; }
+            } else {
+                if (fpCampaignSchedule && fpCampaignSchedule.altInput) {
+                    fpCampaignSchedule.altInput.style.border = '';
+                    fpCampaignSchedule.altInput.classList.remove('is-invalid');
+                }
+                scheduledAtEl.style.border = '';
+            }
 
+            const campaignId = document.getElementById('createCampaignModal').getAttribute('data-campaign-id');
             try {
                 const res = await fetch(API, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'save_campaign', name, type, template_id, send_mode, send_delay, scheduled_at, communication_config_id: comm_config_id })
+                    body: JSON.stringify({ action: 'save_campaign', id: campaignId ? parseInt(campaignId) : 0, name, type, template_id, send_mode, send_delay, scheduled_at, communication_config_id: comm_config_id })
                 });
                 const data = await res.json();
                 if (data.success) {
-                    vyToast('Campaign created successfully!', 'success');
+                    vyToast(campaignId ? 'Campaign updated successfully!' : 'Campaign created successfully!', 'success');
                     closeModal('createCampaignModal');
-                    loadCampaigns();
-                    // Open it immediately
-                    viewCampaign(data.id);
+                    if (campaignId) {
+                        viewCampaign(campaignId);
+                    } else {
+                        loadCampaigns();
+                        viewCampaign(data.id);
+                    }
                 } else {
                     vyToast(data.error, 'error');
                 }
@@ -639,6 +715,16 @@ $v = time();
         function showDetailsPanel(c, recipients) {
             document.getElementById('campaignsDashboard').style.display = 'none';
             document.getElementById('campaignDetailsPanel').style.display = 'block';
+
+            // Toggle edit button visibility based on campaign status (only allow draft/scheduled edits)
+            const editBtn = document.getElementById('btnEditCampaign');
+            if (editBtn) {
+                if (c.status === 'draft' || c.status === 'scheduled') {
+                    editBtn.style.display = 'inline-flex';
+                } else {
+                    editBtn.style.display = 'none';
+                }
+            }
 
             document.getElementById('detailName').textContent = c.name;
             const chanLabel = c.type === 'email' ? 'Email Channel' : 'WhatsApp Channel';
@@ -1083,7 +1169,40 @@ $v = time();
                 .replace(/'/g, '&#039;');
         }
 
-        document.addEventListener('DOMContentLoaded', initPage);
+        let fpCampaignSchedule = null;
+        document.addEventListener('DOMContentLoaded', () => {
+            initPage();
+            
+            // Initialize Flatpickr for Campaign Scheduled At
+            fpCampaignSchedule = flatpickr('#campaignScheduledAt', {
+                enableTime: true,
+                dateFormat: "Y-m-d H:i",
+                altInput: true,
+                altFormat: "d/m/Y, h:i K",
+                minuteIncrement: 5,
+                allowInput: false,
+                onChange: function(selectedDates, dateStr, instance) {
+                    if (selectedDates.length > 0) {
+                        const d = selectedDates[0];
+                        const m = d.getMinutes();
+                        if (m % 5 !== 0) {
+                            const rounded = new Date(Math.round(d.getTime() / 300000) * 300000);
+                            instance.setDate(rounded, false);
+                        }
+                    }
+                },
+                onClose: function(selectedDates, dateStr, instance) {
+                    if (selectedDates.length > 0) {
+                        const d = selectedDates[0];
+                        const m = d.getMinutes();
+                        if (m % 5 !== 0) {
+                            const rounded = new Date(Math.round(d.getTime() / 300000) * 300000);
+                            instance.setDate(rounded, false);
+                        }
+                    }
+                }
+            });
+        });
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
     </script>
 </body>

@@ -142,6 +142,15 @@ try {
             $commConfigId = !empty($input['communication_config_id']) ? (int)$input['communication_config_id'] : null;
 
             if ($id > 0) {
+                $existingStmt = $conn->prepare("SELECT status FROM {$prefix}campaigns WHERE id = ?");
+                $existingStmt->execute([$id]);
+                $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
+                if ($existing) {
+                    $existingStatus = $existing['status'];
+                    if ($existingStatus !== 'draft' && $existingStatus !== 'scheduled') {
+                        throw new RuntimeException('Cannot edit a campaign that has already started or completed.');
+                    }
+                }
                 $stmt = $conn->prepare("UPDATE {$prefix}campaigns SET name = ?, type = ?, template_id = ?, scheduled_at = ?, send_delay = ?, status = ?, communication_config_id = ? WHERE id = ?");
                 $stmt->execute([$name, $type, $templateId, $scheduledAt, $sendDelay, $status, $commConfigId, $id]);
                 $savedId = $id;
