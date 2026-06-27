@@ -95,13 +95,17 @@ try {
                         break;
                     }
 
-                    // Resolve placeholders
-                    $replacements = [
-                        '{First Name}' => $recipient['first_name'] ?: '',
-                        '{Last Name}' => $recipient['last_name'] ?: '',
-                        '{Company Name}' => $recipient['company_name'] ?: '',
-                        '{Designation}' => $recipient['designation'] ?: ''
-                    ];
+                    // Resolve Personalization placeholders dynamically from configured fields
+                    $cfStmt = $conn->query("SELECT field_key, label FROM {$tenantPrefix}campaign_fields");
+                    $campaignFields = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
+                    $extraData = !empty($recipient['extra_data']) ? json_decode($recipient['extra_data'], true) : [];
+                    
+                    $replacements = [];
+                    foreach ($campaignFields as $cf) {
+                        $fKey = $cf['field_key'];
+                        $val = isset($extraData[$fKey]) ? $extraData[$fKey] : ($recipient[$fKey] ?? '');
+                        $replacements['{' . $cf['label'] . '}'] = $val;
+                    }
 
                     $subject = str_ireplace(array_keys($replacements), array_values($replacements), $campaign['subject'] ?? '');
                     $body = str_ireplace(array_keys($replacements), array_values($replacements), $campaign['body'] ?? '');

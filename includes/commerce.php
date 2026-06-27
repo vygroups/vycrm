@@ -546,11 +546,31 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             phone VARCHAR(30) DEFAULT NULL,
             company_name VARCHAR(150) DEFAULT NULL,
             designation VARCHAR(100) DEFAULT NULL,
+            extra_data JSON DEFAULT NULL,
             status ENUM('pending', 'sent', 'failed') DEFAULT 'pending',
             sent_at DATETIME DEFAULT NULL,
             error_message TEXT DEFAULT NULL,
             FOREIGN KEY (campaign_id) REFERENCES {$prefix}campaigns(id) ON DELETE CASCADE,
             INDEX idx_recipient_campaign (campaign_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    // Migrate: add extra_data column if missing
+    try { $conn->exec("ALTER TABLE {$prefix}campaign_recipients ADD COLUMN extra_data JSON DEFAULT NULL AFTER designation"); } catch (Throwable $e) {}
+
+    // 17. Campaign Custom Fields
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}campaign_fields (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            field_key VARCHAR(100) NOT NULL,
+            label VARCHAR(150) NOT NULL,
+            field_type ENUM('text','email','phone','number','textarea','select','date','url') DEFAULT 'text',
+            placeholder VARCHAR(255) DEFAULT NULL,
+            options JSON DEFAULT NULL,
+            is_required TINYINT(1) DEFAULT 0,
+            sort_order INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_campaign_field_key (field_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 }

@@ -66,6 +66,81 @@ try {
             $stmt->execute([$key]);
             commerce_json_response(['success' => true]);
 
+        /* ════════════════════ CAMPAIGN CUSTOM FIELDS ════════════════════ */
+
+        case 'list_campaign_fields':
+            $stmt = $conn->query("SELECT * FROM {$prefix}campaign_fields ORDER BY sort_order ASC, id ASC");
+            $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($fields as &$f) {
+                $f['options'] = $f['options'] ? json_decode($f['options'], true) : [];
+                $f['is_required'] = (int)$f['is_required'];
+                $f['sort_order'] = (int)$f['sort_order'];
+            }
+            unset($f);
+            commerce_json_response(['success' => true, 'fields' => $fields]);
+
+        case 'save_campaign_field':
+            $fId = (int)($input['id'] ?? 0);
+            $label = trim($input['label'] ?? '');
+            $fieldType = trim($input['field_type'] ?? 'text');
+            $placeholder = trim($input['placeholder'] ?? '');
+            $options = $input['options'] ?? [];
+            $isRequired = (int)($input['is_required'] ?? 0);
+            $sortOrder = (int)($input['sort_order'] ?? 0);
+
+            if (!$label) throw new RuntimeException('Field label is required');
+
+            $allowedTypes = ['text','email','phone','number','textarea','select','date','url'];
+            if (!in_array($fieldType, $allowedTypes)) $fieldType = 'text';
+
+            $optionsJson = !empty($options) ? json_encode($options) : null;
+
+            if ($fId > 0) {
+                $stmt = $conn->prepare("UPDATE {$prefix}campaign_fields SET label=?, field_type=?, placeholder=?, options=?, is_required=?, sort_order=? WHERE id=?");
+                $stmt->execute([$label, $fieldType, $placeholder, $optionsJson, $isRequired, $sortOrder, $fId]);
+                $savedId = $fId;
+            } else {
+                // Generate field_key from label
+                $fieldKey = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '_', $label));
+                $fieldKey = trim($fieldKey, '_');
+                // Check uniqueness, append number if needed
+                $baseKey = $fieldKey;
+                $counter = 1;
+                while (true) {
+                    $ck = $conn->prepare("SELECT id FROM {$prefix}campaign_fields WHERE field_key = ?");
+                    $ck->execute([$fieldKey]);
+                    if (!$ck->fetch()) break;
+                    $fieldKey = $baseKey . '_' . $counter++;
+                }
+                // Auto sort_order
+                $maxStmt = $conn->query("SELECT COALESCE(MAX(sort_order),0)+1 FROM {$prefix}campaign_fields");
+                $sortOrder = (int)$maxStmt->fetchColumn();
+                $stmt = $conn->prepare("INSERT INTO {$prefix}campaign_fields (field_key,label,field_type,placeholder,options,is_required,sort_order) VALUES (?,?,?,?,?,?,?)");
+                $stmt->execute([$fieldKey, $label, $fieldType, $placeholder, $optionsJson, $isRequired, $sortOrder]);
+                $savedId = (int)$conn->lastInsertId();
+            }
+            $row = $conn->prepare("SELECT * FROM {$prefix}campaign_fields WHERE id=?");
+            $row->execute([$savedId]);
+            $saved = $row->fetch(PDO::FETCH_ASSOC);
+            $saved['options'] = $saved['options'] ? json_decode($saved['options'], true) : [];
+            commerce_json_response(['success' => true, 'field' => $saved]);
+
+        case 'delete_campaign_field':
+            $fId = (int)($input['id'] ?? 0);
+            if (!$fId) throw new RuntimeException('Field ID required');
+            $conn->prepare("DELETE FROM {$prefix}campaign_fields WHERE id=?")->execute([$fId]);
+            commerce_json_response(['success' => true]);
+
+        case 'reorder_campaign_fields':
+            $order = $input['order'] ?? []; // [{id: 1, sort_order: 0}, ...]
+            if (is_array($order)) {
+                $upd = $conn->prepare("UPDATE {$prefix}campaign_fields SET sort_order=? WHERE id=?");
+                foreach ($order as $item) {
+                    $upd->execute([(int)($item['sort_order'] ?? 0), (int)($item['id'] ?? 0)]);
+                }
+            }
+            commerce_json_response(['success' => true]);
+
         /* ════════════════════ CAMPAIGN TEMPLATES CRUD ════════════════════ */
 
         case 'list_templates':
@@ -144,8 +219,17 @@ try {
             $rStmt = $conn->prepare("SELECT * FROM {$prefix}campaign_recipients WHERE campaign_id = ? ORDER BY id ASC");
             $rStmt->execute([$id]);
             $recipients = $rStmt->fetchAll(PDO::FETCH_ASSOC);
+            // Decode extra_data JSON
+            foreach ($recipients as &$r) {
+                $r['extra_data'] = !empty($r['extra_data']) ? json_decode($r['extra_data'], true) : [];
+            }
+            unset($r);
 
-            commerce_json_response(['success' => true, 'campaign' => $campaign, 'recipients' => $recipients]);
+            // Also return custom field definitions
+            $cfStmt = $conn->query("SELECT * FROM {$prefix}campaign_fields ORDER BY sort_order ASC, id ASC");
+            $customFields = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            commerce_json_response(['success' => true, 'campaign' => $campaign, 'recipients' => $recipients, 'custom_fields' => $customFields]);
 
         case 'save_campaign':
             $id = (int)($input['id'] ?? 0);
@@ -207,35 +291,93 @@ try {
             if (!$campaignId) throw new RuntimeException('Campaign ID is required');
             if (!is_array($recipients) || empty($recipients)) throw new RuntimeException('No contacts to import');
 
-            // Delete existing recipients for this campaign
-            $conn->prepare("DELETE FROM {$prefix}campaign_recipients WHERE campaign_id = ?")->execute([$campaignId]);
+            // Load existing recipients for this campaign to prevent inserting exact duplicates
+            $existingStmt = $conn->prepare("SELECT email, phone FROM {$prefix}campaign_recipients WHERE campaign_id = ?");
+            $existingStmt->execute([$campaignId]);
+            $existingRecipients = $existingStmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $existingEmails = [];
+            $existingPhones = [];
+            foreach ($existingRecipients as $er) {
+                $em = trim(strtolower($er['email'] ?? ''));
+                $ph = trim($er['phone'] ?? '');
+                if ($em) $existingEmails[$em] = true;
+                if ($ph) $existingPhones[$ph] = true;
+            }
 
-            // Bulk insert recipients
+            // Fetch all campaign field definitions
+            $cfStmt = $conn->query("SELECT field_key, field_type FROM {$prefix}campaign_fields ORDER BY sort_order ASC");
+            $campaignFieldDefs = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
+            $allFieldKeys = array_column($campaignFieldDefs, 'field_key');
+
+            // Detect which field_keys map to fixed DB columns (by key name convention)
+            $fixedColMap = [
+                'first_name'    => 'first_name',
+                'last_name'     => 'last_name',
+                'email'         => 'email',
+                'phone'         => 'phone',
+                'mobile'        => 'phone',
+                'company_name'  => 'company_name',
+                'company'       => 'company_name',
+                'designation'   => 'designation',
+            ];
+
+            // Bulk insert recipients — store ALL values in extra_data, also populate fixed columns
             $stmt = $conn->prepare("
                 INSERT INTO {$prefix}campaign_recipients 
-                (campaign_id, first_name, last_name, email, phone, company_name, designation, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+                (campaign_id, first_name, last_name, email, phone, company_name, designation, extra_data, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
             ");
 
             $conn->beginTransaction();
+            $importedCount = 0;
             foreach ($recipients as $r) {
-                $fName = trim($r['first_name'] ?? $r['First Name'] ?? '');
-                $lName = trim($r['last_name'] ?? $r['Last Name'] ?? '');
-                $email = trim($r['email'] ?? $r['Email'] ?? '');
-                $phone = trim($r['phone'] ?? $r['Phone'] ?? $r['Mobile'] ?? '');
-                $company = trim($r['company_name'] ?? $r['Company Name'] ?? $r['Company'] ?? '');
-                $designation = trim($r['designation'] ?? $r['Designation'] ?? '');
+                // Build extra_data from ALL campaign field values
+                $extraData = [];
+                foreach ($allFieldKeys as $fKey) {
+                    if (isset($r[$fKey]) && $r[$fKey] !== '') {
+                        $extraData[$fKey] = $r[$fKey];
+                    }
+                }
 
-                if (!$email && !$phone) continue; // Skip entries without contacts
+                // Extract fixed column values from extra_data (by field_key convention)
+                $fName = '';
+                $lName = '';
+                $email = '';
+                $phone = '';
+                $company = '';
+                $designation = '';
+                foreach ($r as $k => $v) {
+                    $k2 = strtolower(trim($k));
+                    switch ($k2) {
+                        case 'first_name': $fName = trim($v); break;
+                        case 'last_name': $lName = trim($v); break;
+                        case 'email': $email = trim($v); break;
+                        case 'phone': case 'mobile': $phone = trim($v); break;
+                        case 'company_name': case 'company': $company = trim($v); break;
+                        case 'designation': $designation = trim($v); break;
+                    }
+                }
 
-                $stmt->execute([$campaignId, $fName, $lName, $email, $phone, $company, $designation]);
+                $extraDataJson = !empty($extraData) ? json_encode($extraData) : null;
+
+                // Skip if this contact already exists in the campaign by email or phone
+                if ($email && isset($existingEmails[strtolower($email)])) continue;
+                if ($phone && isset($existingPhones[$phone])) continue;
+
+                // Add to temporary tracker to prevent duplicate entries inside the same upload batch
+                if ($email) $existingEmails[strtolower($email)] = true;
+                if ($phone) $existingPhones[$phone] = true;
+
+                $stmt->execute([$campaignId, $fName, $lName, $email, $phone, $company, $designation, $extraDataJson]);
+                $importedCount++;
             }
             $conn->commit();
 
             // Set campaign status back to draft, UNLESS it is already scheduled
             $conn->prepare("UPDATE {$prefix}campaigns SET status = IF(status = 'scheduled', 'scheduled', 'draft') WHERE id = ?")->execute([$campaignId]);
 
-            commerce_json_response(['success' => true, 'count' => count($recipients)]);
+            commerce_json_response(['success' => true, 'count' => $importedCount]);
 
 
         /* ════════════════════ PROGRESSIVE SENDING ENGINE ════════════════════ */
@@ -281,13 +423,17 @@ try {
                 commerce_json_response(['success' => true, 'finished' => true, 'campaign_status' => $finalStatus]);
             }
 
-            // Resolve Personalization placeholders
-            $replacements = [
-                '{First Name}' => $recipient['first_name'] ?: '',
-                '{Last Name}' => $recipient['last_name'] ?: '',
-                '{Company Name}' => $recipient['company_name'] ?: '',
-                '{Designation}' => $recipient['designation'] ?: ''
-            ];
+            // Resolve Personalization placeholders dynamically from configured fields
+            $cfStmt = $conn->query("SELECT field_key, label FROM {$prefix}campaign_fields");
+            $campaignFields = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
+            $extraData = !empty($recipient['extra_data']) ? json_decode($recipient['extra_data'], true) : [];
+            
+            $replacements = [];
+            foreach ($campaignFields as $cf) {
+                $fKey = $cf['field_key'];
+                $val = isset($extraData[$fKey]) ? $extraData[$fKey] : ($recipient[$fKey] ?? '');
+                $replacements['{' . $cf['label'] . '}'] = $val;
+            }
 
             $subject = str_ireplace(array_keys($replacements), array_values($replacements), $campaign['subject'] ?? '');
             $body = str_ireplace(array_keys($replacements), array_values($replacements), $campaign['body'] ?? '');

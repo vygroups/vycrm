@@ -34,6 +34,18 @@ try {
     }
 } catch (Exception $e) {}
 
+// Load campaign custom fields
+$campaignCustomFields = [];
+try {
+    $cfStmt = $conn->query("SELECT * FROM {$prefix}campaign_fields ORDER BY sort_order ASC, id ASC");
+    $campaignCustomFields = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($campaignCustomFields as &$cf) {
+        $cf['options'] = !empty($cf['options']) ? json_decode($cf['options'], true) : [];
+        $cf['is_required'] = (int)$cf['is_required'];
+    }
+    unset($cf);
+} catch (Exception $e) {}
+
 $v = time();
 ?>
 <!DOCTYPE html>
@@ -262,33 +274,39 @@ $v = time();
                             <!-- Manual Entry Content -->
                             <div id="tabContentManual" style="display:none; background: rgba(123, 94, 240, 0.02); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
                                 <h5 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 700; color: var(--primary);">Add Contact Manually</h5>
+                                <?php if (empty($campaignCustomFields)): ?>
+                                <div style="text-align:center; padding: 20px; color: var(--text-muted); font-size: 13px; background: rgba(123,94,240,0.04); border-radius: 10px; margin-bottom: 15px;">
+                                    <i class="fa-solid fa-sliders" style="font-size: 24px; margin-bottom: 8px; display:block; opacity:0.4;"></i>
+                                    No fields configured yet. Go to <strong>Module Manager → Bulk Campaigns → Configure Fields</strong> to add fields first.
+                                </div>
+                                <?php else: ?>
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 15px;">
+                                    <?php foreach ($campaignCustomFields as $cf): ?>
                                     <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:6px;">
-                                        <label class="form-label" style="font-size:11px; margin-bottom:4px; font-weight:700;">First Name</label>
-                                        <input type="text" id="manualFirstName" class="form-control" style="height:36px; padding:6px 12px; font-size:13px; background:#fff;" placeholder="e.g. John">
+                                        <label class="form-label" style="font-size:11px; margin-bottom:4px; font-weight:700;">
+                                            <?= htmlspecialchars($cf['label']) ?><?= $cf['is_required'] ? ' <span style="color:#ef4444;">*</span>' : '' ?>
+                                        </label>
+                                        <?php if ($cf['field_type'] === 'textarea'): ?>
+                                        <textarea id="manual_cf_<?= htmlspecialchars($cf['field_key']) ?>" class="form-control" style="padding:6px 12px; font-size:13px; background:#fff; height:60px; resize:vertical;" placeholder="<?= htmlspecialchars($cf['placeholder'] ?? '') ?>"></textarea>
+                                        <?php elseif ($cf['field_type'] === 'select' && !empty($cf['options'])): ?>
+                                        <select id="manual_cf_<?= htmlspecialchars($cf['field_key']) ?>" class="form-control" style="height:36px; padding:6px 12px; font-size:13px; background:#fff;">
+                                            <option value="">-- Select <?= htmlspecialchars($cf['label']) ?> --</option>
+                                            <?php foreach ($cf['options'] as $opt): ?>
+                                            <option value="<?= htmlspecialchars($opt) ?>"><?= htmlspecialchars($opt) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <?php else: ?>
+                                        <input type="<?= htmlspecialchars($cf['field_type'] === 'phone' ? 'tel' : $cf['field_type']) ?>"
+                                               id="manual_cf_<?= htmlspecialchars($cf['field_key']) ?>"
+                                               class="form-control"
+                                               style="height:36px; padding:6px 12px; font-size:13px; background:#fff;"
+                                               placeholder="<?= htmlspecialchars($cf['placeholder'] ?? 'e.g. ' . $cf['label']) ?>">
+                                        <?php endif; ?>
                                     </div>
-                                    <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:6px;">
-                                        <label class="form-label" style="font-size:11px; margin-bottom:4px; font-weight:700;">Last Name</label>
-                                        <input type="text" id="manualLastName" class="form-control" style="height:36px; padding:6px 12px; font-size:13px; background:#fff;" placeholder="e.g. Doe">
-                                    </div>
-                                    <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:6px;">
-                                        <label class="form-label" style="font-size:11px; margin-bottom:4px; font-weight:700;">Email</label>
-                                        <input type="email" id="manualEmail" class="form-control" style="height:36px; padding:6px 12px; font-size:13px; background:#fff;" placeholder="e.g. john@example.com">
-                                    </div>
-                                    <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:6px;">
-                                        <label class="form-label" style="font-size:11px; margin-bottom:4px; font-weight:700;">Phone / Mobile</label>
-                                        <input type="text" id="manualPhone" class="form-control" style="height:36px; padding:6px 12px; font-size:13px; background:#fff;" placeholder="e.g. 9876543210">
-                                    </div>
-                                    <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:6px;">
-                                        <label class="form-label" style="font-size:11px; margin-bottom:4px; font-weight:700;">Company Name</label>
-                                        <input type="text" id="manualCompany" class="form-control" style="height:36px; padding:6px 12px; font-size:13px; background:#fff;" placeholder="e.g. Acme Corp">
-                                    </div>
-                                    <div class="form-group" style="margin:0; display:flex; flex-direction:column; gap:6px;">
-                                        <label class="form-label" style="font-size:11px; margin-bottom:4px; font-weight:700;">Designation</label>
-                                        <input type="text" id="manualDesignation" class="form-control" style="height:36px; padding:6px 12px; font-size:13px; background:#fff;" placeholder="e.g. Director">
-                                    </div>
+                                    <?php endforeach; ?>
                                 </div>
                                 <button class="mm-btn mm-btn-primary" style="height:36px; padding:0 16px; font-size:13px;" onclick="addManualContact()"><i class="fa-solid fa-plus"></i> Add to list</button>
+                                <?php endif; ?>
                             </div>
                             
                             <?php foreach ($activeModules as $mm): ?>
@@ -327,14 +345,11 @@ $v = time();
                                 <div class="table-responsive" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px;">
                                     <table class="crm-table" style="font-size: 12px; margin: 0; width: 100%;">
                                         <thead>
-                                            <tr>
-                                                <th>First Name</th>
-                                                <th>Last Name</th>
-                                                <th>Email</th>
-                                                <th>Phone</th>
-                                                <th>Company</th>
-                                                <th>Designation</th>
-                                                <th style="text-align:right;">Actions</th>
+                                            <tr id="csvPreviewHeader">
+                                                <?php foreach ($campaignCustomFields as $cf): ?>
+                                                <th><?= htmlspecialchars($cf['label']) ?></th>
+                                                <?php endforeach; ?>
+                                                <th style="text-align:right; position: sticky; right: 0; background: #fafafa; z-index: 10; box-shadow: -2px 0 5px rgba(0,0,0,0.04);">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="csvPreviewBody"></tbody>
@@ -351,19 +366,17 @@ $v = time();
                         <div class="table-responsive">
                             <table class="crm-table" style="width: 100%;">
                                 <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Email</th>
-                                        <th>Phone</th>
-                                        <th>Company</th>
-                                        <th>Designation</th>
+                                    <tr id="recipientsLogHeader">
+                                        <?php foreach ($campaignCustomFields as $cf): ?>
+                                        <th><?= htmlspecialchars($cf['label']) ?></th>
+                                        <?php endforeach; ?>
                                         <th>Status</th>
                                         <th>Log Message / Sent At</th>
                                     </tr>
                                 </thead>
                                 <tbody id="recipientsListBody">
                                     <tr>
-                                        <td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">No recipients registered yet. Please upload contacts above.</td>
+                                        <td colspan="<?= 2 + count($campaignCustomFields) ?>" style="text-align: center; padding: 20px; color: var(--text-muted);">No recipients registered yet. Please upload contacts above.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -453,6 +466,7 @@ $v = time();
     <script>
         const API = 'api/campaigns_api.php';
         const commConfigs = <?= json_encode($commConfigs) ?>;
+        const campaignCustomFields = <?= json_encode($campaignCustomFields) ?>;
         let campaignsList = [];
         let templatesList = [];
         let activeCampaign = null;
@@ -851,8 +865,10 @@ $v = time();
             const tbody = document.getElementById('recipientsListBody');
             if (!tbody) return;
 
+            const colSpan = 2 + campaignCustomFields.length;
+
             if (recipients.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">No recipients registered yet. Please upload contacts above.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align: center; padding: 20px; color: var(--text-muted);">No recipients registered yet. Please upload contacts above.</td></tr>`;
                 return;
             }
 
@@ -869,13 +885,17 @@ $v = time();
                     logMsg = `<span style="color:var(--text-muted); font-size:11px;">Sent on ${formatVyDate(r.sent_at)}</span>`;
                 }
 
+                // All field cells from extra_data (or fixed columns as fallback)
+                const fieldCells = campaignCustomFields.map(cf => {
+                    const val = (r.extra_data && r.extra_data[cf.field_key] !== undefined && r.extra_data[cf.field_key] !== '')
+                        ? r.extra_data[cf.field_key]
+                        : (r[cf.field_key] || '-');
+                    return `<td style="padding:10px 12px; border-bottom:1px solid var(--border); font-size:12px;">${escapeHtml(String(val))}</td>`;
+                }).join('');
+
                 return `
                     <tr>
-                        <td style="padding:10px 12px; border-bottom:1px solid var(--border);"><strong>${escapeHtml(r.first_name + ' ' + r.last_name)}</strong></td>
-                        <td style="padding:10px 12px; border-bottom:1px solid var(--border); font-size:12px;">${escapeHtml(r.email || '-')}</td>
-                        <td style="padding:10px 12px; border-bottom:1px solid var(--border); font-size:12px;">${escapeHtml(r.phone || '-')}</td>
-                        <td style="padding:10px 12px; border-bottom:1px solid var(--border); font-size:12px;">${escapeHtml(r.company_name || '-')}</td>
-                        <td style="padding:10px 12px; border-bottom:1px solid var(--border); font-size:12px;">${escapeHtml(r.designation || '-')}</td>
+                        ${fieldCells}
                         <td style="padding:10px 12px; border-bottom:1px solid var(--border);">${badge}</td>
                         <td style="padding:10px 12px; border-bottom:1px solid var(--border);">${logMsg}</td>
                     </tr>
@@ -950,29 +970,23 @@ $v = time();
                 return;
             }
 
+            const colSpan = 1 + campaignCustomFields.length;
             previewSection.style.display = 'block';
             tbody.innerHTML = parsedRecipients.slice(0, 10).map((r, idx) => {
-                const fName = r.first_name || r['First Name'] || '';
-                const lName = r.last_name || r['Last Name'] || '';
-                const email = r.email || r['Email'] || '';
-                const phone = r.phone || r['Phone'] || r['Mobile'] || '';
-                const company = r.company_name || r['Company Name'] || r['Company'] || '';
-                const desig = r.designation || r['Designation'] || '';
+                const cells = campaignCustomFields.map(cf => {
+                    const val = r[cf.field_key] || '';
+                    return `<td>${escapeHtml(val)}</td>`;
+                }).join('');
 
                 return `
                     <tr>
-                        <td>${escapeHtml(fName)}</td>
-                        <td>${escapeHtml(lName)}</td>
-                        <td>${escapeHtml(email)}</td>
-                        <td>${escapeHtml(phone)}</td>
-                        <td>${escapeHtml(company)}</td>
-                        <td>${escapeHtml(desig)}</td>
-                        <td style="text-align:right;">
+                        ${cells}
+                        <td style="text-align:right; position: sticky; right: 0; background: white; z-index: 9; box-shadow: -2px 0 5px rgba(0,0,0,0.04);">
                             <button class="mm-icon-btn mm-icon-danger" onclick="removePreviewRecipient(${idx})" style="padding:4px 8px; font-size:11px;" title="Remove"><i class="fa-solid fa-trash"></i></button>
                         </td>
                     </tr>
                 `;
-            }).join('') + (parsedRecipients.length > 10 ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); font-style:italic;">... and ${parsedRecipients.length - 10} more rows</td></tr>` : '');
+            }).join('') + (parsedRecipients.length > 10 ? `<tr><td colspan="${colSpan}" style="text-align:center; color:var(--text-muted); font-style:italic;">... and ${parsedRecipients.length - 10} more rows</td></tr>` : '');
         }
 
         function removePreviewRecipient(idx) {
@@ -1258,38 +1272,42 @@ $v = time();
         }
 
         function addManualContact() {
-            const fName = document.getElementById('manualFirstName').value.trim();
-            const lName = document.getElementById('manualLastName').value.trim();
-            const email = document.getElementById('manualEmail').value.trim();
-            const phone = document.getElementById('manualPhone').value.trim();
-            const company = document.getElementById('manualCompany').value.trim();
-            const desig = document.getElementById('manualDesignation').value.trim();
-            
-            if (!fName && !lName) {
-                vyToast('Please enter at least First Name or Last Name.', 'error');
+            if (!campaignCustomFields.length) {
+                vyToast('No fields configured. Go to Module Manager → Configure Fields first.', 'error');
                 return;
             }
-            if (!email && !phone) {
-                vyToast('Please enter either Email or Phone number.', 'error');
-                return;
-            }
-            
-            parsedRecipients.push({
-                first_name: fName,
-                last_name: lName,
-                email: email,
-                phone: phone,
-                company_name: company,
-                designation: desig
+
+            // Collect all field values dynamically
+            const contact = {};
+            let hasAnyValue = false;
+            campaignCustomFields.forEach(cf => {
+                const el = document.getElementById('manual_cf_' + cf.field_key);
+                if (el) {
+                    const val = el.value.trim();
+                    contact[cf.field_key] = val;
+                    if (val) hasAnyValue = true;
+                }
             });
-            
-            // Clear inputs
-            document.getElementById('manualFirstName').value = '';
-            document.getElementById('manualLastName').value = '';
-            document.getElementById('manualEmail').value = '';
-            document.getElementById('manualPhone').value = '';
-            document.getElementById('manualCompany').value = '';
-            document.getElementById('manualDesignation').value = '';
+
+            if (!hasAnyValue) {
+                vyToast('Please fill in at least one field.', 'error');
+                return;
+            }
+
+            // Check required fields
+            const missingRequired = campaignCustomFields.filter(cf => cf.is_required && !contact[cf.field_key]);
+            if (missingRequired.length) {
+                vyToast(`Required field missing: ${missingRequired[0].label}`, 'error');
+                return;
+            }
+
+            parsedRecipients.push(contact);
+
+            // Clear all inputs
+            campaignCustomFields.forEach(cf => {
+                const el = document.getElementById('manual_cf_' + cf.field_key);
+                if (el) el.value = '';
+            });
             
             renderCsvPreview();
             vyToast('Contact added to list!', 'success');

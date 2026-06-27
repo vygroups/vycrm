@@ -24,6 +24,8 @@ $v = time();
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
     <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
+    <!-- CKEditor 5 -->
+    <script src="https://cdn.ckeditor.com/ckeditor5/38.1.0/classic/ckeditor.js"></script>
     <style>
         .placeholder-btn {
             background: #fff;
@@ -49,6 +51,9 @@ $v = time();
             padding: 12px;
             border-radius: 8px;
             margin-top: 8px;
+        }
+        .ck-editor__editable {
+            min-height: 250px;
         }
     </style>
 </head>
@@ -132,11 +137,8 @@ $v = time();
                 <div class="placeholder-container">
                     <h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 700; color: var(--primary);">Personalization Placeholders</h4>
                     <p style="margin: 0 0 10px 0; font-size: 12px; color: var(--text-muted);">Place your cursor in Subject or Body and click a tag to insert it:</p>
-                    <div style="display: flex; flex-wrap: wrap;">
-                        <span class="placeholder-btn" onclick="insertPlaceholder('{First Name}')">{First Name}</span>
-                        <span class="placeholder-btn" onclick="insertPlaceholder('{Last Name}')">{Last Name}</span>
-                        <span class="placeholder-btn" onclick="insertPlaceholder('{Company Name}')">{Company Name}</span>
-                        <span class="placeholder-btn" onclick="insertPlaceholder('{Designation}')">{Designation}</span>
+                    <div style="display: flex; flex-wrap: wrap;" id="placeholderTagsContainer">
+                        <span style="color: var(--text-muted); font-size: 12px;">Loading fields...</span>
                     </div>
                 </div>
             </div>
@@ -200,9 +202,42 @@ $v = time();
             }).join('');
         }
 
+        let editorInstance = null;
+
+        async function initCKEditor() {
+            const editorConfig = {
+                ckfinder: {
+                    uploadUrl: '/api/upload_image.php'
+                }
+            };
+            try {
+                editorInstance = await ClassicEditor.create(document.querySelector('#templateBody'), editorConfig);
+                onTypeChange();
+            } catch (e) {
+                console.error('CKEditor init error:', e);
+            }
+        }
+
         function onTypeChange() {
             const type = document.getElementById('templateType').value;
             document.getElementById('subjectGroup').style.display = type === 'email' ? 'flex' : 'none';
+
+            const ckEditorEl = document.querySelector('.ck-editor');
+            const textareaEl = document.getElementById('templateBody');
+            
+            if (type === 'email') {
+                if (ckEditorEl) ckEditorEl.style.display = 'block';
+                textareaEl.style.display = 'none';
+            } else {
+                if (ckEditorEl) ckEditorEl.style.display = 'none';
+                textareaEl.style.display = 'block';
+                if (editorInstance) {
+                    // Sync text back from CKEditor, stripping HTML tags
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = editorInstance.getData();
+                    textareaEl.value = tempDiv.textContent || tempDiv.innerText || '';
+                }
+            }
         }
 
         function openTemplateModal(editData = null) {
@@ -211,7 +246,12 @@ $v = time();
             document.getElementById('templateName').value = editData ? editData.name : '';
             document.getElementById('templateType').value = editData ? editData.type : 'email';
             document.getElementById('templateSubject').value = editData ? (editData.subject || '') : '';
-            document.getElementById('templateBody').value = editData ? editData.body : '';
+            
+            const bodyVal = editData ? editData.body : '';
+            document.getElementById('templateBody').value = bodyVal;
+            if (editorInstance) {
+                editorInstance.setData(bodyVal);
+            }
             
             onTypeChange();
             openModal('templateModal');
@@ -248,7 +288,8 @@ $v = time();
             const name = nameEl.value.trim();
             const type = document.getElementById('templateType').value;
             const subject = subEl.value.trim();
-            const body = bodyEl.value.trim();
+            
+            const body = (type === 'email' && editorInstance) ? editorInstance.getData().trim() : bodyEl.value.trim();
 
             if (!name) {
                 vyToast('Template name is required.', 'error');
@@ -266,9 +307,13 @@ $v = time();
             }
             if (!body) {
                 vyToast('Message body is required.', 'error');
-                bodyEl.classList.add('is-invalid');
-                bodyEl.style.border = '1px solid #ef4444';
-                bodyEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (type === 'email' && editorInstance) {
+                    const editable = document.querySelector('.ck-editor__editable');
+                    if (editable) editable.style.border = '1px solid #ef4444';
+                } else {
+                    bodyEl.classList.add('is-invalid');
+                    bodyEl.style.border = '1px solid #ef4444';
+                }
                 return;
             }
 
@@ -325,12 +370,18 @@ $v = time();
                 subEl.focus();
                 subEl.selectionStart = subEl.selectionEnd = start + placeholder.length;
             } else {
-                bodyEl.focus();
-                const start = bodyEl.selectionStart;
-                const end = bodyEl.selectionEnd;
-                bodyEl.value = bodyEl.value.substring(0, start) + placeholder + bodyEl.value.substring(end);
-                bodyEl.focus();
-                bodyEl.selectionStart = bodyEl.selectionEnd = start + placeholder.length;
+                if (type === 'email' && editorInstance) {
+                    const viewFragment = editorInstance.data.processor.toView(placeholder);
+                    const modelFragment = editorInstance.data.toModel(viewFragment);
+                    editorInstance.model.insertContent(modelFragment);
+                } else {
+                    bodyEl.focus();
+                    const start = bodyEl.selectionStart;
+                    const end = bodyEl.selectionEnd;
+                    bodyEl.value = bodyEl.value.substring(0, start) + placeholder + bodyEl.value.substring(end);
+                    bodyEl.focus();
+                    bodyEl.selectionStart = bodyEl.selectionEnd = start + placeholder.length;
+                }
             }
         }
 
@@ -344,7 +395,31 @@ $v = time();
                 .replace(/'/g, '&#039;');
         }
 
-        document.addEventListener('DOMContentLoaded', loadTemplates);
+        async function loadCampaignFieldPlaceholders() {
+            try {
+                const res = await fetch(`${API}?action=list_campaign_fields`);
+                const data = await res.json();
+                const container = document.getElementById('placeholderTagsContainer');
+                if (!container) return;
+                if (data.success && data.fields && data.fields.length > 0) {
+                    container.innerHTML = data.fields.map(f => {
+                        const tag = '{' + f.label + '}';
+                        return `<span class="placeholder-btn" onclick="insertPlaceholder('${tag.replace(/'/g, "\\'")}')">${escapeHtml(tag)}</span>`;
+                    }).join('');
+                } else {
+                    container.innerHTML = '<span style="color:var(--text-muted); font-size:12px; font-style:italic;">No campaign fields configured yet. Add fields in Module Manager → Configure Fields.</span>';
+                }
+            } catch(e) {
+                const container = document.getElementById('placeholderTagsContainer');
+                if (container) container.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">Failed to load placeholders.</span>';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTemplates();
+            loadCampaignFieldPlaceholders();
+            initCKEditor();
+        });
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
     </script>
 </body>

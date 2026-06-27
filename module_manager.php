@@ -462,6 +462,11 @@ try {
                                                 <i class="fa-solid fa-map-location-dot"></i> Field Mapping
                                             </button>
                                         </div>
+                                        <div style="padding-top: 6px;">
+                                            <button class="mm-btn mm-btn-outline" style="width: 100%; font-size: 11px; padding: 4px 8px; height: 28px; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="openCampaignFieldsModal()">
+                                                <i class="fa-solid fa-sliders"></i> Configure Fields
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -636,6 +641,72 @@ try {
             <div class="mm-modal-footer">
                 <button class="mm-btn" onclick="closeModal('campaignMappingModal')">Cancel</button>
                 <button class="mm-btn mm-btn-primary" id="btnSaveCampaignMapping" onclick="saveCampaignMapping()" disabled><i class="fa-solid fa-check"></i> Save Mapping</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Campaign Configure Fields Modal -->
+    <div class="mm-modal-overlay" id="campaignFieldsModal">
+        <div class="mm-modal" style="max-width: 680px;">
+            <div class="mm-modal-header">
+                <h3><i class="fa-solid fa-sliders" style="color: var(--primary); margin-right: 8px;"></i> Configure Campaign Fields</h3>
+                <button class="mm-icon-btn" onclick="closeModal('campaignFieldsModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mm-modal-body" style="padding: 0;">
+                <!-- All configurable fields -->
+                <div style="padding: 16px 20px;">
+                    <p style="margin: 0 0 10px 0; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px;">Campaign Fields</p>
+                    <div id="campaignFieldsList" style="margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; min-height: 40px;">
+                        <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;" id="campaignFieldsEmpty">Loading...</div>
+                    </div>
+
+                    <!-- Add field form -->
+                    <div id="campaignFieldAddForm" style="background: rgba(123,94,240,0.03); border: 1.5px dashed var(--border); border-radius: 10px; padding: 14px; display:none;">
+                        <p style="margin:0 0 10px 0; font-size:12px; font-weight:700; color:var(--primary);" id="campaignFieldFormTitle">Add New Field</p>
+                        <input type="hidden" id="cfEditId" value="0">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                            <div>
+                                <label class="form-label" style="font-size:11px;">Label *</label>
+                                <input type="text" id="cfLabel" class="form-control" placeholder="e.g. Age, City, Score" style="height:36px; padding:6px 12px; font-size:13px;">
+                            </div>
+                            <div>
+                                <label class="form-label" style="font-size:11px;">Field Type</label>
+                                <select id="cfType" class="form-control" style="height:36px; padding:6px 12px; font-size:13px; line-height:1.5;" onchange="onCfTypeChange()">
+                                    <option value="text">Text</option>
+                                    <option value="number">Number</option>
+                                    <option value="email">Email</option>
+                                    <option value="phone">Phone</option>
+                                    <option value="date">Date</option>
+                                    <option value="url">URL</option>
+                                    <option value="textarea">Textarea</option>
+                                    <option value="select">Dropdown (Select)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr auto; gap:10px; align-items:end; margin-bottom:10px;">
+                            <div>
+                                <label class="form-label" style="font-size:11px;">Placeholder</label>
+                                <input type="text" id="cfPlaceholder" class="form-control" placeholder="e.g. Enter age" style="height:36px; padding:6px 12px; font-size:13px;">
+                            </div>
+                            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; padding-bottom:4px;">
+                                <input type="checkbox" id="cfRequired" style="width:14px; height:14px; accent-color:var(--primary);">
+                                Required
+                            </label>
+                        </div>
+                        <div id="cfOptionsGroup" style="display:none; margin-bottom:10px;">
+                            <label class="form-label" style="font-size:11px;">Options (comma-separated)</label>
+                            <input type="text" id="cfOptions" class="form-control" placeholder="Option 1, Option 2, Option 3" style="height:36px; padding:6px 12px; font-size:13px;">
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="mm-btn mm-btn-primary" style="height:32px; padding:0 14px; font-size:12px;" onclick="saveCampaignField()"><i class="fa-solid fa-check"></i> Save Field</button>
+                            <button class="mm-btn" style="height:32px; padding:0 14px; font-size:12px;" onclick="cancelCfEdit()">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mm-modal-footer">
+                <button class="mm-btn" onclick="closeModal('campaignFieldsModal')">Close</button>
+                <button class="mm-btn mm-btn-primary" onclick="showCfAddForm()"><i class="fa-solid fa-plus"></i> Add Field</button>
             </div>
         </div>
     </div>
@@ -2351,6 +2422,144 @@ try {
                     vyToast('Failed to update permissions: ' + r.error, 'error');
                 }
             }).catch(e => vyToast('Error: ' + e.message, 'error'));
+        }
+
+        /* ════════════════════ CAMPAIGN CONFIGURE FIELDS ════════════════════ */
+
+        let campaignFieldsData = [];
+
+        async function openCampaignFieldsModal() {
+            openModal('campaignFieldsModal');
+            cancelCfEdit();
+            await loadCampaignFields();
+        }
+
+        async function loadCampaignFields() {
+            // Reset list to loading state (recreates #campaignFieldsEmpty safely)
+            document.getElementById('campaignFieldsList').innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;" id="campaignFieldsEmpty">Loading...</div>';
+            try {
+                const res = await fetch('api/campaigns_api.php?action=list_campaign_fields');
+                const data = await res.json();
+                if (data.success) {
+                    campaignFieldsData = data.fields || [];
+                    renderCampaignFieldsList();
+                } else {
+                    vyToast(data.error || 'Failed to load fields', 'error');
+                }
+            } catch(e) {
+                vyToast('Connection error: ' + e.message, 'error');
+            }
+        }
+
+        function renderCampaignFieldsList() {
+            const container = document.getElementById('campaignFieldsList');
+            if (!campaignFieldsData.length) {
+                container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;">No custom fields yet. Click "+ Add Field" to create one.</div>';
+                return;
+            }
+            const typeIcons = { text:'fa-font', number:'fa-hashtag', email:'fa-envelope', phone:'fa-phone', date:'fa-calendar', url:'fa-link', textarea:'fa-align-left', select:'fa-chevron-down' };
+            container.innerHTML = campaignFieldsData.map(f => `
+                <div style="display:flex; align-items:center; gap:10px; background:#fff; border:1.5px solid var(--border); border-radius:10px; padding:10px 14px;">
+                    <div style="width:30px; height:30px; background:rgba(123,94,240,0.1); border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i class="fa-solid ${typeIcons[f.field_type] || 'fa-font'}" style="color:var(--primary); font-size:12px;"></i>
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:13px; font-weight:700; color:var(--text);">${escapeHtml(f.label)}${f.is_required ? ' <span style="color:#ef4444; font-size:10px;">*required</span>' : ''}</div>
+                        <div style="font-size:11px; color:var(--text-muted);">key: <code style="background:rgba(0,0,0,0.05); padding:1px 4px; border-radius:3px;">${escapeHtml(f.field_key)}</code> · type: ${f.field_type}${f.placeholder ? ' · placeholder: ' + escapeHtml(f.placeholder) : ''}</div>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-shrink:0;">
+                        <button class="mm-btn mm-btn-sm" onclick="editCampaignField(${f.id})"><i class="fa-solid fa-pencil"></i> Edit</button>
+                        <button class="mm-icon-btn mm-icon-danger" onclick="deleteCampaignField(${f.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showCfAddForm() {
+            document.getElementById('cfEditId').value = '0';
+            document.getElementById('cfLabel').value = '';
+            document.getElementById('cfType').value = 'text';
+            document.getElementById('cfPlaceholder').value = '';
+            document.getElementById('cfRequired').checked = false;
+            document.getElementById('cfOptions').value = '';
+            document.getElementById('cfOptionsGroup').style.display = 'none';
+            document.getElementById('campaignFieldFormTitle').textContent = 'Add New Field';
+            document.getElementById('campaignFieldAddForm').style.display = 'block';
+            document.getElementById('cfLabel').focus();
+        }
+
+        function editCampaignField(id) {
+            const f = campaignFieldsData.find(x => x.id == id);
+            if (!f) return;
+            document.getElementById('cfEditId').value = f.id;
+            document.getElementById('cfLabel').value = f.label;
+            document.getElementById('cfType').value = f.field_type;
+            document.getElementById('cfPlaceholder').value = f.placeholder || '';
+            document.getElementById('cfRequired').checked = !!f.is_required;
+            document.getElementById('cfOptions').value = Array.isArray(f.options) ? f.options.join(', ') : '';
+            onCfTypeChange();
+            document.getElementById('campaignFieldFormTitle').textContent = 'Edit Field';
+            document.getElementById('campaignFieldAddForm').style.display = 'block';
+            document.getElementById('cfLabel').focus();
+        }
+
+        function cancelCfEdit() {
+            document.getElementById('campaignFieldAddForm').style.display = 'none';
+        }
+
+        function onCfTypeChange() {
+            const type = document.getElementById('cfType').value;
+            document.getElementById('cfOptionsGroup').style.display = type === 'select' ? 'block' : 'none';
+        }
+
+        async function saveCampaignField() {
+            const id = parseInt(document.getElementById('cfEditId').value) || 0;
+            const label = document.getElementById('cfLabel').value.trim();
+            const fieldType = document.getElementById('cfType').value;
+            const placeholder = document.getElementById('cfPlaceholder').value.trim();
+            const isRequired = document.getElementById('cfRequired').checked ? 1 : 0;
+            const optionsRaw = document.getElementById('cfOptions').value.trim();
+            const options = fieldType === 'select' && optionsRaw ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+            if (!label) { vyToast('Field label is required', 'error'); return; }
+
+            try {
+                const res = await fetch('api/campaigns_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'save_campaign_field', id, label, field_type: fieldType, placeholder, is_required: isRequired, options })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast(id ? 'Field updated!' : 'Field added!', 'success');
+                    cancelCfEdit();
+                    await loadCampaignFields();
+                } else {
+                    vyToast(data.error || 'Failed to save field', 'error');
+                }
+            } catch(e) {
+                vyToast('Connection error: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteCampaignField(id) {
+            if (!confirm('Delete this custom field? Existing data in this field will be lost.')) return;
+            try {
+                const res = await fetch('api/campaigns_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete_campaign_field', id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast('Field deleted', 'success');
+                    await loadCampaignFields();
+                } else {
+                    vyToast(data.error || 'Failed to delete', 'error');
+                }
+            } catch(e) {
+                vyToast('Connection error', 'error');
+            }
         }
 
         async function openCampaignMappingModal() {
