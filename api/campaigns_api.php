@@ -36,6 +36,36 @@ $action = $_GET['action'] ?? $input['action'] ?? '';
 try {
     switch ($action) {
 
+        /* ════════════════════ CAMPAIGN FIELD MAPPINGS ════════════════════ */
+
+        case 'save_field_mapping':
+            $moduleId = (int)($input['module_id'] ?? 0);
+            if (!$moduleId) throw new RuntimeException('Module ID required');
+            $mapping = $input['mapping'] ?? null;
+            if (!$mapping || !is_array($mapping)) throw new RuntimeException('Mapping required');
+            
+            $key = "campaign_mapping_" . $moduleId;
+            $value = json_encode($mapping);
+            dm_set_system_setting($conn, $prefix, $key, $value);
+            commerce_json_response(['success' => true]);
+
+        case 'get_field_mapping':
+            $moduleId = (int)($_GET['module_id'] ?? $input['module_id'] ?? 0);
+            if (!$moduleId) throw new RuntimeException('Module ID required');
+            
+            $key = "campaign_mapping_" . $moduleId;
+            $value = dm_get_system_setting($conn, $prefix, $key, null);
+            $mapping = $value ? json_decode($value, true) : null;
+            commerce_json_response(['success' => true, 'mapping' => $mapping]);
+
+        case 'delete_field_mapping':
+            $moduleId = (int)($input['module_id'] ?? 0);
+            if (!$moduleId) throw new RuntimeException('Module ID required');
+            $key = "campaign_mapping_" . $moduleId;
+            $stmt = $conn->prepare("DELETE FROM {$prefix}system_settings WHERE setting_key = ?");
+            $stmt->execute([$key]);
+            commerce_json_response(['success' => true]);
+
         /* ════════════════════ CAMPAIGN TEMPLATES CRUD ════════════════════ */
 
         case 'list_templates':

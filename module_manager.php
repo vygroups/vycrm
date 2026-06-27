@@ -14,6 +14,22 @@ $fieldTypes = dm_field_types();
 $countries = dm_get_countries();
 $allModules = dm_fetch_all_modules($conn, $prefix);
 
+// Fetch all campaign mappings already configured
+$configuredMappings = [];
+try {
+    foreach ($allModules as $m) {
+        $mappingKey = 'campaign_mapping_' . $m['id'];
+        $val = dm_get_system_setting($conn, $prefix, $mappingKey, null);
+        if ($val) {
+            $configuredMappings[$m['id']] = [
+                'id' => $m['id'],
+                'name' => $m['name'],
+                'mapping' => json_decode($val, true)
+            ];
+        }
+    }
+} catch (Exception $e) {}
+
 // If editing a module
 $editModule = null;
 if (!empty($_GET['edit'])) {
@@ -441,6 +457,11 @@ try {
                                                 <option value="role_up" <?= $campaignsVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
                                             </select>
                                         </div>
+                                        <div style="padding-top: 6px;">
+                                            <button class="mm-btn mm-btn-outline" style="width: 100%; font-size: 11px; padding: 4px 8px; height: 28px; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="openCampaignMappingModal()">
+                                                <i class="fa-solid fa-map-location-dot"></i> Field Mapping
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -525,6 +546,98 @@ try {
                 <?php endif; ?>
             </div>
         </main>
+    </div>
+
+    <!-- Campaigns Field Mapping Modal -->
+    <div class="mm-modal-overlay" id="campaignMappingModal">
+        <div class="mm-modal mm-modal-lg">
+            <div class="mm-modal-header">
+                <h3>Campaign Field Mapping</h3>
+                <button class="mm-icon-btn" onclick="closeModal('campaignMappingModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mm-modal-body">
+
+                <?php if (!empty($configuredMappings)): ?>
+                <!-- Already configured modules -->
+                <div style="margin-bottom: 24px;">
+                    <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 10px;">Configured Modules</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;" id="configuredMappingsList">
+                        <?php foreach ($configuredMappings as $cm): ?>
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(123,94,240,.05); border: 1px solid rgba(123,94,240,.15); border-radius: 10px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <i class="fa-solid fa-database" style="color: var(--primary); font-size: 14px;"></i>
+                                <span style="font-weight: 700; font-size: 14px;"><?= htmlspecialchars($cm['name']) ?></span>
+                                <span style="font-size: 11px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px;">
+                                    <?php
+                                        $mapped = array_filter($cm['mapping']);
+                                        echo count($mapped) . ' field' . (count($mapped) !== 1 ? 's' : '') . ' mapped';
+                                    ?>
+                                </span>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="mm-btn mm-btn-outline" style="padding: 5px 12px; font-size: 12px; height: 30px;" onclick="loadMappingForEdit(<?= $cm['id'] ?>)">
+                                    <i class="fa-solid fa-pencil"></i> Edit
+                                </button>
+                                <button class="mm-icon-btn mm-icon-danger" title="Remove Mapping" onclick="removeCampaignMapping(<?= $cm['id'] ?>, '<?= htmlspecialchars(addslashes($cm['name'])) ?>')">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <div style="border-top: 1px solid var(--border); margin-bottom: 20px;"></div>
+                <?php endif; ?>
+
+                <!-- Add / Edit a mapping -->
+                <div class="form-group">
+                    <label class="form-label"><?= empty($configuredMappings) ? 'Select Module to Map' : 'Add / Edit Module Mapping' ?></label>
+                    <select id="mappingModuleSelect" class="form-control" onchange="onMappingModuleChange()">
+                        <option value="">-- Choose Module --</option>
+                        <?php foreach ($allModules as $m): ?>
+                            <option value="<?= $m['id'] ?>"><?= htmlspecialchars($m['name']) ?><?= isset($configuredMappings[$m['id']]) ? ' ✓' : '' ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div id="mappingFieldsContainer" style="display: none; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 20px;">
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+                        Map the campaign fields (left) to the fields in your selected module (right).
+                    </p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; margin-bottom: 12px;">
+                        <div style="font-weight: 700; color: var(--text-main);">Campaign Field</div>
+                        <div style="font-weight: 700; color: var(--text-main);">Module Field</div>
+                    </div>
+                    
+                    <!-- Mapping Rows -->
+                    <?php
+                    $fieldsToMap = [
+                        'first_name' => 'First Name *',
+                        'last_name' => 'Last Name',
+                        'email' => 'Email *',
+                        'phone' => 'Phone',
+                        'company' => 'Company Name',
+                        'designation' => 'Designation'
+                    ];
+                    foreach ($fieldsToMap as $key => $label):
+                    ?>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: center; margin-bottom: 12px;">
+                        <div style="font-size: 13px; font-weight: 600; color: var(--text);"><?= htmlspecialchars($label) ?></div>
+                        <div>
+                            <select id="map_field_<?= $key ?>" class="form-control mapping-dropdown" style="width: 100%;">
+                                <option value="">-- Don't Map --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <div class="mm-modal-footer">
+                <button class="mm-btn" onclick="closeModal('campaignMappingModal')">Cancel</button>
+                <button class="mm-btn mm-btn-primary" id="btnSaveCampaignMapping" onclick="saveCampaignMapping()" disabled><i class="fa-solid fa-check"></i> Save Mapping</button>
+            </div>
+        </div>
     </div>
 
     <!-- Create Module Modal -->
@@ -2239,6 +2352,143 @@ try {
                 }
             }).catch(e => vyToast('Error: ' + e.message, 'error'));
         }
+
+        async function openCampaignMappingModal() {
+            document.getElementById('mappingModuleSelect').value = '';
+            document.getElementById('mappingFieldsContainer').style.display = 'none';
+            document.getElementById('btnSaveCampaignMapping').disabled = true;
+            openModal('campaignMappingModal');
+        }
+
+        async function loadMappingForEdit(moduleId) {
+            const sel = document.getElementById('mappingModuleSelect');
+            sel.value = moduleId;
+            await onMappingModuleChange();
+            // Scroll to the mapping fields
+            const container = document.getElementById('mappingFieldsContainer');
+            if (container) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function removeCampaignMapping(moduleId, moduleName) {
+            if (!confirm(`Remove Campaign field mapping for "${moduleName}"? This cannot be undone.`)) return;
+            try {
+                const res = await fetch('api/campaigns_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete_field_mapping', module_id: parseInt(moduleId) })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast(`Mapping for "${moduleName}" removed.`, 'success');
+                    // Remove the card from UI
+                    const list = document.getElementById('configuredMappingsList');
+                    if (list) {
+                        const cards = list.querySelectorAll('[data-module-id]');
+                        cards.forEach(c => { if (parseInt(c.dataset.moduleId) === moduleId) c.remove(); });
+                    }
+                    // Refresh after short delay to show updated state
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    vyToast(data.error || 'Failed to remove mapping', 'error');
+                }
+            } catch (e) {
+                vyToast('Error: ' + e.message, 'error');
+            }
+        }
+
+        async function onMappingModuleChange() {
+            const moduleId = document.getElementById('mappingModuleSelect').value;
+            const container = document.getElementById('mappingFieldsContainer');
+            const saveBtn = document.getElementById('btnSaveCampaignMapping');
+            
+            if (!moduleId) {
+                container.style.display = 'none';
+                saveBtn.disabled = true;
+                return;
+            }
+            
+            try {
+                // Fetch module schema (blocks and fields) using existing api/modules.php?action=get
+                const res = await fetch(`api/modules.php?action=get&id=${moduleId}`);
+                const data = await res.json();
+                if (data.success) {
+                    const module = data.module;
+                    
+                    // Collect all custom fields from all blocks
+                    const fields = [];
+                    module.blocks.forEach(block => {
+                        block.fields.forEach(field => {
+                            fields.push(field);
+                        });
+                    });
+                    
+                    // Populate each mapping dropdown
+                    const dropdowns = document.querySelectorAll('.mapping-dropdown');
+                    dropdowns.forEach(dd => {
+                        dd.innerHTML = '<option value="">-- Don\'t Map --</option>';
+                        fields.forEach(f => {
+                            dd.innerHTML += `<option value="${f.field_key}">${escapeHtml(f.label)} (${f.field_key})</option>`;
+                        });
+                    });
+                    
+                    // Now, fetch any existing saved mapping for this module
+                    const mapRes = await fetch(`api/campaigns_api.php?action=get_field_mapping&module_id=${moduleId}`);
+                    const mapData = await mapRes.json();
+                    
+                    if (mapData.success && mapData.mapping) {
+                        const m = mapData.mapping;
+                        Object.keys(m).forEach(key => {
+                            const dd = document.getElementById(`map_field_${key}`);
+                            if (dd) dd.value = m[key] || '';
+                        });
+                    }
+                    
+                    container.style.display = 'block';
+                    saveBtn.disabled = false;
+                } else {
+                    vyToast(data.error || 'Failed to fetch module fields', 'error');
+                }
+            } catch (e) {
+                vyToast('Connection failed: ' + e.message, 'error');
+            }
+        }
+
+        async function saveCampaignMapping() {
+            const moduleId = document.getElementById('mappingModuleSelect').value;
+            if (!moduleId) return;
+            
+            const mapping = {
+                first_name: document.getElementById('map_field_first_name').value,
+                last_name: document.getElementById('map_field_last_name').value,
+                email: document.getElementById('map_field_email').value,
+                phone: document.getElementById('map_field_phone').value,
+                company: document.getElementById('map_field_company').value,
+                designation: document.getElementById('map_field_designation').value
+            };
+            
+            try {
+                const res = await fetch('api/campaigns_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'save_field_mapping',
+                        module_id: parseInt(moduleId),
+                        mapping: mapping
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast('Campaign field mapping saved successfully!', 'success');
+                    // Reload after short delay so toast is visible and list refreshes
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    vyToast(data.error || 'Failed to save mapping', 'error');
+                }
+            } catch (e) {
+                vyToast('Connection error: ' + e.message, 'error');
+            }
+        }
+
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
     </script>

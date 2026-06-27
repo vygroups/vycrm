@@ -17,6 +17,23 @@ try {
     $commConfigs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
 
+$activeModules = [];
+try {
+    $mStmt = $conn->query("SELECT id, name FROM {$prefix}modules WHERE status = 'active' ORDER BY name ASC");
+    $allActiveModules = $mStmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($allActiveModules as $m) {
+        $mappingKey = "campaign_mapping_" . $m['id'];
+        $val = dm_get_system_setting($conn, $prefix, $mappingKey, null);
+        if ($val) {
+            $activeModules[] = [
+                'id' => $m['id'],
+                'name' => $m['name'],
+                'mapping' => json_decode($val, true)
+            ];
+        }
+    }
+} catch (Exception $e) {}
+
 $v = time();
 ?>
 <!DOCTYPE html>
@@ -224,6 +241,11 @@ $v = time();
                                 <button type="button" class="tab-btn" id="btnTabManual" onclick="switchImportTab('manual')" style="background:none; border:none; padding:10px 15px; font-size:14px; font-weight:600; cursor:pointer; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; outline:none;">
                                     <i class="fa-solid fa-keyboard"></i> Manual Entry
                                 </button>
+                                <?php foreach ($activeModules as $mm): ?>
+                                <button type="button" class="tab-btn btn-tab-mapped-module" id="btnTabModule_<?= $mm['id'] ?>" onclick="switchImportTab('module_<?= $mm['id'] ?>')" style="background:none; border:none; padding:10px 15px; font-size:14px; font-weight:600; cursor:pointer; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; outline:none;">
+                                    <i class="fa-solid fa-database"></i> <?= htmlspecialchars($mm['name']) ?>
+                                </button>
+                                <?php endforeach; ?>
                             </div>
                             
                             <!-- CSV Upload Content -->
@@ -268,6 +290,37 @@ $v = time();
                                 </div>
                                 <button class="mm-btn mm-btn-primary" style="height:36px; padding:0 16px; font-size:13px;" onclick="addManualContact()"><i class="fa-solid fa-plus"></i> Add to list</button>
                             </div>
+                            
+                            <?php foreach ($activeModules as $mm): ?>
+                            <!-- Module Tab Content: <?= htmlspecialchars($mm['name']) ?> -->
+                            <div id="tabContentModule_<?= $mm['id'] ?>" class="tab-content-mapped-module" style="display:none; background: rgba(123, 94, 240, 0.02); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                                <h5 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 700; color: var(--primary);">Link <?= htmlspecialchars($mm['name']) ?> Records</h5>
+                                
+                                <!-- Saved Filters + Search Bar -->
+                                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
+                                    <select id="savedFilterSelect_<?= $mm['id'] ?>" class="form-control" style="height:32px; font-size:12px; padding:4px 8px; background:#fff; width:auto; min-width:150px;" onchange="applySavedFilter(<?= $mm['id'] ?>)">
+                                        <option value="">-- No Filter --</option>
+                                    </select>
+                                    <input type="text" id="importRecordsSearch_<?= $mm['id'] ?>" class="form-control" placeholder="Search records..." style="flex:1; min-width:150px; height:32px; font-size:12px; padding:4px 10px; background:#fff; box-sizing:border-box;" oninput="debounceRecordSearch(<?= $mm['id'] ?>)">
+                                </div>
+                                
+                                <div class="table-responsive" style="max-height: 350px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; background: #fff;">
+                                    <table class="crm-table" style="font-size: 12px; margin: 0; width: 100%;">
+                                        <thead>
+                                            <tr id="moduleRecordsHeader_<?= $mm['id'] ?>">
+                                                <th style="width: 30px; text-align: center;"><input type="checkbox" id="selectAllModuleRecords_<?= $mm['id'] ?>" onchange="toggleSelectAllModuleRecords(<?= $mm['id'] ?>, this.checked)"></th>
+                                                <th>Loading...</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="moduleRecordsImportBody_<?= $mm['id'] ?>">
+                                            <tr><td colspan="10" style="text-align: center; padding: 20px; color: var(--text-muted);">Loading records...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <button class="mm-btn mm-btn-primary" onclick="importSelectedModuleRecords(<?= $mm['id'] ?>)"><i class="fa-solid fa-file-import"></i> Import Selected Records</button>
+                            </div>
+                            <?php endforeach; ?>
 
                             <div id="csvPreviewSection" style="display: none;">
                                 <h4 style="margin: 15px 0 8px 0; font-size: 13px; font-weight: 700; color: var(--text);">Contacts List Preview (<span id="previewCount">0</span> rows detected)</h4>
@@ -930,26 +983,278 @@ $v = time();
         function switchImportTab(type) {
             const tabUpload = document.getElementById('btnTabUpload');
             const tabManual = document.getElementById('btnTabManual');
+            
             const contentUpload = document.getElementById('tabContentUpload');
             const contentManual = document.getElementById('tabContentManual');
             
-            if (type === 'upload') {
-                tabUpload.style.color = 'var(--primary)';
-                tabUpload.style.borderBottom = '2px solid var(--primary)';
-                tabManual.style.color = 'var(--text-muted)';
-                tabManual.style.borderBottom = '2px solid transparent';
-                
-                contentUpload.style.display = 'block';
-                contentManual.style.display = 'none';
-            } else {
-                tabManual.style.color = 'var(--primary)';
-                tabManual.style.borderBottom = '2px solid var(--primary)';
+            // Reset active states for all tabs
+            if (tabUpload) {
                 tabUpload.style.color = 'var(--text-muted)';
                 tabUpload.style.borderBottom = '2px solid transparent';
-                
-                contentManual.style.display = 'block';
-                contentUpload.style.display = 'none';
             }
+            if (tabManual) {
+                tabManual.style.color = 'var(--text-muted)';
+                tabManual.style.borderBottom = '2px solid transparent';
+            }
+            document.querySelectorAll('.btn-tab-mapped-module').forEach(btn => {
+                btn.style.color = 'var(--text-muted)';
+                btn.style.borderBottom = '2px solid transparent';
+            });
+            
+            // Hide all tab contents
+            if (contentUpload) contentUpload.style.display = 'none';
+            if (contentManual) contentManual.style.display = 'none';
+            document.querySelectorAll('.tab-content-mapped-module').forEach(content => {
+                content.style.display = 'none';
+            });
+            
+            if (type === 'upload') {
+                if (tabUpload) {
+                    tabUpload.style.color = 'var(--primary)';
+                    tabUpload.style.borderBottom = '2px solid var(--primary)';
+                }
+                if (contentUpload) contentUpload.style.display = 'block';
+            } else if (type === 'manual') {
+                if (tabManual) {
+                    tabManual.style.color = 'var(--primary)';
+                    tabManual.style.borderBottom = '2px solid var(--primary)';
+                }
+                if (contentManual) contentManual.style.display = 'block';
+            } else if (type.startsWith('module_')) {
+                const moduleId = type.replace('module_', '');
+                const tabModule = document.getElementById('btnTabModule_' + moduleId);
+                const contentModule = document.getElementById('tabContentModule_' + moduleId);
+                
+                if (tabModule) {
+                    tabModule.style.color = 'var(--primary)';
+                    tabModule.style.borderBottom = '2px solid var(--primary)';
+                }
+                if (contentModule) {
+                    contentModule.style.display = 'block';
+                }
+                loadModuleRecords(moduleId);
+            }
+        }
+
+        let activeModuleRecords = {};
+        let activeModuleFields = {}; // Store fields per module for import lookup
+        let debounceSearchTimeout = null;
+        let activeModuleFilters = {}; // { moduleId: filter_rules | null }
+
+        function debounceRecordSearch(moduleId) {
+            clearTimeout(debounceSearchTimeout);
+            debounceSearchTimeout = setTimeout(() => {
+                loadModuleRecords(moduleId);
+            }, 300);
+        }
+
+        function applySavedFilter(moduleId) {
+            const sel = document.getElementById(`savedFilterSelect_${moduleId}`);
+            const filterId = sel ? sel.value : '';
+            if (filterId) {
+                activeModuleFilters[moduleId] = { filter_id: parseInt(filterId) };
+            } else {
+                activeModuleFilters[moduleId] = null;
+            }
+            loadModuleRecords(moduleId);
+        }
+
+        async function loadModuleRecords(moduleId) {
+            const tbody = document.getElementById(`moduleRecordsImportBody_${moduleId}`);
+            const headerRow = document.getElementById(`moduleRecordsHeader_${moduleId}`);
+            if (!tbody) return;
+            
+            const colSpan = activeModuleFields[moduleId] ? activeModuleFields[moduleId].length + 1 : 5;
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align: center; padding: 20px; color: var(--text-muted);">Loading records...</td></tr>`;
+            
+            try {
+                // Load saved filters if not yet loaded
+                const filterSel = document.getElementById(`savedFilterSelect_${moduleId}`);
+                if (filterSel && filterSel.options.length <= 1) {
+                    const fRes = await fetch(`/api/modules.php?action=list_filters&module_id=${moduleId}`);
+                    const fData = await fRes.json();
+                    if (fData.success && fData.filters.length > 0) {
+                        fData.filters.forEach(f => {
+                            const opt = document.createElement('option');
+                            opt.value = f.id;
+                            opt.textContent = f.name + (f.is_default ? ' ★' : '');
+                            filterSel.appendChild(opt);
+                        });
+                    }
+                }
+
+                // Build fetch payload
+                const searchInput = document.getElementById(`importRecordsSearch_${moduleId}`);
+                const search = searchInput ? searchInput.value : '';
+                
+                const payload = {
+                    action: 'list_records',
+                    module_id: parseInt(moduleId),
+                    search: search || null,
+                    limit: 200,
+                    offset: 0
+                };
+
+                const filterInfo = activeModuleFilters[moduleId];
+                if (filterInfo) {
+                    if (filterInfo.filter_id) {
+                        payload.filter_id = filterInfo.filter_id;
+                    } else if (filterInfo.filter_rules) {
+                        payload.filter_rules = filterInfo.filter_rules;
+                    }
+                }
+
+                const recRes = await fetch('/api/modules.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const recData = await recRes.json();
+                
+                if (recData.success) {
+                    const fields = recData.data.fields || [];
+                    activeModuleFields[moduleId] = fields;
+                    activeModuleRecords[moduleId] = recData.data.records || [];
+                    const records = activeModuleRecords[moduleId];
+                    
+                    // Update header columns dynamically
+                    if (headerRow) {
+                        let headerHtml = `<th style="width: 30px; text-align: center;"><input type="checkbox" id="selectAllModuleRecords_${moduleId}" onchange="toggleSelectAllModuleRecords(${moduleId}, this.checked)"></th>`;
+                        fields.forEach(f => {
+                            headerHtml += `<th>${escapeHtml(f.label)}</th>`;
+                        });
+                        headerRow.innerHTML = headerHtml;
+                    }
+                    
+                    if (records.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="${fields.length + 1}" style="text-align: center; padding: 20px; color: var(--text-muted);">No records found in this module.</td></tr>`;
+                        return;
+                    }
+                    
+                    // Render all fields as columns
+                    tbody.innerHTML = records.map(r => {
+                        const values = r.values || {};
+                        let rowHtml = `<tr>`;
+                        rowHtml += `<td style="text-align: center; padding: 8px 12px;"><input type="checkbox" class="record-select-checkbox-${moduleId}" value="${r.id}"></td>`;
+                        fields.forEach(f => {
+                            const val = values[f.id] !== undefined ? values[f.id] : '';
+                            rowHtml += `<td style="padding: 8px 12px;">${escapeHtml(String(val || '-'))}</td>`;
+                        });
+                        rowHtml += `</tr>`;
+                        return rowHtml;
+                    }).join('');
+                    
+                    // Reset master checkbox
+                    const masterCheckbox = document.getElementById(`selectAllModuleRecords_${moduleId}`);
+                    if (masterCheckbox) masterCheckbox.checked = false;
+                } else {
+                    const errMsg = recData.error || 'Unknown error';
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--danger);">Error: ${escapeHtml(errMsg)}</td></tr>`;
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--danger);">Connection failed: ${escapeHtml(e.message)}</td></tr>`;
+            }
+        }
+        
+        function toggleSelectAllModuleRecords(moduleId, checked) {
+            const checkboxes = document.querySelectorAll(`.record-select-checkbox-${moduleId}`);
+            checkboxes.forEach(cb => cb.checked = checked);
+        }
+
+        function importSelectedModuleRecords(moduleId) {
+            const checkedBoxes = document.querySelectorAll(`.record-select-checkbox-${moduleId}:checked`);
+            if (checkedBoxes.length === 0) {
+                vyToast('Please select at least one record to import.', 'error');
+                return;
+            }
+            
+            fetch(`api/campaigns_api.php?action=get_field_mapping&module_id=${moduleId}`)
+                .then(res => res.json())
+                .then(mapData => {
+                    if (!mapData.success || !mapData.mapping) {
+                        vyToast('No field mapping configured for this module.', 'error');
+                        return;
+                    }
+                    
+                    const mapping = mapData.mapping; // { first_name: 'field_key', email: 'field_key', ... }
+                    const fields = activeModuleFields[moduleId] || [];
+                    const records = activeModuleRecords[moduleId] || [];
+                    
+                    // Build field_key -> field_id map
+                    const keyToId = {};
+                    fields.forEach(f => { keyToId[f.field_key] = f.id; });
+                    
+                    let count = 0;
+                    let skippedDup = 0;
+                    let skippedNoContact = 0;
+                    
+                    checkedBoxes.forEach(box => {
+                        const recId = parseInt(box.value);
+                        const r = records.find(item => item.id === recId);
+                        if (r) {
+                            const values = r.values || {};
+                            
+                            // Resolve each mapped field key -> field id -> value
+                            const getVal = (mappedKey) => {
+                                if (!mappedKey) return '';
+                                const fid = keyToId[mappedKey];
+                                return fid !== undefined && values[fid] !== undefined ? String(values[fid]).trim() : '';
+                            };
+                            
+                            const first_name = getVal(mapping.first_name);
+                            const last_name = getVal(mapping.last_name);
+                            const email = getVal(mapping.email);
+                            const phone = getVal(mapping.phone);
+                            const company = getVal(mapping.company);
+                            const designation = getVal(mapping.designation);
+                            
+                            if (!email && !phone) {
+                                skippedNoContact++;
+                                return;
+                            }
+                            
+                            const isDup = parsedRecipients.some(pr => 
+                                (email && pr.email === email) || (phone && pr.phone === phone)
+                            );
+                            if (isDup) {
+                                skippedDup++;
+                                return;
+                            }
+                            
+                            parsedRecipients.push({
+                                first_name, last_name, email, phone,
+                                company_name: company, designation
+                            });
+                            count++;
+                        }
+                    });
+                    
+                    if (count > 0) {
+                        let msg = `Added ${count} record${count !== 1 ? 's' : ''} to the campaign list.`;
+                        if (skippedDup > 0) msg += ` (${skippedDup} duplicate${skippedDup !== 1 ? 's' : ''} skipped)`;
+                        if (skippedNoContact > 0) msg += ` (${skippedNoContact} skipped — no email/phone mapped)`;
+                        vyToast(msg, 'success');
+                        renderCsvPreview();
+                        checkedBoxes.forEach(box => box.checked = false);
+                        const masterCheckbox = document.getElementById(`selectAllModuleRecords_${moduleId}`);
+                        if (masterCheckbox) masterCheckbox.checked = false;
+                    } else {
+                        let reason = '';
+                        if (skippedNoContact > 0 && skippedDup > 0) {
+                            reason = `${skippedNoContact} record${skippedNoContact !== 1 ? 's' : ''} had no email/phone in the field mapping, and ${skippedDup} were duplicates.`;
+                        } else if (skippedNoContact > 0) {
+                            reason = `No email or phone found in the selected records. Check your field mapping under Module Manager → Bulk Campaigns → Field Mapping.`;
+                        } else if (skippedDup > 0) {
+                            reason = `All selected records are already in the campaign contacts list.`;
+                        } else {
+                            reason = 'Records could not be matched — check field mapping configuration.';
+                        }
+                        vyToast(reason, 'warning');
+                    }
+                })
+                .catch(e => {
+                    vyToast('Failed to load mapping: ' + e.message, 'error');
+                });
         }
 
         function addManualContact() {
