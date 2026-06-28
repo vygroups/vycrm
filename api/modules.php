@@ -974,6 +974,82 @@ try {
             
             commerce_json_response(['success' => true, 'records' => $results, 'total' => $total, 'page' => $page, 'limit' => $limit]);
 
+        case 'get_module_fields':
+            $moduleId = (int)($_GET['module_id'] ?? $input['module_id'] ?? 0);
+            if (!$moduleId) throw new RuntimeException('Module ID required');
+            
+            $stmt = $conn->prepare("SELECT id, label, field_type FROM {$prefix}module_fields WHERE module_id = ? ORDER BY sort_order ASC");
+            $stmt->execute([$moduleId]);
+            $fields = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Add system fields
+            $fields[] = ['id' => 'created_at', 'label' => 'Created Date', 'field_type' => 'datetime'];
+            $fields[] = ['id' => 'updated_at', 'label' => 'Updated Date', 'field_type' => 'datetime'];
+            
+            commerce_json_response(['success' => true, 'fields' => $fields]);
+
+        case 'list_dashboard_widgets':
+            $stmt = $conn->query("
+                SELECT w.*, m.name as module_name 
+                FROM {$prefix}dashboard_widgets w
+                LEFT JOIN {$prefix}modules m ON m.id = w.module_id
+                ORDER BY w.sort_order ASC, w.id ASC
+            ");
+            $widgets = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($widgets as &$w) {
+                if (in_array($w['field_id'], ['created_at', 'updated_at'])) {
+                    $w['field_label'] = $w['field_id'] === 'created_at' ? 'Created Date' : 'Updated Date';
+                } else {
+                    $fStmt = $conn->prepare("SELECT label FROM {$prefix}module_fields WHERE id = ?");
+                    $fStmt->execute([(int)$w['field_id']]);
+                    $w['field_label'] = $fStmt->fetchColumn() ?: 'Unknown';
+                }
+            }
+            unset($w);
+            commerce_json_response(['success' => true, 'widgets' => $widgets]);
+
+        case 'save_dashboard_widget':
+            $wId = (int)($input['id'] ?? 0);
+            $title = trim($input['title'] ?? '');
+            $moduleId = (int)($input['module_id'] ?? 0);
+            $fieldId = trim($input['field_id'] ?? '');
+            $operator = trim($input['operator'] ?? '=');
+            $value = trim($input['value'] ?? '');
+            $icon = trim($input['icon'] ?? 'fa-solid fa-bell');
+            $color = trim($input['color'] ?? 'var(--primary)');
+            
+            if (!$title) throw new RuntimeException('Widget Title is required');
+            if (!$moduleId) throw new RuntimeException('Target Module is required');
+            if (!$fieldId) throw new RuntimeException('Filter Field is required');
+            
+            // Construct rule array
+            $rules = [
+                [
+                    'field_id' => $fieldId,
+                    'operator' => $operator,
+                    'value' => $value
+                ]
+            ];
+            $rulesJson = json_encode($rules);
+            
+            if ($wId > 0) {
+                $stmt = $conn->prepare("UPDATE {$prefix}dashboard_widgets SET title = ?, module_id = ?, field_id = ?, operator_type = ?, rules = ?, icon = ?, color = ? WHERE id = ?");
+                $stmt->execute([$title, $moduleId, $fieldId, $operator, $rulesJson, $icon, $color, $wId]);
+            } else {
+                $maxStmt = $conn->query("SELECT COALESCE(MAX(sort_order),0)+1 FROM {$prefix}dashboard_widgets");
+                $sort = (int)$maxStmt->fetchColumn();
+                $stmt = $conn->prepare("INSERT INTO {$prefix}dashboard_widgets (title, module_id, field_id, operator_type, rules, icon, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$title, $moduleId, $fieldId, $operator, $rulesJson, $icon, $color, $sort]);
+            }
+            commerce_json_response(['success' => true]);
+
+        case 'delete_dashboard_widget':
+            $wId = (int)($input['id'] ?? 0);
+            if (!$wId) throw new RuntimeException('Widget ID required');
+            $stmt = $conn->prepare("DELETE FROM {$prefix}dashboard_widgets WHERE id = ?");
+            $stmt->execute([$wId]);
+            commerce_json_response(['success' => true]);
+
         default:
             throw new RuntimeException("Unknown action: $action");
     }

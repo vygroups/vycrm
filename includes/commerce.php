@@ -431,6 +431,23 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 
+    // 12. Dashboard Insights Widgets
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}dashboard_widgets (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            title VARCHAR(150) NOT NULL,
+            module_id INT NOT NULL,
+            field_id VARCHAR(50) NOT NULL,
+            operator_type VARCHAR(50) NOT NULL,
+            rules TEXT NOT NULL,
+            icon VARCHAR(50) NOT NULL DEFAULT 'fa-solid fa-clock',
+            color VARCHAR(50) NOT NULL DEFAULT '#7b5ef0',
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
     // 11. Workflow Automation Rules
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}module_workflows (

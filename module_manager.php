@@ -378,7 +378,7 @@ try {
                         $billingVisibility = dm_get_system_setting($conn, $prefix, 'billing_visibility', 'all');
                         $campaignsVisibility = dm_get_system_setting($conn, $prefix, 'campaigns_visibility', 'all');
                         ?>
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;">
 
                             <!-- Attendance Card -->
                             <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
@@ -498,6 +498,22 @@ try {
                                                 <option value="role_up" <?= $payrollVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
                                             </select>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Dashboard Widgets Card -->
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                                    <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #7b5ef0, #a78bfa); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-gauge" style="color: #fff; font-size: 16px;"></i>
+                                    </div>
+                                    <div style="flex: 1; min-width: 0;">
+                                        <h5 style="margin: 0 0 4px; font-size: 13px; font-weight: 700; color: var(--text);">Dashboard Widgets</h5>
+                                        <p style="margin: 0 0 10px; font-size: 11px; color: var(--text-muted);">Configure dynamic insight widgets on CRM dashboard.</p>
+                                        <button class="mm-btn mm-btn-outline" style="width: 100%; font-size: 11px; padding: 4px 8px; height: 28px; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="openWidgetsConfigModal()">
+                                            <i class="fa-solid fa-sliders"></i> Configure Widgets
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -707,6 +723,121 @@ try {
             <div class="mm-modal-footer">
                 <button class="mm-btn" onclick="closeModal('campaignFieldsModal')">Close</button>
                 <button class="mm-btn mm-btn-primary" onclick="showCfAddForm()"><i class="fa-solid fa-plus"></i> Add Field</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Widgets Config Modal -->
+    <div class="mm-modal-overlay" id="widgetsConfigModal">
+        <div class="mm-modal mm-modal-lg" style="max-width:850px;">
+            <div class="mm-modal-header">
+                <h3>Configure Dashboard Widgets</h3>
+                <button class="mm-icon-btn" onclick="closeModal('widgetsConfigModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mm-modal-body" style="padding: 24px; min-height: 400px; display: flex; flex-direction: column; gap: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px;">
+                    <span style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Active Widgets</span>
+                    <button type="button" class="mm-btn mm-btn-primary mm-btn-sm" onclick="showAddWidgetForm()">
+                        <i class="fa-solid fa-plus"></i> Add New Widget
+                    </button>
+                </div>
+                
+                <!-- Widget Form (Hidden by default) -->
+                <div id="widgetFormContainer" style="display:none; background:#f8fafc; border:1px solid var(--border); border-radius:12px; padding:20px; box-shadow:var(--shadow-sm);">
+                    <h4 id="widgetFormTitle" style="margin:0 0 15px; font-size:15px; font-weight:700; color:var(--primary);">Add Dashboard Widget</h4>
+                    <input type="hidden" id="widgetId" value="">
+                    
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
+                            <label class="form-label" style="font-size:12px; font-weight:700;">Widget Title *</label>
+                            <input type="text" id="widgetTitle" class="form-control" placeholder="e.g. Follow ups due today" style="height:38px; box-sizing:border-box; padding: 6px 12px;">
+                        </div>
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
+                            <label class="form-label" style="font-size:12px; font-weight:700;">Target Module *</label>
+                            <select id="widgetModule" class="form-control" style="height: 38px; padding-top: 6px; padding-bottom: 6px; line-height: 1.5;" onchange="onWidgetModuleChange()">
+                                <option value="">-- Select Module --</option>
+                                <?php foreach ($allModules as $mod): ?>
+                                <option value="<?= $mod['id'] ?>"><?= htmlspecialchars($mod['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:15px;">
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
+                            <label class="form-label" style="font-size:12px; font-weight:700;">Filter Field *</label>
+                            <select id="widgetField" class="form-control" style="height: 38px; padding-top: 6px; padding-bottom: 6px; line-height: 1.5;" onchange="onWidgetFieldChange()">
+                                <option value="">-- Select Field --</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
+                            <label class="form-label" style="font-size:12px; font-weight:700;">Condition *</label>
+                            <select id="widgetOperator" class="form-control" style="height: 38px; padding-top: 6px; padding-bottom: 6px; line-height: 1.5;" onchange="onWidgetOperatorChange()">
+                                <option value="=">Equals (=)</option>
+                                <option value="LIKE">Contains (LIKE)</option>
+                                <option value="today">Is Today</option>
+                                <option value="days_older">Older than X days</option>
+                                <option value="days_within_future">Within next X days</option>
+                                <option value="empty">Is Empty</option>
+                                <option value="not_empty">Is Not Empty</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="widgetValueGroup" style="display:flex; flex-direction:column; gap:4px;">
+                            <label class="form-label" style="font-size:12px; font-weight:700;">Value</label>
+                            <input type="text" id="widgetValue" class="form-control" placeholder="Value..." style="height:38px; box-sizing:border-box; padding: 6px 12px;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
+                            <label class="form-label" style="font-size:12px; font-weight:700;">Icon *</label>
+                            <select id="widgetIcon" class="form-control" style="height: 38px; padding-top: 6px; padding-bottom: 6px; line-height: 1.5;">
+                                <option value="fa-solid fa-clock">⏰ Clock</option>
+                                <option value="fa-solid fa-bell">🔔 Bell</option>
+                                <option value="fa-solid fa-circle-exclamation">⚠️ Warning Alert</option>
+                                <option value="fa-solid fa-database">🛢️ Database</option>
+                                <option value="fa-solid fa-users">👥 Users</option>
+                                <option value="fa-solid fa-user-check">👤 User Check</option>
+                                <option value="fa-solid fa-chart-line">📈 Trend Chart</option>
+                                <option value="fa-solid fa-list-check">☑️ Task List</option>
+                                <option value="fa-solid fa-dollar-sign">💲 Dollar Sign</option>
+                                <option value="fa-solid fa-envelope">✉️ Envelope</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
+                            <label class="form-label" style="font-size:12px; font-weight:700;">Widget Color *</label>
+                            <select id="widgetColor" class="form-control" style="height: 38px; padding-top: 6px; padding-bottom: 6px; line-height: 1.5;">
+                                <option value="#7b5ef0" style="color:#7b5ef0; font-weight:700;">Purple (Primary)</option>
+                                <option value="#3b82f6" style="color:#3b82f6; font-weight:700;">Blue (Info)</option>
+                                <option value="#10b981" style="color:#10b981; font-weight:700;">Green (Success)</option>
+                                <option value="#f59e0b" style="color:#f59e0b; font-weight:700;">Orange (Warning)</option>
+                                <option value="#ef4444" style="color:#ef4444; font-weight:700;">Red (Danger)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+                        <button type="button" class="mm-btn" onclick="hideWidgetForm()">Cancel</button>
+                        <button type="button" class="mm-btn mm-btn-primary" onclick="saveWidget()"><i class="fa-solid fa-check"></i> Save Widget</button>
+                    </div>
+                </div>
+                
+                <!-- Widgets List -->
+                <div style="flex:1; overflow-y:auto; border:1px solid var(--border); border-radius:12px; background:#fff; min-height:200px;">
+                    <table class="crm-table" style="margin:0; width:100%;">
+                        <thead>
+                            <tr style="background:#fafafa; border-bottom:1px solid var(--border);">
+                                <th style="padding:10px 15px;">Title</th>
+                                <th style="padding:10px 15px;">Module</th>
+                                <th style="padding:10px 15px;">Condition Description</th>
+                                <th style="padding:10px 15px; text-align:right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="widgetsListTableBody">
+                            <tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">No dashboard widgets configured. Click "Add New Widget" to create one.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -2698,6 +2829,244 @@ try {
             }
         }
 
+
+        /* ════════════════════ DASHBOARD WIDGETS MANAGER ════════════════════ */
+        let activeWidgetsList = [];
+
+        function openWidgetsConfigModal() {
+            openModal('widgetsConfigModal');
+            loadWidgetsList();
+        }
+
+        async function loadWidgetsList() {
+            const tbody = document.getElementById('widgetsListTableBody');
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading widgets...</td></tr>';
+            
+            try {
+                const res = await fetch(`${API}?action=list_dashboard_widgets`);
+                const data = await res.json();
+                if (data.success) {
+                    activeWidgetsList = data.widgets;
+                    renderWidgetsTable();
+                } else {
+                    vyToast(data.error || 'Failed to load widgets', 'error');
+                }
+            } catch (e) {
+                vyToast('Connection failed: ' + e.message, 'error');
+            }
+        }
+
+        function renderWidgetsTable() {
+            const tbody = document.getElementById('widgetsListTableBody');
+            if (activeWidgetsList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">No dashboard widgets configured. Click "Add New Widget" to create one.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = activeWidgetsList.map(w => {
+                const iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:6px; background:${w.color}15; color:${w.color}; margin-right:8px;"><i class="${w.icon}"></i></span>`;
+                
+                // Parse condition details
+                let rules = [];
+                try { rules = JSON.parse(w.rules); } catch(ex) {}
+                const rule = rules[0] || {};
+                
+                let condDesc = '';
+                if (rule.operator === 'today') condDesc = `[${w.field_label}] is Today`;
+                else if (rule.operator === 'days_older') condDesc = `[${w.field_label}] is older than ${rule.value} days`;
+                else if (rule.operator === 'days_within_future') condDesc = `[${w.field_label}] is within next ${rule.value} days`;
+                else if (rule.operator === 'empty') condDesc = `[${w.field_label}] is Empty`;
+                else if (rule.operator === 'not_empty') condDesc = `[${w.field_label}] is Not Empty`;
+                else condDesc = `[${w.field_label}] ${rule.operator} "${rule.value}"`;
+
+                return `
+                    <tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:12px 15px; font-weight:700; color:var(--text-main);">${iconHtml}${escapeHtml(w.title)}</td>
+                        <td style="padding:12px 15px;">${escapeHtml(w.module_name || 'Unknown')}</td>
+                        <td style="padding:12px 15px; font-size:12px; font-family:monospace; color:#3b82f6;">${escapeHtml(condDesc)}</td>
+                        <td style="padding:12px 15px; text-align:right;">
+                            <div style="display:inline-flex; gap:6px;">
+                                <button type="button" class="mm-btn mm-btn-sm" onclick="editWidget(${w.id})"><i class="fa-solid fa-pencil"></i> Edit</button>
+                                <button type="button" class="mm-icon-btn mm-icon-danger" onclick="deleteWidget(${w.id})"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function showAddWidgetForm() {
+            document.getElementById('widgetFormTitle').textContent = 'Add Dashboard Widget';
+            document.getElementById('widgetId').value = '';
+            document.getElementById('widgetTitle').value = '';
+            document.getElementById('widgetModule').value = '';
+            document.getElementById('widgetField').innerHTML = '<option value="">-- Select Field --</option>';
+            document.getElementById('widgetOperator').value = '=';
+            document.getElementById('widgetValue').value = '';
+            document.getElementById('widgetIcon').value = 'fa-solid fa-clock';
+            document.getElementById('widgetColor').value = '#7b5ef0';
+            
+            document.getElementById('widgetFormContainer').style.display = 'block';
+            onWidgetOperatorChange();
+        }
+
+        function hideWidgetForm() {
+            document.getElementById('widgetFormContainer').style.display = 'none';
+        }
+
+        async function onWidgetModuleChange() {
+            const moduleId = document.getElementById('widgetModule').value;
+            const fieldSelect = document.getElementById('widgetField');
+            fieldSelect.innerHTML = '<option value="">Loading fields...</option>';
+
+            if (!moduleId) {
+                fieldSelect.innerHTML = '<option value="">-- Select Field --</option>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API}?action=get_module_fields&module_id=${moduleId}`);
+                const data = await res.json();
+                if (data.success) {
+                    fieldSelect.innerHTML = '<option value="">-- Select Field --</option>' + data.fields.map(f => {
+                        return `<option value="${f.id}">${escapeHtml(f.label)}</option>`;
+                    }).join('');
+                } else {
+                    vyToast('Failed to load fields', 'error');
+                }
+            } catch (e) {
+                vyToast('Connection failed: ' + e.message, 'error');
+            }
+        }
+
+        function onWidgetFieldChange() {
+            // No-op
+        }
+
+        function onWidgetOperatorChange() {
+            const op = document.getElementById('widgetOperator').value;
+            const valGroup = document.getElementById('widgetValueGroup');
+            const showValue = !['today', 'empty', 'not_empty'].includes(op);
+            valGroup.style.display = showValue ? 'flex' : 'none';
+            if (!showValue) {
+                document.getElementById('widgetValue').value = '';
+            }
+        }
+
+        function editWidget(id) {
+            const w = activeWidgetsList.find(x => x.id == id);
+            if (!w) return;
+
+            document.getElementById('widgetFormTitle').textContent = 'Edit Dashboard Widget';
+            document.getElementById('widgetId').value = w.id;
+            document.getElementById('widgetTitle').value = w.title;
+            document.getElementById('widgetModule').value = w.module_id;
+            document.getElementById('widgetIcon').value = w.icon;
+            document.getElementById('widgetColor').value = w.color;
+            
+            // Re-load fields dynamically
+            const fieldSelect = document.getElementById('widgetField');
+            fieldSelect.innerHTML = '<option value="">Loading fields...</option>';
+            
+            fetch(`${API}?action=get_module_fields&module_id=${w.module_id}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    fieldSelect.innerHTML = '<option value="">-- Select Field --</option>' + data.fields.map(f => {
+                        return `<option value="${f.id}">${escapeHtml(f.label)}</option>`;
+                    }).join('');
+                    
+                    // Set correct field value
+                    fieldSelect.value = w.field_id;
+                    
+                    // Parse rule properties
+                    let rules = [];
+                    try { rules = JSON.parse(w.rules); } catch(ex) {}
+                    const rule = rules[0] || {};
+                    
+                    document.getElementById('widgetOperator').value = rule.operator || '=';
+                    document.getElementById('widgetValue').value = rule.value || '';
+                    
+                    document.getElementById('widgetFormContainer').style.display = 'block';
+                    onWidgetOperatorChange();
+                }
+            });
+        }
+
+        async function saveWidget() {
+            const id = document.getElementById('widgetId').value;
+            const title = document.getElementById('widgetTitle').value.trim();
+            const moduleId = document.getElementById('widgetModule').value;
+            const fieldId = document.getElementById('widgetField').value;
+            const operator = document.getElementById('widgetOperator').value;
+            const value = document.getElementById('widgetValue').value.trim();
+            const icon = document.getElementById('widgetIcon').value;
+            const color = document.getElementById('widgetColor').value;
+
+            if (!title) {
+                vyToast('Widget Title is required.', 'error');
+                return;
+            }
+            if (!moduleId) {
+                vyToast('Target Module is required.', 'error');
+                return;
+            }
+            if (!fieldId) {
+                vyToast('Filter Field is required.', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'save_dashboard_widget',
+                        id: id ? parseInt(id) : 0,
+                        title,
+                        module_id: parseInt(moduleId),
+                        field_id: fieldId,
+                        operator,
+                        value,
+                        icon,
+                        color
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast(id ? 'Widget updated successfully!' : 'Widget created successfully!', 'success');
+                    hideWidgetForm();
+                    loadWidgetsList();
+                } else {
+                    vyToast(data.error || 'Failed to save widget', 'error');
+                }
+            } catch (e) {
+                vyToast('Connection failed: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteWidget(id) {
+            if (!confirm('Are you sure you want to delete this widget?')) return;
+            try {
+                const res = await fetch(API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete_dashboard_widget',
+                        id: parseInt(id)
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast('Widget deleted successfully!', 'success');
+                    loadWidgetsList();
+                } else {
+                    vyToast(data.error || 'Failed to delete widget', 'error');
+                }
+            } catch (e) {
+                vyToast('Connection failed: ' + e.message, 'error');
+            }
+        }
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
     </script>

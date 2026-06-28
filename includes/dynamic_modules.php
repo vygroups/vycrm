@@ -293,7 +293,7 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
             $val = $rule_item['value'] ?? '';
 
             // Validate operator
-            $allowedOps = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE'];
+            $allowedOps = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE', 'today', 'days_older', 'days_within_future', 'empty', 'not_empty'];
             if (!in_array($op, $allowedOps)) {
                 $op = '=';
             }
@@ -328,6 +328,18 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                 } elseif ($op === 'NOT LIKE') {
                     $baseSql .= " AND $mappedCol NOT LIKE ?";
                     $params[] = '%' . $val . '%';
+                } elseif ($op === 'today') {
+                    $baseSql .= " AND DATE($mappedCol) = CURDATE()";
+                } elseif ($op === 'days_older') {
+                    $baseSql .= " AND DATE($mappedCol) <= DATE_SUB(CURDATE(), INTERVAL ? DAY)";
+                    $params[] = (int)$val;
+                } elseif ($op === 'days_within_future') {
+                    $baseSql .= " AND DATE($mappedCol) >= CURDATE() AND DATE($mappedCol) <= DATE_ADD(CURDATE(), INTERVAL ? DAY)";
+                    $params[] = (int)$val;
+                } elseif ($op === 'empty') {
+                    $baseSql .= " AND $mappedCol IS NULL";
+                } elseif ($op === 'not_empty') {
+                    $baseSql .= " AND $mappedCol IS NOT NULL";
                 } else {
                     $baseSql .= " AND $mappedCol $op ?";
                     $params[] = $val;
@@ -348,6 +360,23 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                         $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value = ?)";
                         $params[] = $fieldId;
                         $params[] = $val;
+                    } elseif ($op === 'today') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) = CURDATE())";
+                        $params[] = $fieldId;
+                    } elseif ($op === 'days_older') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) <= DATE_SUB(CURDATE(), INTERVAL ? DAY))";
+                        $params[] = $fieldId;
+                        $params[] = (int)$val;
+                    } elseif ($op === 'days_within_future') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) >= CURDATE() AND DATE(value) <= DATE_ADD(CURDATE(), INTERVAL ? DAY))";
+                        $params[] = $fieldId;
+                        $params[] = (int)$val;
+                    } elseif ($op === 'empty') {
+                        $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value IS NOT NULL AND TRIM(value) != '')";
+                        $params[] = $fieldId;
+                    } elseif ($op === 'not_empty') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value IS NOT NULL AND TRIM(value) != '')";
+                        $params[] = $fieldId;
                     } else {
                         $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value $op ?)";
                         $params[] = $fieldId;

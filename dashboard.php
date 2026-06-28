@@ -54,6 +54,13 @@ foreach ($dynModules as $dm) {
     ];
 }
 
+// Fetch dashboard widgets
+$widgets = [];
+try {
+    $wStmt = $conn->query("SELECT * FROM {$prefix}dashboard_widgets ORDER BY sort_order ASC, id ASC");
+    $widgets = $wStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
+
 try {
     if ($billingEnabled) {
         $dashboardStats['billing'][0]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}customers")->fetchColumn();
@@ -360,6 +367,51 @@ try {
                     <?php endif; ?>
                 <?php endforeach; ?>
             </div>
+            
+            <?php if (!empty($widgets)): ?>
+            <!-- Dynamic Insights Section -->
+            <div id="dynamicInsightsSection" style="margin-bottom: 35px;">
+                <h3 class="pipeline-header" style="margin-top:0; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-gauge-high" style="color:var(--primary);"></i> Dynamic Insights
+                </h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
+                    <?php foreach ($widgets as $w): 
+                        $wRules = json_decode($w['rules'], true);
+                        $wCount = 0;
+                        try {
+                            $res = dm_fetch_records($conn, $prefix, (int)$w['module_id'], null, 0, 0, $wRules);
+                            $wCount = $res['total'];
+                        } catch (Exception $ex) {}
+                        
+                        $cardColor = htmlspecialchars($w['color'] ?: 'var(--primary)');
+                        $cardIcon = htmlspecialchars($w['icon'] ?: 'fa-solid fa-bell');
+                        
+                        // Link to module view with filter rules
+                        $viewUrl = 'module_view.php?module=' . (int)$w['module_id'] . '&filter_rules=' . urlencode($w['rules']);
+                    ?>
+                        <a href="<?= $viewUrl ?>" class="crm-card" style="display: block; text-decoration: none; padding: 20px; border-left: 5px solid <?= $cardColor ?>; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.transform='none'; this.style.boxShadow='var(--shadow-sm)';">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                <div style="flex: 1; min-width: 0; padding-right: 15px;">
+                                    <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="<?= htmlspecialchars($w['title']) ?>">
+                                        <?= htmlspecialchars($w['title']) ?>
+                                    </div>
+                                    <div style="font-size: 28px; font-weight: 800; color: var(--text-main); line-height: 1;">
+                                        <?= number_format($wCount) ?>
+                                    </div>
+                                </div>
+                                <div style="width: 42px; height: 42px; border-radius: 12px; background: <?= $cardColor ?>12; color: <?= $cardColor ?>; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">
+                                    <i class="<?= $cardIcon ?>"></i>
+                                </div>
+                            </div>
+                            <div style="font-size: 12px; color: var(--primary); font-weight: 700; margin-top: 15px; display: flex; align-items: center; gap: 4px;">
+                                View Records <i class="fa-solid fa-arrow-right-long" style="font-size:10px;"></i>
+                            </div>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <h3 class="pipeline-header">CONFIGURABLE MODULES</h3>
             <div class="module-shortcuts">
                 <?php foreach ($dashboardModules as $moduleKey => $module): ?>
