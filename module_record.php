@@ -670,8 +670,13 @@ foreach ($module['blocks'] as $block) {
 </style>
 <div class="mm-modal-overlay" id="recordPickerModal">
     <div class="mm-modal mm-modal-lg">
-        <div class="mm-modal-header">
-            <h3 id="recordPickerModalTitle">Select Record</h3>
+        <div class="mm-modal-header" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <div style="display:flex; align-items:center; gap:16px;">
+                <h3 id="recordPickerModalTitle" style="margin:0;">Select Record</h3>
+                <button type="button" class="mm-btn mm-btn-primary mm-btn-sm" id="rpCreateBtn" onclick="createNewRecordFromPicker()" style="font-size:12px; height:28px; padding:0 12px; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-plus"></i> Create New Record
+                </button>
+            </div>
             <button class="mm-icon-btn" onclick="closeModal('recordPickerModal')"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="mm-modal-body" style="padding: 0 24px 24px 24px; min-height: 400px; display: flex; flex-direction: column;">
@@ -1137,6 +1142,11 @@ function changeRecordPickerPage(dir) {
     loadRecordPickerData();
 }
 
+function createNewRecordFromPicker() {
+    if (!currentPickerModuleId) return;
+    window.open(`module_record.php?module=${currentPickerModuleId}`, '_blank');
+}
+
 function loadRecordPickerData() {
     const contentDiv = document.getElementById('recordPickerContent');
     contentDiv.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; margin-bottom:10px; display:block;"></i> Loading...</div>';
@@ -1153,7 +1163,14 @@ function loadRecordPickerData() {
         }
 
         if (r.records.length === 0) {
-            contentDiv.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted); font-size: 14px;">No records found.</div>';
+            contentDiv.innerHTML = `
+                <div style="text-align:center; padding:40px; color:var(--text-muted); font-size: 14px;">
+                    <p style="margin-bottom:15px;">No records found.</p>
+                    <button type="button" class="mm-btn mm-btn-primary" onclick="createNewRecordFromPicker()">
+                        <i class="fa-solid fa-plus"></i> Create New Record
+                    </button>
+                </div>
+            `;
             document.getElementById('rpPageInfo').textContent = 'Page 1 of 1';
             return;
         }
