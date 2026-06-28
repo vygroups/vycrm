@@ -50,7 +50,22 @@ if ($activeFilterId) {
     }
 }
 
-$data = dm_fetch_records($conn, $prefix, $moduleId, $search ?: null, 50, 0, $activeFilterRules);
+// Query visible fields to find default sort column (either the sys_created_at field ID, or 'created')
+$fieldsStmt = $conn->prepare("SELECT id, field_type FROM {$prefix}module_fields WHERE module_id = ? AND is_list_visible = 1 ORDER BY sort_order ASC");
+$fieldsStmt->execute([$moduleId]);
+$visibleFields = $fieldsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+$defaultSortBy = 'created';
+foreach ($visibleFields as $vf) {
+    if ($vf['field_type'] === 'sys_created_at') {
+        $defaultSortBy = (string)$vf['id'];
+        break;
+    }
+}
+$sortBy = $_GET['sort_by'] ?? $defaultSortBy;
+$sortOrder = $_GET['sort_order'] ?? 'DESC';
+
+$data = dm_fetch_records($conn, $prefix, $moduleId, $search ?: null, 50, 0, $activeFilterRules, $sortBy, $sortOrder);
 $fields = $data['fields'];
 $records = $data['records'];
 $total = $data['total'];
@@ -170,6 +185,31 @@ if (!$hasUpdatedAt) {
         #vyToastContainer { position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; }
         .vy-toast { background:#fff; border-radius:10px; padding:14px 20px; min-width:280px; max-width:360px; font-size:14px; font-weight:600; box-shadow:0 8px 25px rgba(0,0,0,.12); display:flex; align-items:center; gap:10px; opacity:0; transform:translateX(30px); transition:all .35s cubic-bezier(.25,.8,.25,1); }
         .vy-toast.show { opacity:1; transform:translateX(0); }
+
+        /* Sortable headers style */
+        .crm-table th[data-field-id], .crm-table th[data-column] {
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        .crm-table th[data-field-id]:hover, .crm-table th[data-column]:hover {
+            background-color: rgba(123, 94, 240, 0.05) !important;
+        }
+        .sort-icon {
+            margin-left: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+            opacity: 0.5;
+            transition: opacity 0.2s, color 0.2s;
+        }
+        .crm-table th[data-field-id]:hover .sort-icon, .crm-table th[data-column]:hover .sort-icon {
+            opacity: 1;
+            color: var(--primary);
+        }
+        .crm-table th.active-sort .sort-icon {
+            opacity: 1;
+            color: var(--primary);
+        }
     </style>
 </head>
 <body>
@@ -454,6 +494,12 @@ function toggleColumnSelector(event) {
 const DEFAULT_PAGE_LIMIT = <?= $defaultRecordsPerPage ?>;
 let currentPage = 1;
 let currentPageLimit = DEFAULT_PAGE_LIMIT;
+
+// Sorting state variables
+const DEFAULT_SORT_BY = <?= json_encode($defaultSortBy) ?>;
+const DEFAULT_SORT_ORDER = 'DESC';
+let currentSortBy = <?= json_encode($sortBy) ?>;
+let currentSortOrder = <?= json_encode($sortOrder) ?>;
 
 // Saved Filters and Dynamic Rules logic
 const COMPANY_USERS = <?= json_encode($usersList) ?>;
@@ -892,7 +938,9 @@ async function fetchAndRenderRecords(filterRules = null, filterId = 0, page = 1)
         module_id: MODULE_ID,
         search: searchVal || null,
         limit: currentPageLimit,
-        offset: offset
+        offset: offset,
+        sort_by: currentSortBy,
+        sort_order: currentSortOrder
     };
     
     if (filterRules && filterRules.length > 0) {
@@ -911,6 +959,7 @@ async function fetchAndRenderRecords(filterRules = null, filterId = 0, page = 1)
         
         if (r.success && r.data) {
             renderRecordsTable(r.data.fields, r.data.records);
+            updateHeaderSortIcons();
             
             const total = r.data.total;
             const countLabel = document.querySelector('.mv-toolbar .text-muted.text-sm');
@@ -1375,10 +1424,88 @@ document.querySelectorAll('.col-toggle-checkbox').forEach(cb => {
     });
 });
 
+function setupHeaderSortListeners() {
+    document.querySelectorAll('th[data-field-id], th[data-column]').forEach(th => {
+        th.style.cursor = 'pointer';
+        
+        let icon = th.querySelector('.sort-icon');
+        if (!icon) {
+            icon = document.createElement('i');
+            icon.className = 'fa-solid fa-sort sort-icon';
+            icon.style.marginLeft = '8px';
+            icon.style.opacity = '0.4';
+            th.appendChild(icon);
+        }
+        
+        th.addEventListener('click', () => {
+            const fieldId = th.dataset.fieldId;
+            const column = th.dataset.column;
+            const key = fieldId || column;
+            handleHeaderSort(key);
+        });
+    });
+}
+
+function handleHeaderSort(key) {
+    if (currentSortBy == key) {
+        if (currentSortOrder === 'ASC') {
+            currentSortOrder = 'DESC';
+        } else {
+            // Already DESC
+            if (key == DEFAULT_SORT_BY) {
+                currentSortOrder = 'ASC';
+            } else {
+                currentSortBy = DEFAULT_SORT_BY;
+                currentSortOrder = DEFAULT_SORT_ORDER;
+            }
+        }
+    } else {
+        currentSortBy = key;
+        currentSortOrder = 'ASC';
+    }
+    fetchAndRenderRecords(activeFilterRules, activeFilterId, 1);
+}
+
+function updateHeaderSortIcons() {
+    document.querySelectorAll('th[data-field-id], th[data-column]').forEach(th => {
+        const fieldId = th.dataset.fieldId;
+        const column = th.dataset.column;
+        const key = fieldId || column;
+        
+        const isActive = (key == currentSortBy);
+        th.classList.remove('active-sort');
+        
+        let icon = th.querySelector('.sort-icon');
+        if (!icon) {
+            icon = document.createElement('i');
+            icon.className = 'sort-icon';
+            icon.style.marginLeft = '8px';
+            th.appendChild(icon);
+        }
+        
+        if (isActive) {
+            th.classList.add('active-sort');
+            icon.className = currentSortOrder === 'ASC' 
+                ? 'fa-solid fa-arrow-up-wide-short sort-icon' 
+                : 'fa-solid fa-arrow-down-short-wide sort-icon';
+            icon.style.opacity = '1';
+        } else {
+            icon.className = 'fa-solid fa-sort sort-icon';
+            icon.style.opacity = '0.4';
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initColumnOrder();
     applyColumnVisibility();
     setupDragAndDrop();
+    setupHeaderSortListeners();
+    updateHeaderSortIcons();
+    
+    // Call initial fetch to set up pagination stats, pagination buttons, sorting headers, etc.
+    fetchAndRenderRecords(activeFilterRules, activeFilterId, 1);
+
     loadSavedFiltersList().then(() => {
         const container = document.getElementById('filterRulesContainer');
         if (container && container.children.length === 0) {

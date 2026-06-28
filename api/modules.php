@@ -336,6 +336,8 @@ try {
             $search = $input['search'] ?? $_GET['search'] ?? null;
             $limit = (int)($input['limit'] ?? $_GET['limit'] ?? 50);
             $offset = (int)($input['offset'] ?? $_GET['offset'] ?? 0);
+            $sortBy = $input['sort_by'] ?? $_GET['sort_by'] ?? null;
+            $sortOrder = $input['sort_order'] ?? $_GET['sort_order'] ?? 'DESC';
             
             $filterRules = null;
             $filterRulesInput = $input['filter_rules'] ?? $_GET['filter_rules'] ?? null;
@@ -353,7 +355,7 @@ try {
                 }
             }
 
-            $data = dm_fetch_records($conn, $prefix, $moduleId, $search, $limit, $offset, $filterRules);
+            $data = dm_fetch_records($conn, $prefix, $moduleId, $search, $limit, $offset, $filterRules, $sortBy, $sortOrder);
             commerce_json_response(['success' => true, 'data' => $data]);
 
         case 'get_record':

@@ -182,7 +182,7 @@ function dm_fetch_module_full(PDO $conn, string $p, int $moduleId): ?array
 /**
  * Fetch records for a module with values pivoted.
  */
-function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search = null, int $limit = 50, int $offset = 0, ?array $filterRules = null): array
+function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search = null, int $limit = 50, int $offset = 0, ?array $filterRules = null, ?string $sortBy = null, ?string $sortOrder = 'DESC'): array
 {
     // Get list-visible fields
     $fStmt = $conn->prepare("
@@ -363,8 +363,48 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
     $cStmt->execute($params);
     $total = (int) $cStmt->fetchColumn();
 
+    // Determine order by column/expression
+    $orderBy = "r.created_at DESC";
+    if ($sortBy) {
+        $sortOrder = strtoupper($sortOrder) === 'ASC' ? 'ASC' : 'DESC';
+        
+        $sysFields = [
+            'created_at' => 'r.created_at',
+            'created_by' => 'r.created_by',
+            'updated_at' => 'r.updated_at',
+            'updated_by' => 'r.updated_by',
+            'id'         => 'r.id',
+            'created'    => 'r.created_at'
+        ];
+        
+        if (isset($sysFields[$sortBy])) {
+            $orderBy = $sysFields[$sortBy] . " " . $sortOrder;
+        } else {
+            $sortFieldId = (int)$sortBy;
+            if ($sortFieldId > 0) {
+                $sfStmt = $conn->prepare("SELECT field_type FROM {$p}module_fields WHERE id = ? LIMIT 1");
+                $sfStmt->execute([$sortFieldId]);
+                $sortFieldType = $sfStmt->fetchColumn();
+                
+                if ($sortFieldType === 'sys_created_at') {
+                    $orderBy = "r.created_at " . $sortOrder;
+                } elseif ($sortFieldType === 'sys_created_by') {
+                    $orderBy = "r.created_by " . $sortOrder;
+                } elseif ($sortFieldType === 'sys_updated_at') {
+                    $orderBy = "r.updated_at " . $sortOrder;
+                } elseif ($sortFieldType === 'sys_updated_by') {
+                    $orderBy = "r.updated_by " . $sortOrder;
+                } elseif ($sortFieldType === 'number' || $sortFieldType === 'currency' || $sortFieldType === 'duration') {
+                    $orderBy = "(SELECT CAST(NULLIF(value, '') AS DECIMAL(20,4)) FROM {$p}module_record_values WHERE record_id = r.id AND field_id = $sortFieldId) " . $sortOrder;
+                } else {
+                    $orderBy = "(SELECT value FROM {$p}module_record_values WHERE record_id = r.id AND field_id = $sortFieldId) " . $sortOrder;
+                }
+            }
+        }
+    }
+
     // Query records
-    $sql = "SELECT r.id, r.created_at, r.created_by, r.updated_at, r.updated_by" . $baseSql . " ORDER BY r.created_at DESC LIMIT $limit OFFSET $offset";
+    $sql = "SELECT r.id, r.created_at, r.created_by, r.updated_at, r.updated_by" . $baseSql . " ORDER BY $orderBy LIMIT $limit OFFSET $offset";
     $rStmt = $conn->prepare($sql);
     $rStmt->execute($params);
     $records = $rStmt->fetchAll(PDO::FETCH_ASSOC);
