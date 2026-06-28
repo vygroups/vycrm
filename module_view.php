@@ -210,6 +210,10 @@ if (!$hasUpdatedAt) {
             opacity: 1;
             color: var(--primary);
         }
+        .export-dropdown-item:hover {
+            background-color: rgba(123, 94, 240, 0.05) !important;
+            color: var(--primary) !important;
+        }
     </style>
 </head>
 <body>
@@ -266,6 +270,26 @@ if (!$hasUpdatedAt) {
                                     </div>
                                     <?php endif; ?>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Import Button -->
+                        <button class="mm-btn mm-btn-sm mm-btn-outline" onclick="openImportModal()" style="display:inline-flex;align-items:center;gap:6px;">
+                            <i class="fa-solid fa-file-import"></i> Import
+                        </button>
+
+                        <!-- Export Dropdown -->
+                        <div style="position:relative; display:inline-block;">
+                            <button class="mm-btn mm-btn-sm mm-btn-outline" onclick="toggleExportDropdown(event)" style="display:inline-flex;align-items:center;gap:6px;">
+                                <i class="fa-solid fa-file-export"></i> Export
+                            </button>
+                            <div id="exportDropdown" class="crm-card" style="display:none; position:absolute; right:0; top:40px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:8px; box-shadow:var(--shadow-lg); z-index:1000; min-width:160px;">
+                                <button class="export-dropdown-item" onclick="triggerExport('csv')" style="width:100%; text-align:left; background:none; border:none; padding:8px 12px; font-size:13px; font-weight:600; cursor:pointer; color:var(--text); border-radius:6px; display:flex; align-items:center; gap:8px;">
+                                    <i class="fa-solid fa-file-csv" style="color:#10b981; font-size:16px;"></i> Export as CSV
+                                </button>
+                                <button class="export-dropdown-item" onclick="triggerExport('excel')" style="width:100%; text-align:left; background:none; border:none; padding:8px 12px; font-size:13px; font-weight:600; cursor:pointer; color:var(--text); border-radius:6px; display:flex; align-items:center; gap:8px; margin-top:2px;">
+                                    <i class="fa-solid fa-file-excel" style="color:#3b82f6; font-size:16px;"></i> Export as Excel
+                                </button>
                             </div>
                         </div>
 
@@ -1223,6 +1247,10 @@ document.addEventListener('click', function(event) {
     if (dropdown && !dropdown.contains(event.target)) {
         dropdown.style.display = 'none';
     }
+    const expDropdown = document.getElementById('exportDropdown');
+    if (expDropdown && !expDropdown.contains(event.target) && !event.target.closest('button[onclick="toggleExportDropdown(event)"]')) {
+        expDropdown.style.display = 'none';
+    }
 });
 
 function applyColumnVisibility() {
@@ -1517,6 +1545,124 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+function toggleExportDropdown(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('exportDropdown');
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+}
+
+function triggerExport(format) {
+    // Close dropdown
+    const dropdown = document.getElementById('exportDropdown');
+    if (dropdown) dropdown.style.display = 'none';
+    
+    // Get search value
+    const searchInput = document.getElementById('recordSearchInput');
+    const searchVal = searchInput ? searchInput.value.trim() : '';
+    
+    // Prepare URL parameters
+    const params = new URLSearchParams({
+        module_id: MODULE_ID,
+        format: format
+    });
+    
+    if (searchVal) {
+        params.append('search', searchVal);
+    }
+    if (activeFilterRules && activeFilterRules.length > 0) {
+        params.append('filter_rules', JSON.stringify(activeFilterRules));
+    } else if (activeFilterId) {
+        params.append('filter_id', activeFilterId);
+    }
+    if (currentSortBy) {
+        params.append('sort_by', currentSortBy);
+        params.append('sort_order', currentSortOrder);
+    }
+    
+    // Redirect to trigger browser download
+    window.location.href = `/api/module_export.php?${params.toString()}`;
+}
+
+function openImportModal() {
+    const modal = document.getElementById('importModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeImportModal() {
+    const modal = document.getElementById('importModal');
+    if (modal) modal.style.display = 'none';
+    const form = document.getElementById('importForm');
+    if (form) form.reset();
+}
+
+function downloadTemplate() {
+    const params = new URLSearchParams({
+        module_id: MODULE_ID,
+        template: '1'
+    });
+    window.location.href = `/api/module_export.php?${params.toString()}`;
+}
+
+async function handleImportSubmit(event) {
+    event.preventDefault();
+    const fileInput = document.getElementById('importFile');
+    if (!fileInput || !fileInput.files.length) return;
+    
+    const formData = new FormData();
+    formData.append('import_file', fileInput.files[0]);
+    formData.append('module_id', MODULE_ID);
+    
+    try {
+        const response = await fetch('/api/module_import.php', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            vyToast(result.message || 'Import successful!', 'success');
+            closeImportModal();
+            // Refresh table
+            fetchAndRenderRecords(activeFilterRules, activeFilterId, 1);
+        } else {
+            vyToast(result.error || 'Import failed.', 'error');
+        }
+    } catch (e) {
+        vyToast('Import request failed: ' + e.message, 'error');
+    }
+}
 </script>
+<!-- Import Modal -->
+<div class="mm-modal-overlay" id="importModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+    <div class="crm-card" style="width:100%; max-width:500px; padding:24px; border-radius:16px; background:var(--surface); box-shadow:var(--shadow-lg);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+            <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                <i class="fa-solid fa-file-import" style="color:var(--primary);"></i> Import Records
+            </h3>
+            <button class="mm-icon-btn" onclick="closeImportModal()" style="background:none; border:none; cursor:pointer; font-size:16px; color:var(--text);"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div style="margin-bottom:20px;">
+            <p style="font-size:13px; color:var(--text-muted); margin:0 0 12px; line-height:1.5;">
+                Upload a CSV or Excel (.xls, .xlsx) file containing records for this module. The first row must contain column headers that match the module fields' names.
+            </p>
+            <div style="display:flex; gap:10px; margin-bottom:16px;">
+                <button class="mm-btn mm-btn-sm mm-btn-outline" onclick="downloadTemplate()" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:6px 12px;">
+                    <i class="fa-solid fa-download"></i> Download CSV Template
+                </button>
+            </div>
+            <form id="importForm" onsubmit="handleImportSubmit(event)">
+                <div class="form-group" style="display:flex; flex-direction:column; gap:6px;">
+                    <label class="form-label" style="font-size:13px; font-weight:600; color:var(--text-main);">Choose CSV or Excel File *</label>
+                    <input type="file" id="importFile" accept=".csv,.xls,.xlsx" required class="form-control" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px;">
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:24px; border-top:1px solid var(--border); padding-top:16px;">
+                    <button type="button" class="mm-btn mm-btn-sm mm-btn-outline" onclick="closeImportModal()">Cancel</button>
+                    <button type="submit" class="mm-btn mm-btn-sm" style="background:var(--primary); color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;">Upload and Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 </body>
 </html>

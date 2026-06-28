@@ -248,7 +248,7 @@ $v = time();
                             <!-- Tab Switcher -->
                             <div style="display: flex; gap: 15px; border-bottom: 2px solid var(--border); margin-bottom: 20px;">
                                 <button type="button" class="tab-btn active" id="btnTabUpload" onclick="switchImportTab('upload')" style="background:none; border:none; padding:10px 15px; font-size:14px; font-weight:600; cursor:pointer; color:var(--primary); border-bottom:2px solid var(--primary); margin-bottom:-2px; outline:none;">
-                                    <i class="fa-solid fa-file-csv"></i> CSV Upload
+                                    <i class="fa-solid fa-file-excel"></i> CSV / Excel Upload
                                 </button>
                                 <button type="button" class="tab-btn" id="btnTabManual" onclick="switchImportTab('manual')" style="background:none; border:none; padding:10px 15px; font-size:14px; font-weight:600; cursor:pointer; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; outline:none;">
                                     <i class="fa-solid fa-keyboard"></i> Manual Entry
@@ -262,12 +262,12 @@ $v = time();
                             
                             <!-- CSV Upload Content -->
                             <div id="tabContentUpload">
-                                <p style="margin: 0 0 15px 0; font-size: 13px; color: var(--text-muted);">Upload contacts via a CSV file containing columns: <strong>First Name, Last Name, Email, Phone, Company Name, Designation</strong></p>
+                                <p style="margin: 0 0 15px 0; font-size: 13px; color: var(--text-muted);">Upload contacts via a CSV or Excel (.xls, .xlsx) file containing columns: <strong>First Name, Last Name, Email, Phone, Company Name, Designation</strong></p>
                                 <div class="csv-drop-zone" onclick="document.getElementById('csvFileInput').click()">
-                                    <i class="fa-solid fa-file-csv"></i>
-                                    <h4 style="margin: 0 0 4px 0;">Click or Drag CSV File Here</h4>
-                                    <span style="font-size:12px; color:var(--text-muted);">Only CSV files are supported</span>
-                                    <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="handleCsvFileSelected(event)">
+                                    <i class="fa-solid fa-file-excel"></i>
+                                    <h4 style="margin: 0 0 4px 0;">Click or Drag CSV or Excel File Here</h4>
+                                    <span style="font-size:12px; color:var(--text-muted);">CSV, XLS, and XLSX files are supported</span>
+                                    <input type="file" id="csvFileInput" accept=".csv,.xls,.xlsx" style="display: none;" onchange="handleCsvFileSelected(event)">
                                 </div>
                             </div>
                             
@@ -905,17 +905,31 @@ $v = time();
 
         /* ════════════════════ CSV CONTACTS PARSING ════════════════════ */
 
-        function handleCsvFileSelected(event) {
+        async function handleCsvFileSelected(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const text = e.target.result;
-                parsedRecipients = parseCSV(text);
-                renderCsvPreview();
-            };
-            reader.readAsText(file);
+            const formData = new FormData();
+            formData.append('contacts_file', file);
+            formData.append('action', 'parse_contacts_file');
+
+            try {
+                const res = await fetch(API, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    parsedRecipients = data.contacts;
+                    renderCsvPreview();
+                    vyToast(`Parsed ${parsedRecipients.length} contacts!`, 'success');
+                } else {
+                    vyToast(data.error || 'Failed to parse file.', 'error');
+                }
+            } catch(e) {
+                vyToast('File parsing failed: ' + e.message, 'error');
+            }
+            event.target.value = '';
         }
 
         function parseCSV(text) {

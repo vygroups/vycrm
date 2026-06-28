@@ -552,9 +552,221 @@ try {
 
             commerce_json_response(['success' => true]);
 
+        case 'parse_contacts_file':
+            if (empty($_FILES['contacts_file']) || $_FILES['contacts_file']['error'] !== UPLOAD_ERR_OK) {
+                throw new RuntimeException('Valid CSV or Excel file upload required');
+            }
+            
+            $fileTmpPath = $_FILES['contacts_file']['tmp_name'];
+            $fileName = $_FILES['contacts_file']['name'];
+            
+            // Load rows
+            $rows = get_rows_from_file($fileTmpPath, $fileName);
+            if (empty($rows)) {
+                throw new RuntimeException('Empty or invalid file');
+            }
+            
+            $headers = array_shift($rows);
+            // Clean BOM
+            if (substr($headers[0], 0, 3) == "\xEF\xBB\xBF") {
+                $headers[0] = substr($headers[0], 3);
+            }
+            
+            // Get campaign fields definitions
+            $cfStmt = $conn->query("SELECT field_key, label FROM {$prefix}campaign_fields");
+            $fields = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $headerMap = [];
+            foreach ($headers as $index => $headerName) {
+                $headerName = trim(strtolower($headerName));
+                foreach ($fields as $f) {
+                    if (trim(strtolower($f['label'])) === $headerName || trim(strtolower($f['field_key'])) === $headerName) {
+                        $headerMap[$index] = $f['field_key'];
+                        break;
+                    }
+                }
+            }
+            
+            if (empty($headerMap)) {
+                throw new RuntimeException('No columns matched the campaign fields. Please check your headers.');
+            }
+            
+            $contacts = [];
+            foreach ($rows as $row) {
+                $isEmpty = true;
+                foreach ($row as $cell) {
+                    if (trim($cell) !== '') {
+                        $isEmpty = false;
+                        break;
+                    }
+                }
+                if ($isEmpty) continue;
+                
+                $contact = [];
+                // Initialize all fields to empty string
+                foreach ($fields as $f) {
+                    $contact[$f['field_key']] = '';
+                }
+                
+                foreach ($row as $index => $val) {
+                    if (isset($headerMap[$index])) {
+                        $fKey = $headerMap[$index];
+                        $contact[$fKey] = trim($val);
+                    }
+                }
+                $contacts[] = $contact;
+            }
+            
+            commerce_json_response(['success' => true, 'contacts' => $contacts]);
+
         default:
             throw new RuntimeException("Unknown action: $action");
     }
 } catch (Throwable $e) {
     commerce_json_response(['success' => false, 'error' => $e->getMessage()], 400);
+}
+
+/**
+ * Helper to dynamically load rows based on file format.
+ */
+function get_rows_from_file($filePath, $originalName) {
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    
+    if ($ext === 'xlsx') {
+        return parse_xlsx($filePath);
+    }
+    
+    // Check if it's HTML-based XLS
+    $contentStart = file_get_contents($filePath, false, null, 0, 1000);
+    if (strpos($contentStart, '<html') !== false || strpos($contentStart, '<table') !== false) {
+        return parse_html_xls($filePath);
+    }
+    
+    // Otherwise, assume CSV
+    $rows = [];
+    if (($handle = fopen($filePath, "r")) !== FALSE) {
+        while (($row = fgetcsv($handle, 1000, ",")) !== FALSE) {
+            $rows[] = $row;
+        }
+        fclose($handle);
+    }
+    return $rows;
+}
+
+/**
+ * Parses native Excel (.xlsx) files without composer dependencies using SimpleXML.
+ */
+function parse_xlsx($filePath) {
+    if (!class_exists('ZipArchive')) {
+        throw new Exception("ZipArchive PHP extension is missing. Please save files as CSV or HTML XLS.");
+    }
+    
+    $zip = new ZipArchive();
+    if ($zip->open($filePath) !== TRUE) {
+        throw new Exception("Unable to open XLSX container.");
+    }
+    
+    // 1. Read shared strings table
+    $sharedStrings = [];
+    $sharedStringsXml = $zip->getFromName('xl/sharedStrings.xml');
+    if ($sharedStringsXml) {
+        $xml = simplexml_load_string($sharedStringsXml);
+        if ($xml && $xml->si) {
+            foreach ($xml->si as $si) {
+                if (isset($si->t)) {
+                    $sharedStrings[] = (string)$si->t;
+                } elseif (isset($si->r)) {
+                    $str = '';
+                    foreach ($si->r as $r) {
+                        $str .= (string)$r->t;
+                    }
+                    $sharedStrings[] = $str;
+                } else {
+                    $sharedStrings[] = '';
+                }
+            }
+        }
+    }
+    
+    // 2. Read sheet1.xml
+    $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+    if (!$sheetXml) {
+        $zip->close();
+        throw new Exception("Missing worksheet data sheet1.xml in XLSX.");
+    }
+    
+    $xml = simplexml_load_string($sheetXml);
+    $rows = [];
+    
+    if ($xml && $xml->sheetData && $xml->sheetData->row) {
+        foreach ($xml->sheetData->row as $rNode) {
+            $row = [];
+            foreach ($rNode->c as $cNode) {
+                $ref = (string)$cNode['r']; // e.g. A1, B1
+                preg_match('/^[A-Z]+/', $ref, $matches);
+                $colLetters = $matches[0] ?? '';
+                
+                // Convert column letters to 0-based index
+                $colIndex = 0;
+                $len = strlen($colLetters);
+                for ($i = 0; $i < $len; $i++) {
+                    $colIndex = $colIndex * 26 + (ord($colLetters[$i]) - 64);
+                }
+                $colIndex--;
+                
+                $val = '';
+                if (isset($cNode->v)) {
+                    $val = (string)$cNode->v;
+                    $type = (string)$cNode['t']; // 's' for sharedString references
+                    if ($type === 's' && isset($sharedStrings[(int)$val])) {
+                        $val = $sharedStrings[(int)$val];
+                    }
+                }
+                $row[$colIndex] = $val;
+            }
+            
+            // Fill empty intermediate cells
+            if (!empty($row)) {
+                $maxIndex = max(array_keys($row));
+                for ($i = 0; $i <= $maxIndex; $i++) {
+                    if (!isset($row[$i])) {
+                        $row[$i] = '';
+                    }
+                }
+                ksort($row);
+            }
+            $rows[] = $row;
+        }
+    }
+    
+    $zip->close();
+    return $rows;
+}
+
+/**
+ * Parses exported HTML-based XLS table files.
+ */
+function parse_html_xls($filePath) {
+    $html = file_get_contents($filePath);
+    $doc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+    libxml_clear_errors();
+    
+    $rows = [];
+    $trElements = $doc->getElementsByTagName('tr');
+    foreach ($trElements as $tr) {
+        $row = [];
+        $tdElements = $tr->getElementsByTagName('td');
+        if ($tdElements->length === 0) {
+            $tdElements = $tr->getElementsByTagName('th');
+        }
+        foreach ($tdElements as $td) {
+            $row[] = trim($td->nodeValue);
+        }
+        if (!empty($row)) {
+            $rows[] = $row;
+        }
+    }
+    return $rows;
 }
