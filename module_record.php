@@ -481,6 +481,133 @@ foreach ($module['blocks'] as $block) {
                 </div>
                 <?php endforeach; ?>
 
+                <?php if ($isViewOnly && $recordId): ?>
+                    <?php
+                    // Fetch referencing fields of type api_call_picker that link to this module
+                    $fieldsStmt = $conn->query("
+                        SELECT f.id, f.module_id, f.label, f.config, m.name as module_name, m.icon as module_icon
+                        FROM {$prefix}module_fields f
+                        JOIN {$prefix}modules m ON m.id = f.module_id
+                        WHERE f.field_type = 'api_call_picker'
+                    ");
+                    $referencingFields = [];
+                    foreach ($fieldsStmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                        $cfg = json_decode($f['config'] ?: '{}', true);
+                        if (isset($cfg['linked_module_id']) && (int)$cfg['linked_module_id'] === $moduleId) {
+                            $referencingFields[] = $f;
+                        }
+                    }
+
+                    $taggedRecordsGrouped = [];
+                    $totalTaggedRecords = 0;
+                    $totalTaggedModules = 0;
+
+                    foreach ($referencingFields as $rf) {
+                        $valStmt = $conn->prepare("
+                            SELECT rv.record_id
+                            FROM {$prefix}module_record_values rv
+                            JOIN {$prefix}module_records r ON r.id = rv.record_id
+                            WHERE rv.field_id = ? AND rv.value = ?
+                        ");
+                        $valStmt->execute([$rf['id'], (string)$recordId]);
+                        $linkedRecordIds = $valStmt->fetchAll(PDO::FETCH_COLUMN);
+
+                        if (!empty($linkedRecordIds)) {
+                            $totalTaggedModules++;
+                            foreach ($linkedRecordIds as $lrid) {
+                                $totalTaggedRecords++;
+                                // Find display title field
+                                $tfStmt = $conn->prepare("SELECT id, config, field_type FROM {$prefix}module_fields WHERE module_id = ? ORDER BY sort_order ASC");
+                                $tfStmt->execute([$rf['module_id']]);
+                                $allLFields = $tfStmt->fetchAll(PDO::FETCH_ASSOC);
+                                $displayFieldId = null;
+                                $fallbackFieldId = null;
+                                foreach ($allLFields as $lf) {
+                                    $lfConf = json_decode($lf['config'] ?: '{}', true);
+                                    if (!empty($lfConf['is_title'])) {
+                                        $displayFieldId = $lf['id'];
+                                        break;
+                                    }
+                                    if (!$fallbackFieldId && in_array($lf['field_type'], ['text','name','email'])) {
+                                        $fallbackFieldId = $lf['id'];
+                                    }
+                                }
+                                if (!$displayFieldId) {
+                                    $displayFieldId = $fallbackFieldId;
+                                }
+
+                                $displayName = '';
+                                if ($displayFieldId) {
+                                    $rvStmt = $conn->prepare("SELECT value FROM {$prefix}module_record_values WHERE record_id = ? AND field_id = ?");
+                                    $rvStmt->execute([$lrid, $displayFieldId]);
+                                    $displayName = trim((string)$rvStmt->fetchColumn());
+                                }
+                                if (!$displayName) {
+                                    $displayName = "Record #$lrid";
+                                }
+
+                                $taggedRecordsGrouped[$rf['module_id']]['info'] = [
+                                    'name' => $rf['module_name'],
+                                    'icon' => $rf['module_icon'] ?: 'fa-solid fa-cube'
+                                ];
+                                $taggedRecordsGrouped[$rf['module_id']]['records'][] = [
+                                    'id' => $lrid,
+                                    'display_name' => $displayName,
+                                    'field_label' => $rf['label']
+                                ];
+                            }
+                        }
+                    }
+                    ?>
+                    
+                    <?php if (!empty($taggedRecordsGrouped)): ?>
+                    <div class="mr-block" style="margin-top: 30px;">
+                        <div class="mr-block-header" style="display: flex; justify-content: space-between; align-items: center; background: rgba(123, 94, 240, 0.05); border-bottom: 1.5px solid var(--border);">
+                            <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--primary);">
+                                <i class="fa-solid fa-tags"></i> Related Records & References
+                            </span>
+                            <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">
+                                Tagged in <strong style="color:var(--text-main);"><?= $totalTaggedModules ?></strong> Module<?= $totalTaggedModules !== 1 ? 's' : '' ?> (Total <strong style="color:var(--text-main);"><?= $totalTaggedRecords ?></strong> Record<?= $totalTaggedRecords !== 1 ? 's' : '' ?>)
+                            </span>
+                        </div>
+                        <div class="mr-block-body" style="padding: 24px;">
+                            <div style="display: flex; flex-direction: column; gap: 24px;">
+                                <?php foreach ($taggedRecordsGrouped as $refModuleId => $group): ?>
+                                    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow-sm);">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 12px;">
+                                            <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                                                <i class="<?= htmlspecialchars($group['info']['icon']) ?>" style="color: var(--primary); font-size: 15px;"></i>
+                                                <?= htmlspecialchars($group['info']['name']) ?>
+                                            </h4>
+                                            <span class="mm-badge" style="background: rgba(123,94,240,0.08); color: var(--primary); font-weight: 700; font-size: 11px; padding: 3px 10px; border-radius: 50px;">
+                                                <?= count($group['records']) ?> reference<?= count($group['records']) !== 1 ? 's' : '' ?>
+                                            </span>
+                                        </div>
+                                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                                            <?php foreach ($group['records'] as $refRec): ?>
+                                                <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(0,0,0,0.01); border: 1px dashed var(--border); border-radius: 8px; font-size: 13px;">
+                                                    <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+                                                        <span style="color: var(--text-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;">
+                                                            Via <?= htmlspecialchars($refRec['field_label']) ?>
+                                                        </span>
+                                                        <span style="color: var(--text-main); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                                            <?= htmlspecialchars($refRec['display_name']) ?>
+                                                        </span>
+                                                    </div>
+                                                    <a href="module_record.php?module=<?= $refModuleId ?>&record=<?= $refRec['id'] ?>&view=1" target="_blank" class="mm-btn mm-btn-sm" style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; text-decoration: none; border-radius: 6px; border: 1px solid var(--border); background: #fff; color: var(--text-main); transition: all 0.2s;">
+                                                        View Record <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 10px;"></i>
+                                                    </a>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                <?php endif; ?>
+
             </div>
         </div>
     </main>
