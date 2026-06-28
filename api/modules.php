@@ -375,6 +375,48 @@ try {
 
             $conn->beginTransaction();
             try {
+                // Validate unique fields
+                $uniqStmt = $conn->prepare("SELECT id, label FROM {$prefix}module_fields WHERE module_id = ? AND is_unique = 1");
+                $uniqStmt->execute([$moduleId]);
+                $uniqueFields = $uniqStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                foreach ($uniqueFields as $uf) {
+                    $fid = (int)$uf['id'];
+                    $flabel = $uf['label'];
+                    
+                    if (isset($values[$fid]) && trim((string)$values[$fid]) !== '') {
+                        $newVal = trim((string)$values[$fid]);
+                        
+                        if ($recordId) {
+                            $chkStmt = $conn->prepare("
+                                SELECT COUNT(*) 
+                                FROM {$prefix}module_record_values val
+                                JOIN {$prefix}module_records rec ON rec.id = val.record_id
+                                WHERE rec.module_id = ? 
+                                  AND val.field_id = ? 
+                                  AND val.value = ? 
+                                  AND rec.id != ?
+                            ");
+                            $chkStmt->execute([$moduleId, $fid, $newVal, $recordId]);
+                        } else {
+                            $chkStmt = $conn->prepare("
+                                SELECT COUNT(*) 
+                                FROM {$prefix}module_record_values val
+                                JOIN {$prefix}module_records rec ON rec.id = val.record_id
+                                WHERE rec.module_id = ? 
+                                  AND val.field_id = ? 
+                                  AND val.value = ?
+                            ");
+                            $chkStmt->execute([$moduleId, $fid, $newVal]);
+                        }
+                        
+                        $dupCount = (int)$chkStmt->fetchColumn();
+                        if ($dupCount > 0) {
+                            throw new RuntimeException("The value '$newVal' for unique field '$flabel' already exists in another record.");
+                        }
+                    }
+                }
+
                 if ($recordId) {
                     $recStmt = $conn->prepare("SELECT created_by FROM {$prefix}module_records WHERE id = ?");
                     $recStmt->execute([$recordId]);
