@@ -373,6 +373,7 @@ try {
 
             if (!$moduleId) throw new RuntimeException('Module ID required');
 
+            $isNewRecord = false;
             $conn->beginTransaction();
             try {
                 // Validate unique fields
@@ -433,6 +434,7 @@ try {
                     $convRecId = !empty($input['converted_from_record_id']) ? (int)$input['converted_from_record_id'] : (!empty($_POST['converted_from_record_id']) ? (int)$_POST['converted_from_record_id'] : null);
                     $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by, converted_from_module_id, converted_from_record_id) VALUES (?, ?, ?, ?)")->execute([$moduleId, $userId, $convModId, $convRecId]);
                     $recordId = (int)$conn->lastInsertId();
+                    $isNewRecord = true;
                 }
 
                 // Handle file uploads
@@ -493,7 +495,7 @@ try {
                     }
                     
                     // Audit change if it is an update
-                    if ($recordId > 0) {
+                    if ($recordId > 0 && !$isNewRecord) {
                         $oldVal = isset($oldValues[$fieldId]) ? $oldValues[$fieldId] : '';
                         $normOld = trim((string)$oldVal);
                         $normNew = trim((string)$newValue);
@@ -771,7 +773,9 @@ try {
                 FROM {$prefix}module_record_history h
                 LEFT JOIN users u ON u.id = h.changed_by
                 LEFT JOIN {$prefix}module_fields f ON f.id = h.field_id
+                JOIN {$prefix}module_records r ON r.id = h.record_id
                 WHERE h.record_id = ?
+                  AND ABS(TIMESTAMPDIFF(SECOND, h.changed_at, r.created_at)) > 2
             ";
             $params = [$recId];
             if ($fieldId) {

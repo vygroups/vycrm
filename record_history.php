@@ -22,7 +22,9 @@ $histStmt = $conn->prepare("
     FROM {$prefix}module_record_history h
     LEFT JOIN users u ON u.id = h.changed_by
     LEFT JOIN {$prefix}module_fields f ON f.id = h.field_id
+    JOIN {$prefix}module_records r ON r.id = h.record_id
     WHERE h.record_id = ?
+      AND ABS(TIMESTAMPDIFF(SECOND, h.changed_at, r.created_at)) > 2
     ORDER BY h.changed_at DESC
 ");
 $histStmt->execute([$recordId]);
