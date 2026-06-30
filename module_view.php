@@ -239,6 +239,9 @@ if (!$hasUpdatedAt) {
                     <div style="display:flex;gap:10px;align-items:center;">
                         <span class="text-muted text-sm"><?= $total ?> record<?= $total !== 1 ? 's' : '' ?></span>
                         
+                        <button id="btnBulkDelete" class="mm-btn mm-btn-sm mm-btn-danger" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 10px; border-radius: 8px; font-weight: 600;" onclick="bulkDeleteRecords()">
+                            <i class="fa-solid fa-trash"></i> Delete Selected (<span id="selectedCount">0</span>)
+                        </button>
                         <div style="display:inline-flex; align-items:center; gap:5px;">
                             <button id="btnFiltersToggle" class="mm-btn mm-btn-sm mm-btn-outline" onclick="toggleFilterPanel()" style="display:inline-flex;align-items:center;gap:6px; <?= (($activeFilterRules || $activeFilterId) ? 'background:rgba(123,94,240,0.1); border-color:var(--primary); color:var(--primary); font-weight:700;' : '') ?>">
                                 <i class="fa-solid fa-filter"></i> Filters <span id="filtersActiveCount"><?= ($activeFilterRules && count($activeFilterRules) > 0) ? '(' . count($activeFilterRules) . ')' : '' ?></span>
@@ -356,6 +359,7 @@ if (!$hasUpdatedAt) {
                         <table class="crm-table">
                             <thead>
                                 <tr>
+                                    <th class="checkbox-col" style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllRecords" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;" onclick="toggleSelectAll(this)"></th>
                                     <th>#</th>
                                     <?php foreach($fields as $f): ?>
                                     <th data-field-id="<?= $f['id'] ?>"><?= htmlspecialchars($f['label']) ?></th>
@@ -368,10 +372,11 @@ if (!$hasUpdatedAt) {
                             </thead>
                             <tbody id="moduleRecordsTableBody">
                                 <?php if(empty($records)): ?>
-                                <tr><td colspan="<?= count($fields) + 3 ?>" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=<?= $moduleId ?>" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>
+                                <tr><td colspan="<?= count($fields) + 4 ?>" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=<?= $moduleId ?>" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>
                                 <?php else: ?>
                                 <?php foreach($records as $i => $rec): ?>
                                 <tr>
+                                    <td class="checkbox-col" style="text-align: center;"><input type="checkbox" class="record-select" value="<?= $rec['id'] ?>" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;" onchange="updateBulkDeleteButton()"></td>
                                     <td><?= $i + 1 ?></td>
                                     <?php foreach($fields as $f): ?>
                                     <td data-field-id="<?= $f['id'] ?>" <?= in_array($f['field_type'], ['date', 'datetime', 'time', 'phone']) ? 'style="white-space: nowrap;"' : '' ?>><?php
@@ -497,6 +502,102 @@ function deleteRecord(id) {
             vyToast(r.error, 'error'); 
         } 
     }).catch(e => vyToast('Error: ' + e.message, 'error'));
+}
+
+function toggleSelectAll(selectAllCheckbox) {
+    const checkboxes = document.querySelectorAll('.record-select');
+    checkboxes.forEach(cb => {
+        const row = cb.closest('tr');
+        if (row && row.style.display !== 'none') {
+            cb.checked = selectAllCheckbox.checked;
+        }
+    });
+    updateBulkDeleteButton();
+}
+
+function updateBulkDeleteButton() {
+    const checkboxes = document.querySelectorAll('.record-select:checked');
+    const selectedCount = checkboxes.length;
+    const btnBulkDelete = document.getElementById('btnBulkDelete');
+    const selectedCountSpan = document.getElementById('selectedCount');
+    
+    if (selectedCount > 0) {
+        if (btnBulkDelete) {
+            btnBulkDelete.style.display = 'inline-flex';
+        }
+        if (selectedCountSpan) {
+            selectedCountSpan.textContent = selectedCount;
+        }
+    } else {
+        if (btnBulkDelete) {
+            btnBulkDelete.style.display = 'none';
+        }
+    }
+    
+    const allCheckboxes = document.querySelectorAll('.record-select');
+    const allVisible = Array.from(allCheckboxes).filter(cb => {
+        const row = cb.closest('tr');
+        return row && row.style.display !== 'none';
+    });
+    const allChecked = allVisible.length > 0 && allVisible.every(cb => cb.checked);
+    const selectAllCheckbox = document.getElementById('selectAllRecords');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = allChecked;
+        selectAllCheckbox.indeterminate = !allChecked && allVisible.some(cb => cb.checked);
+    }
+}
+
+function bulkDeleteRecords() {
+    const checkboxes = document.querySelectorAll('.record-select:checked');
+    const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    
+    if (ids.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete the ${ids.length} selected record(s)?`)) return;
+    
+    // Show deleting loader
+    const progressModal = document.getElementById('deleteProgressModal');
+    if (progressModal) progressModal.style.display = 'flex';
+    
+    // Wait slightly to make the transition look smooth and premium
+    setTimeout(() => {
+        fetch('/api/modules.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action: 'delete_record', ids})
+        })
+        .then(r => r.json())
+        .then(r => {
+            // Hide deleting loader
+            if (progressModal) progressModal.style.display = 'none';
+            
+            if (r.success) {
+                // Show final result modal
+                const resultText = document.getElementById('deleteResultText');
+                if (resultText) {
+                    resultText.textContent = `Successfully deleted ${ids.length} selected record(s).`;
+                }
+                const resultModal = document.getElementById('deleteResultModal');
+                if (resultModal) resultModal.style.display = 'flex';
+                
+                // Reset Select All checkbox
+                const selectAllCheckbox = document.getElementById('selectAllRecords');
+                if (selectAllCheckbox) selectAllCheckbox.checked = false;
+                fetchAndRenderRecords(activeFilterRules, activeFilterId);
+            } else {
+                vyToast(r.error || 'Failed to delete records.', 'error');
+            }
+        })
+        .catch(e => {
+            if (progressModal) progressModal.style.display = 'none';
+            vyToast('Error: ' + e.message, 'error');
+        });
+    }, 800); // 800ms delay for premium feel
+}
+
+function closeDeleteResultModal() {
+    const resultModal = document.getElementById('deleteResultModal');
+    if (resultModal) resultModal.style.display = 'none';
 }
 
 
@@ -1102,20 +1203,23 @@ function renderPaginationButtons(total, limit, currentPage) {
     
     // Next Button
     addButton(currentPage + 1, 'Next', false, currentPage === totalPages);
-}
+}function renderRecordsTable(fields, records) {
+    const selectAllCheckbox = document.getElementById('selectAllRecords');
+    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+    updateBulkDeleteButton();
 
-function renderRecordsTable(fields, records) {
     const tbody = document.getElementById('moduleRecordsTableBody');
     if (!tbody) return;
     
     if (!records || records.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${fields.length + 3}" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=${MODULE_ID}" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${fields.length + 4}" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=${MODULE_ID}" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>`;
         return;
     }
     
     let html = '';
     records.forEach((rec, i) => {
         html += `<tr>`;
+        html += `<td class="checkbox-col" style="text-align: center;"><input type="checkbox" class="record-select" value="${rec.id}" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;" onchange="updateBulkDeleteButton()"></td>`;
         html += `<td>${i + 1}</td>`;
         
         fields.forEach(f => {
@@ -1132,7 +1236,7 @@ function renderRecordsTable(fields, records) {
         
         let editBtn = rec.can_edit ? `<a href="module_record.php?module=${MODULE_ID}&record=${rec.id}" class="mm-icon-btn" title="Edit"><i class="fa-solid fa-pencil"></i></a>` : '';
         let deleteBtn = rec.can_delete ? `<button class="mm-icon-btn mm-icon-danger" onclick="deleteRecord(${rec.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>` : '';
-
+ 
         html += `
             <td class="sticky-actions-td">
                 <div style="display:flex;gap:4px;">
@@ -1300,7 +1404,8 @@ function applyColumnOrder(orderList) {
         const headerCell = cells.find(c => c.tagName === 'TH' && c.classList.contains('sticky-actions-th'));
         const actionCell = cells.find(c => c.tagName === 'TD' && c.classList.contains('sticky-actions-td'));
         
-        const firstCell = cells[0]; // the '#' column
+        const checkboxCell = cells.find(c => c.classList.contains('checkbox-col'));
+        const indexCell = cells.find(c => !c.dataset.fieldId && !c.dataset.column && !c.classList.contains('sticky-actions-th') && !c.classList.contains('sticky-actions-td') && !c.classList.contains('checkbox-col'));
         const sortableCells = cells.filter(c => c.dataset.fieldId || c.dataset.column);
         
         sortableCells.sort((a, b) => {
@@ -1316,7 +1421,8 @@ function applyColumnOrder(orderList) {
         });
         
         // Re-append nodes in the sorted order (moves existing nodes safely)
-        if (firstCell) row.appendChild(firstCell);
+        if (checkboxCell) row.appendChild(checkboxCell);
+        if (indexCell) row.appendChild(indexCell);
         sortableCells.forEach(cell => {
             row.appendChild(cell);
         });
@@ -1662,6 +1768,27 @@ async function handleImportSubmit(event) {
                 </div>
             </form>
         </div>
+    </div>
+</div>
+<!-- Bulk Delete Progress Modal -->
+<div class="mm-modal-overlay" id="deleteProgressModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:10000; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+    <div class="crm-card" style="width:100%; max-width:400px; padding:30px; border-radius:20px; background:var(--surface); box-shadow:var(--shadow-lg); text-align:center;">
+        <div style="margin-bottom: 20px;">
+            <i class="fa-solid fa-circle-notch fa-spin" style="font-size:48px; color:var(--primary);"></i>
+        </div>
+        <h3 style="margin:0 0 8px; font-size:18px; font-weight:700; color:var(--text-main);">Deleting Records</h3>
+        <p style="margin:0; font-size:14px; color:var(--text-muted); line-height:1.5;">Please wait, deleting the selected records...</p>
+    </div>
+</div>
+<!-- Bulk Delete Result Modal -->
+<div class="mm-modal-overlay" id="deleteResultModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:10000; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+    <div class="crm-card" style="width:100%; max-width:420px; padding:30px; border-radius:20px; background:var(--surface); box-shadow:var(--shadow-lg); text-align:center;">
+        <div style="margin-bottom: 20px;">
+            <i class="fa-solid fa-circle-check" style="font-size:54px; color:#10b981;"></i>
+        </div>
+        <h3 style="margin:0 0 10px; font-size:20px; font-weight:700; color:var(--text-main);">Delete Complete</h3>
+        <p style="margin:0 0 24px; font-size:14px; color:var(--text-muted); line-height:1.5;" id="deleteResultText">Successfully deleted the selected records.</p>
+        <button class="mm-btn" style="background:var(--primary); color:#fff; border:none; border-radius:10px; padding:10px 24px; font-size:14px; font-weight:600; cursor:pointer; width:100%;" onclick="closeDeleteResultModal()">Dismiss</button>
     </div>
 </div>
 </body>

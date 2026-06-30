@@ -311,6 +311,47 @@ try {
             </div>
         </header>
         <div class="content-scroll">
+            <?php if (!empty($widgets)): ?>
+            <!-- Dynamic Insights Section -->
+            <div id="dynamicInsightsSection" style="margin-bottom: 15px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
+                    <?php foreach ($widgets as $w): 
+                        $wRules = json_decode($w['rules'], true);
+                        $wCount = 0;
+                        try {
+                            $res = dm_fetch_records($conn, $prefix, (int)$w['module_id'], null, 0, 0, $wRules);
+                            $wCount = $res['total'];
+                        } catch (Exception $ex) {}
+                        
+                        $cardColor = htmlspecialchars($w['color'] ?: 'var(--primary)');
+                        $cardIcon = htmlspecialchars($w['icon'] ?: 'fa-solid fa-bell');
+                        
+                        // Link to module view with filter rules
+                        $viewUrl = 'module_view.php?module=' . (int)$w['module_id'] . '&filter_rules=' . urlencode($w['rules']);
+                    ?>
+                        <a href="<?= $viewUrl ?>" class="crm-card" style="display: block; text-decoration: none; padding: 20px; border-left: 5px solid <?= $cardColor ?>; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.transform='none'; this.style.boxShadow='var(--shadow-sm)';">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                <div style="flex: 1; min-width: 0; padding-right: 15px;">
+                                    <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="<?= htmlspecialchars($w['title']) ?>">
+                                        <?= htmlspecialchars($w['title']) ?>
+                                    </div>
+                                    <div style="font-size: 28px; font-weight: 800; color: var(--text-main); line-height: 1;">
+                                        <?= number_format($wCount) ?>
+                                    </div>
+                                </div>
+                                <div style="width: 42px; height: 42px; border-radius: 12px; background: <?= $cardColor ?>12; color: <?= $cardColor ?>; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">
+                                    <i class="<?= $cardIcon ?>"></i>
+                                </div>
+                            </div>
+                            <div style="font-size: 12px; color: var(--primary); font-weight: 700; margin-top: 15px; display: flex; align-items: center; gap: 4px;">
+                                View Records <i class="fa-solid fa-arrow-right-long" style="font-size:10px;"></i>
+                            </div>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <h3 class="pipeline-header">DASHBOARD MODULES</h3>
             <div class="module-selector" id="moduleSelector">
                 <?php foreach ($dashboardModules as $moduleKey => $module): ?>
@@ -367,123 +408,7 @@ try {
                     <?php endif; ?>
                 <?php endforeach; ?>
             </div>
-            
-            <?php if (!empty($widgets)): ?>
-            <!-- Dynamic Insights Section -->
-            <div id="dynamicInsightsSection" style="margin-bottom: 35px;">
-                <h3 class="pipeline-header" style="margin-top:0; display:flex; align-items:center; gap:8px;">
-                    <i class="fa-solid fa-gauge-high" style="color:var(--primary);"></i> Dynamic Insights
-                </h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
-                    <?php foreach ($widgets as $w): 
-                        $wRules = json_decode($w['rules'], true);
-                        $wCount = 0;
-                        try {
-                            $res = dm_fetch_records($conn, $prefix, (int)$w['module_id'], null, 0, 0, $wRules);
-                            $wCount = $res['total'];
-                        } catch (Exception $ex) {}
-                        
-                        $cardColor = htmlspecialchars($w['color'] ?: 'var(--primary)');
-                        $cardIcon = htmlspecialchars($w['icon'] ?: 'fa-solid fa-bell');
-                        
-                        // Link to module view with filter rules
-                        $viewUrl = 'module_view.php?module=' . (int)$w['module_id'] . '&filter_rules=' . urlencode($w['rules']);
-                    ?>
-                        <a href="<?= $viewUrl ?>" class="crm-card" style="display: block; text-decoration: none; padding: 20px; border-left: 5px solid <?= $cardColor ?>; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.transform='none'; this.style.boxShadow='var(--shadow-sm)';">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                <div style="flex: 1; min-width: 0; padding-right: 15px;">
-                                    <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="<?= htmlspecialchars($w['title']) ?>">
-                                        <?= htmlspecialchars($w['title']) ?>
-                                    </div>
-                                    <div style="font-size: 28px; font-weight: 800; color: var(--text-main); line-height: 1;">
-                                        <?= number_format($wCount) ?>
-                                    </div>
-                                </div>
-                                <div style="width: 42px; height: 42px; border-radius: 12px; background: <?= $cardColor ?>12; color: <?= $cardColor ?>; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">
-                                    <i class="<?= $cardIcon ?>"></i>
-                                </div>
-                            </div>
-                            <div style="font-size: 12px; color: var(--primary); font-weight: 700; margin-top: 15px; display: flex; align-items: center; gap: 4px;">
-                                View Records <i class="fa-solid fa-arrow-right-long" style="font-size:10px;"></i>
-                            </div>
-                        </a>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-            <?php endif; ?>
 
-            <h3 class="pipeline-header">CONFIGURABLE MODULES</h3>
-            <div class="module-shortcuts">
-                <?php foreach ($dashboardModules as $moduleKey => $module): ?>
-                <div class="module-shortcut module-shortcut-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                    <i class="<?= htmlspecialchars($module['icon']) ?>"></i>
-                    <h4><?= htmlspecialchars($module['title']) ?></h4>
-                    <p><?= htmlspecialchars($module['description']) ?></p>
-                    <div class="module-links">
-                        <?php foreach ($module['links'] as $link): ?>
-                        <a href="<?= htmlspecialchars($link['href']) ?>"><?= htmlspecialchars($link['label']) ?></a>
-                        <?php endforeach; ?>
-                    </div>
-                    <a href="<?= htmlspecialchars($module['links'][0]['href']) ?>">Open <?= htmlspecialchars($module['title']) ?> <i class="fa-solid fa-arrow-right"></i></a>
-                </div>
-                <?php endforeach; ?>
-            </div>
-            <div class="table-panel" id="dashboardInfoPanel">
-                <div class="table-header">
-                    <div class="table-title" id="dashboardInfoTitle">MODULE QUICK GUIDE</div>
-                    <div class="table-actions">
-                        <span class="filter-btn active" id="dashboardInfoTag">Billing & Transactions</span>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="crm-table">
-                        <thead><tr><th>Area</th><th>Purpose</th><th>Primary Action</th></tr></thead>
-                        <tbody id="dashboardGuideBody">
-                            <?php if ($billingEnabled): ?>
-                            <tr data-module="billing" <?= 'billing' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                                <td class="text-bold">Customers</td>
-                                <td>Manage customer master data used during billing.</td>
-                                <td><a href="customers.php">Open Customers</a></td>
-                            </tr>
-                            <tr data-module="billing" <?= 'billing' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                                <td class="text-bold">Invoices</td>
-                                <td>Create and manage sale invoices and totals.</td>
-                                <td><a href="invoices.php">Open Invoices</a></td>
-                            </tr>
-                            <tr data-module="billing" <?= 'billing' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                                <td class="text-bold">Products / Service</td>
-                                <td>Keep sellable items and pricing ready for transactions.</td>
-                                <td><a href="products.php">Open Products</a></td>
-                            </tr>
-                            <?php endif; ?>
-                            <?php if ($attendanceEnabled): ?>
-                            <tr data-module="hr_operations" <?= 'hr_operations' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                                <td class="text-bold">Attendance</td>
-                                <td>Track punch-in, punch-out, and employee work sessions.</td>
-                                <td><a href="attendance.php">Open Attendance</a></td>
-                            </tr>
-                            <tr data-module="hr_operations" <?= 'hr_operations' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                                <td class="text-bold">Attendance Report</td>
-                                <td>Review attendance summaries and date-based reporting.</td>
-                                <td><a href="attendance_report.php">Open Report</a></td>
-                            </tr>
-                            <tr data-module="hr_operations" <?= 'hr_operations' !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                                <td class="text-bold">Approvals</td>
-                                <td>Approve leave and permission requests from employees.</td>
-                                <td><a href="manage_requests.php">Open Approvals</a></td>
-                            </tr>
-                            <?php endif; ?>
-                            <?php foreach ($dynModules as $dm): ?>
-                            <tr data-module="dyn_<?= htmlspecialchars($dm['slug']) ?>" <?= 'dyn_' . $dm['slug'] !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                                <td class="text-bold">Manage <?= htmlspecialchars($dm['name']) ?></td>
-                                <td>Access data and automation for <?= htmlspecialchars($dm['name']) ?>.</td>
-                                <td><a href="module_view.php?module=<?= urlencode($dm['slug']) ?>">Open Module</a></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
         </div>
     </main>
 </div>

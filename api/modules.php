@@ -524,19 +524,35 @@ try {
             }
 
         case 'delete_record':
-            $id = (int)($input['id'] ?? 0);
-            if (!$id) throw new RuntimeException('Record ID required');
-            $recStmt = $conn->prepare("SELECT module_id, created_by FROM {$prefix}module_records WHERE id = ?");
-            $recStmt->execute([$id]);
-            $recInfo = $recStmt->fetch(PDO::FETCH_ASSOC);
-            if ($recInfo) {
-                $moduleInfo = dm_fetch_module_full($conn, $prefix, $recInfo['module_id']);
-                if (!dm_can_delete_record($conn, $prefix, $moduleInfo, $recInfo['created_by'], $userId, $userRole, $isAdmin)) {
-                    throw new RuntimeException('You do not have permission to delete this record.');
-                }
+            $ids = isset($input['ids']) ? (array)$input['ids'] : [];
+            if (empty($ids) && isset($input['id'])) {
+                $ids = [(int)$input['id']];
             }
-            $conn->prepare("DELETE FROM {$prefix}module_records WHERE id = ?")->execute([$id]);
-            commerce_json_response(['success' => true]);
+            if (empty($ids)) throw new RuntimeException('Record ID(s) required');
+
+            $conn->beginTransaction();
+            try {
+                foreach ($ids as $id) {
+                    $id = (int)$id;
+                    $recStmt = $conn->prepare("SELECT module_id, created_by FROM {$prefix}module_records WHERE id = ?");
+                    $recStmt->execute([$id]);
+                    $recInfo = $recStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($recInfo) {
+                        $moduleInfo = dm_fetch_module_full($conn, $prefix, $recInfo['module_id']);
+                        if (!dm_can_delete_record($conn, $prefix, $moduleInfo, $recInfo['created_by'], $userId, $userRole, $isAdmin)) {
+                            throw new RuntimeException("You do not have permission to delete record #$id.");
+                        }
+                    }
+                    $conn->prepare("DELETE FROM {$prefix}module_records WHERE id = ?")->execute([$id]);
+                }
+                $conn->commit();
+                commerce_json_response(['success' => true]);
+            } catch (Throwable $e) {
+                if ($conn->inTransaction()) {
+                    $conn->rollBack();
+                }
+                throw $e;
+            }
 
         case 'duplicate_record':
             $id = (int)($input['id'] ?? 0);
