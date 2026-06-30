@@ -1,5 +1,9 @@
 <?php
 require_once 'auth_check.php';
+if (empty($_SESSION['is_admin'])) {
+    header('Location: dashboard.php');
+    exit;
+}
 require_once 'includes/commerce.php';
 require_once 'includes/brand.php';
 require_once 'includes/dynamic_modules.php';
@@ -912,6 +916,7 @@ try {
                     <label><input type="checkbox" id="fieldUnique"> Unique</label>
                     <label><input type="checkbox" id="fieldSearchable"> Searchable</label>
                     <label><input type="checkbox" id="fieldListVisible" checked> Show in List</label>
+                    <label><input type="checkbox" id="fieldQuickCreate"> Quick Create</label>
                     <label><input type="checkbox" id="fieldIsTitle"> Title (Record Name)</label>
                 </div>
                 <!-- Options for dropdown/multi_picker/radio_group -->
@@ -1169,6 +1174,28 @@ try {
                     </div>
                     <button type="button" id="permDeleteRolesDoneBtn" style="display:none; margin-top:6px; padding:6px 16px; font-size:12px; font-weight:600; background:var(--primary); color:#fff; border:none; border-radius:6px; cursor:pointer;" onclick="document.getElementById('permDeleteRolesContainer').style.display='none'; this.style.display='none';">Done</button>
                 </div>
+
+                <div class="form-group" style="margin-bottom:20px; border-top:1px solid var(--border); padding-top:16px;">
+                    <label class="form-label" style="font-weight:600; color:var(--text-main);">Feature Controls</label>
+                    <p style="font-size:12px; color:var(--text-muted); margin:0 0 10px 0;">Enable or disable features for non-admin users:</p>
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-main); user-select:none; margin:0;">
+                            <input type="checkbox" id="permEnableImport" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;"> Enable Import
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-main); user-select:none; margin:0;">
+                            <input type="checkbox" id="permEnableExport" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;"> Enable Export
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-main); user-select:none; margin:0;">
+                            <input type="checkbox" id="permEnableMultiDelete" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;"> Enable Multi Delete
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-main); user-select:none; margin:0;">
+                            <input type="checkbox" id="permEnableCreate" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;"> Enable Create
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-main); user-select:none; margin:0;">
+                            <input type="checkbox" id="permEnableQuickCreate" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;"> Enable Quick Create
+                        </label>
+                    </div>
+                </div>
             </div>
             <div class="mm-modal-footer" style="padding:20px; border-top:1px solid var(--border);">
                 <button class="mm-btn" onclick="closeModal('permissionsModal')">Cancel</button>
@@ -1195,7 +1222,12 @@ try {
             edit_rule: <?= json_encode($editModule['edit_rule'] ?? 'all') ?>,
             edit_roles: <?= json_encode(explode(',', $editModule['edit_roles'] ?? '')) ?>,
             delete_rule: <?= json_encode($editModule['delete_rule'] ?? 'all') ?>,
-            delete_roles: <?= json_encode(explode(',', $editModule['delete_roles'] ?? '')) ?>
+            delete_roles: <?= json_encode(explode(',', $editModule['delete_roles'] ?? '')) ?>,
+            enable_import: <?= (int)($editModule['enable_import'] ?? 1) ?>,
+            enable_export: <?= (int)($editModule['enable_export'] ?? 1) ?>,
+            enable_multidelete: <?= (int)($editModule['enable_multidelete'] ?? 1) ?>,
+            enable_create: <?= (int)($editModule['enable_create'] ?? 1) ?>,
+            enable_quickcreate: <?= (int)($editModule['enable_quickcreate'] ?? 1) ?>
         };
         <?php endif; ?>
 
@@ -1450,6 +1482,7 @@ try {
             document.getElementById('fieldUnique').checked = editData ? !!editData.is_unique : false;
             document.getElementById('fieldSearchable').checked = editData ? !!editData.is_searchable : false;
             document.getElementById('fieldListVisible').checked = editData ? !!editData.is_list_visible : true;
+            document.getElementById('fieldQuickCreate').checked = editData ? !!editData.is_quick_create : false;
             
             let configObj = {};
             if (editData && editData.config) {
@@ -1489,6 +1522,7 @@ try {
                 is_unique: +document.getElementById('fieldUnique').checked,
                 is_searchable: +document.getElementById('fieldSearchable').checked,
                 is_list_visible: +document.getElementById('fieldListVisible').checked,
+                is_quick_create: +document.getElementById('fieldQuickCreate').checked,
             };
             if (!data.label) return alert('Label is required');
             // Options
@@ -2482,6 +2516,12 @@ try {
             document.getElementById('permEditRule').value = MODULE_PERMS.edit_rule;
             document.getElementById('permDeleteRule').value = MODULE_PERMS.delete_rule;
             
+            document.getElementById('permEnableImport').checked = parseInt(MODULE_PERMS.enable_import) !== 0;
+            document.getElementById('permEnableExport').checked = parseInt(MODULE_PERMS.enable_export) !== 0;
+            document.getElementById('permEnableMultiDelete').checked = parseInt(MODULE_PERMS.enable_multidelete) !== 0;
+            document.getElementById('permEnableCreate').checked = parseInt(MODULE_PERMS.enable_create ?? 1) !== 0;
+            document.getElementById('permEnableQuickCreate').checked = parseInt(MODULE_PERMS.enable_quickcreate ?? 1) !== 0;
+            
             buildRolesCheckboxes('permViewRolesContainer', MODULE_PERMS.visibility_roles || []);
             buildRolesCheckboxes('permEditRolesContainer', MODULE_PERMS.edit_roles);
             buildRolesCheckboxes('permDeleteRolesContainer', MODULE_PERMS.delete_roles);
@@ -2531,6 +2571,12 @@ try {
                 document.querySelectorAll('#permDeleteRolesContainer input:checked').forEach(cb => delete_roles.push(cb.value));
             }
             
+            const enable_import = document.getElementById('permEnableImport').checked ? 1 : 0;
+            const enable_export = document.getElementById('permEnableExport').checked ? 1 : 0;
+            const enable_multidelete = document.getElementById('permEnableMultiDelete').checked ? 1 : 0;
+            const enable_create = document.getElementById('permEnableCreate').checked ? 1 : 0;
+            const enable_quickcreate = document.getElementById('permEnableQuickCreate').checked ? 1 : 0;
+            
             api('update', {
                 id: MODULE_ID,
                 visibility_rule: visibility,
@@ -2538,7 +2584,12 @@ try {
                 edit_rule: edit_rule,
                 edit_roles: edit_roles.join(','),
                 delete_rule: delete_rule,
-                delete_roles: delete_roles.join(',')
+                delete_roles: delete_roles.join(','),
+                enable_import: enable_import,
+                enable_export: enable_export,
+                enable_multidelete: enable_multidelete,
+                enable_create: enable_create,
+                enable_quickcreate: enable_quickcreate
             }).then(r => {
                 if (r.success) {
                     MODULE_PERMS.visibility = visibility;
@@ -2547,6 +2598,11 @@ try {
                     MODULE_PERMS.edit_roles = edit_roles;
                     MODULE_PERMS.delete_rule = delete_rule;
                     MODULE_PERMS.delete_roles = delete_roles;
+                    MODULE_PERMS.enable_import = enable_import;
+                    MODULE_PERMS.enable_export = enable_export;
+                    MODULE_PERMS.enable_multidelete = enable_multidelete;
+                    MODULE_PERMS.enable_create = enable_create;
+                    MODULE_PERMS.enable_quickcreate = enable_quickcreate;
                     vyToast('Permissions updated successfully.', 'success');
                     closeModal('permissionsModal');
                 } else {

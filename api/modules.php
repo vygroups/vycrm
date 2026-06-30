@@ -112,7 +112,7 @@ try {
             if (!$id) throw new RuntimeException('Module ID required');
             $sets = [];
             $params = [];
-            foreach (['name', 'icon', 'description', 'status', 'visibility_rule', 'visibility_roles', 'edit_rule', 'edit_roles', 'delete_rule', 'delete_roles'] as $col) {
+            foreach (['name', 'icon', 'description', 'status', 'visibility_rule', 'visibility_roles', 'edit_rule', 'edit_roles', 'delete_rule', 'delete_roles', 'enable_import', 'enable_export', 'enable_multidelete', 'enable_create', 'enable_quickcreate'] as $col) {
                 if (isset($input[$col])) {
                     $sets[] = "$col = ?";
                     $params[] = $input[$col];
@@ -205,8 +205,8 @@ try {
             $stmt = $conn->prepare("
                 INSERT INTO {$prefix}module_fields 
                 (block_id, module_id, field_key, label, field_type, placeholder, default_value, 
-                 is_required, is_unique, is_searchable, is_list_visible, sort_order, config) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 is_required, is_unique, is_searchable, is_list_visible, is_quick_create, sort_order, config) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $blockId, $moduleId, $fieldKey, $label, $fieldType,
@@ -216,6 +216,7 @@ try {
                 (int)($input['is_unique'] ?? 0),
                 (int)($input['is_searchable'] ?? 0),
                 (int)($input['is_list_visible'] ?? 1),
+                (int)($input['is_quick_create'] ?? 0),
                 $maxSort + 1,
                 $config,
             ]);
@@ -242,7 +243,7 @@ try {
                     $params[] = $input[$col];
                 }
             }
-            foreach (['is_required', 'is_unique', 'is_searchable', 'is_list_visible', 'sort_order'] as $col) {
+            foreach (['is_required', 'is_unique', 'is_searchable', 'is_list_visible', 'is_quick_create', 'sort_order'] as $col) {
                 if (isset($input[$col])) {
                     $sets[] = "$col = ?";
                     $params[] = (int)$input[$col];
@@ -327,6 +328,39 @@ try {
             $stmt = $conn->prepare("INSERT INTO {$prefix}module_field_options (field_id, label, value, sort_order) VALUES (?, ?, ?, ?)");
             $stmt->execute([$fieldId, $label, $value, $maxSort + 1]);
             commerce_json_response(['success' => true, 'id' => (int)$conn->lastInsertId(), 'label' => $label, 'value' => $value]);
+
+        case 'get_quick_create_fields':
+            $mid = (int)($input['module_id'] ?? $_GET['module_id'] ?? 0);
+            if (!$mid) throw new RuntimeException('Module ID required');
+            
+            // Check if quickcreate is enabled for this module
+            $mStmt = $conn->prepare("SELECT enable_quickcreate FROM {$prefix}modules WHERE id = ?");
+            $mStmt->execute([$mid]);
+            $eqc = $mStmt->fetchColumn();
+            if ($eqc !== false && (int)$eqc === 0) {
+                commerce_json_response(['success' => true, 'fields' => []]);
+            }
+            
+            $stmt = $conn->prepare("SELECT * FROM {$prefix}module_fields WHERE module_id = ? AND is_quick_create = 1 ORDER BY sort_order ASC");
+            $stmt->execute([$mid]);
+            $qcFields = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Hydrate options
+            foreach ($qcFields as &$f) {
+                $fid = (int)$f['id'];
+                $f['options'] = [];
+                if (in_array($f['field_type'], ['dropdown', 'multi_picker', 'radio_group'])) {
+                    $oStmt = $conn->prepare("SELECT label, value FROM {$prefix}module_field_options WHERE field_id = ? ORDER BY sort_order ASC");
+                    $oStmt->execute([$fid]);
+                    $f['options'] = $oStmt->fetchAll(PDO::FETCH_ASSOC);
+                }
+                if ($f['config']) {
+                    $f['config'] = json_decode($f['config'], true);
+                }
+            }
+            unset($f);
+            
+            commerce_json_response(['success' => true, 'fields' => $qcFields]);
 
         /* ════════════════════ RECORD CRUD ════════════════════ */
 

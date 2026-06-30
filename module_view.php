@@ -21,6 +21,38 @@ if (!$moduleId) { header('Location: module_manager.php'); exit; }
 $module = dm_fetch_module_full($conn, $prefix, $moduleId);
 if (!$module) { header('Location: module_manager.php'); exit; }
 
+$canImport = !isset($module['enable_import']) || (int)$module['enable_import'] !== 0;
+$canExport = !isset($module['enable_export']) || (int)$module['enable_export'] !== 0;
+$canMultiDelete = !isset($module['enable_multidelete']) || (int)$module['enable_multidelete'] !== 0;
+$canCreate = !isset($module['enable_create']) || (int)$module['enable_create'] !== 0;
+$canQuickCreate = !isset($module['enable_quickcreate']) || (int)$module['enable_quickcreate'] !== 0;
+
+$quickCreateFields = [];
+if ($canQuickCreate && !empty($module['blocks'])) {
+    foreach ($module['blocks'] as $b) {
+        foreach ($b['fields'] as $f) {
+            if (!empty($f['is_quick_create'])) {
+                $quickCreateFields[] = $f;
+            }
+        }
+    }
+}
+
+// Fetch users for assigned_to fields in Quick Create modal if needed
+$usersList = [];
+if (!empty($quickCreateFields)) {
+    try {
+        $usersQuery = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users ORDER BY username ASC");
+        while ($u = $usersQuery->fetch(PDO::FETCH_ASSOC)) {
+            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+            $usersList[] = [
+                'id' => (int)$u['id'],
+                'name' => $fullName ?: $u['username']
+            ];
+        }
+    } catch (Exception $e) {}
+}
+
 $search = $_GET['search'] ?? '';
 
 // Saved Filters logic
@@ -133,6 +165,21 @@ if (!$hasUpdatedAt) {
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
     <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
+    <?php if (!empty($quickCreateFields)): ?>
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.default.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <style>
+        .ts-wrapper { width: 100%; }
+        .ts-control { border-radius: 12px; border: 1px solid var(--border); padding: 8px 16px; font-size: 14px; min-height: 44px; background: var(--surface); display: flex; align-items: center; box-shadow: none !important; }
+        .ts-control.focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(123,94,240,0.2) !important; }
+        .ts-dropdown { border-radius: 12px; border-color: var(--border); box-shadow: var(--shadow-lg); font-size: 14px; z-index: 10000; overflow: hidden; margin-top: 4px; }
+        .ts-dropdown .active { background-color: rgba(123,94,240,0.1); color: var(--primary); }
+        .dm-radio-group { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 5px 0; }
+        .dm-radio-group label { margin-bottom: 0 !important; white-space: nowrap; }
+    </style>
+    <?php endif; ?>
     <style>
         .col-item {
             transition: background 0.2s, border 0.2s;
@@ -222,10 +269,17 @@ if (!$hasUpdatedAt) {
     <main class="main-content">
         <header class="topbar">
             <div class="breadcrumb">Modules / <span class="current"><?= htmlspecialchars($module['name']) ?></span></div>
-            <div class="topbar-right">
-                <a href="module_record.php?module=<?= $moduleId ?>" class="btn-primary" style="width:auto;padding:12px 24px;text-decoration:none;display:inline-flex;align-items:center;gap:8px;">
+            <div class="topbar-right" style="display:flex; gap:10px; align-items:center;">
+                <?php if ($canQuickCreate && !empty($quickCreateFields)): ?>
+                <button class="mm-btn mm-btn-outline" onclick="openQuickCreateModal()" style="display:inline-flex; align-items:center; gap:8px; padding:12px 20px; font-weight:600; height: 42px; border-radius: 12px; box-sizing: border-box;">
+                    <i class="fa-solid fa-bolt" style="color:var(--primary);"></i> Quick Create
+                </button>
+                <?php endif; ?>
+                <?php if ($canCreate): ?>
+                <a href="module_record.php?module=<?= $moduleId ?>" class="btn-primary" style="width:auto;padding:12px 24px;text-decoration:none;display:inline-flex;align-items:center;gap:8px;height:42px;border-radius:12px;box-sizing:border-box;">
                     <i class="fa-solid fa-plus"></i> New Record
                 </a>
+                <?php endif; ?>
             </div>
         </header>
         <div class="content-scroll">
@@ -277,11 +331,14 @@ if (!$hasUpdatedAt) {
                         </div>
 
                         <!-- Import Button -->
+                        <?php if ($canImport): ?>
                         <button class="mm-btn mm-btn-sm mm-btn-outline" onclick="openImportModal()" style="display:inline-flex;align-items:center;gap:6px;">
                             <i class="fa-solid fa-file-import"></i> Import
                         </button>
+                        <?php endif; ?>
 
                         <!-- Export Dropdown -->
+                        <?php if ($canExport): ?>
                         <div style="position:relative; display:inline-block;">
                             <button class="mm-btn mm-btn-sm mm-btn-outline" onclick="toggleExportDropdown(event)" style="display:inline-flex;align-items:center;gap:6px;">
                                 <i class="fa-solid fa-file-export"></i> Export
@@ -295,6 +352,7 @@ if (!$hasUpdatedAt) {
                                 </button>
                             </div>
                         </div>
+                        <?php endif; ?>
 
                         <?php if (!empty($_SESSION['is_admin'])): ?>
                         <a href="module_manager.php?edit=<?= $moduleId ?>" class="mm-btn mm-btn-sm mm-btn-outline"><i class="fa-solid fa-cog"></i> Configure</a>
@@ -359,7 +417,9 @@ if (!$hasUpdatedAt) {
                         <table class="crm-table">
                             <thead>
                                 <tr>
+                                    <?php if ($canMultiDelete): ?>
                                     <th class="checkbox-col" style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllRecords" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;" onclick="toggleSelectAll(this)"></th>
+                                    <?php endif; ?>
                                     <th>#</th>
                                     <?php foreach($fields as $f): ?>
                                     <th data-field-id="<?= $f['id'] ?>"><?= htmlspecialchars($f['label']) ?></th>
@@ -372,11 +432,13 @@ if (!$hasUpdatedAt) {
                             </thead>
                             <tbody id="moduleRecordsTableBody">
                                 <?php if(empty($records)): ?>
-                                <tr><td colspan="<?= count($fields) + 4 ?>" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=<?= $moduleId ?>" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>
+                                <tr><td colspan="<?= count($fields) + ($canMultiDelete ? 4 : 3) ?>" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=<?= $moduleId ?>" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>
                                 <?php else: ?>
                                 <?php foreach($records as $i => $rec): ?>
                                 <tr>
+                                    <?php if ($canMultiDelete): ?>
                                     <td class="checkbox-col" style="text-align: center;"><input type="checkbox" class="record-select" value="<?= $rec['id'] ?>" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;" onchange="updateBulkDeleteButton()"></td>
+                                    <?php endif; ?>
                                     <td><?= $i + 1 ?></td>
                                     <?php foreach($fields as $f): ?>
                                     <td data-field-id="<?= $f['id'] ?>" <?= in_array($f['field_type'], ['date', 'datetime', 'time', 'phone']) ? 'style="white-space: nowrap;"' : '' ?>><?php
@@ -601,6 +663,633 @@ function closeDeleteResultModal() {
 }
 
 
+// Quick Create Modal JS Logic
+let qcTomSelectInstances = {};
+let qcPickersInitialized = false;
+
+function openQuickCreateModal() {
+    const modal = document.getElementById('quickCreateModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    
+    if (!qcPickersInitialized) {
+        // Initialize Flatpickr for Date & Time fields
+        const dateFormat = "<?= $_SESSION['date_format'] ?? 'd M, Y' ?>";
+        const is12Hour = "<?= $_SESSION['time_format'] ?? '12h' ?>" === '12h';
+        const timeFormat = is12Hour ? 'h:i K' : 'H:i';
+
+        if (typeof flatpickr !== 'undefined') {
+            flatpickr('.qc-date-picker', {
+                altInput: true,
+                altFormat: dateFormat,
+                dateFormat: "Y-m-d",
+                allowInput: true
+            });
+
+            flatpickr('.qc-datetime-picker', {
+                enableTime: true,
+                altInput: true,
+                altFormat: dateFormat + " " + timeFormat,
+                dateFormat: "Y-m-d H:i",
+                time_24hr: !is12Hour,
+                allowInput: true
+            });
+
+            flatpickr('.qc-time-picker', {
+                enableTime: true,
+                noCalendar: true,
+                altInput: true,
+                altFormat: timeFormat,
+                dateFormat: "H:i",
+                time_24hr: !is12Hour,
+                allowInput: true
+            });
+        }
+
+        // Initialize TomSelect for dropdowns and multi_picker
+        if (typeof TomSelect !== 'undefined') {
+            document.querySelectorAll('#quickCreateModal .qc-tom-select').forEach(el => {
+                let isMulti = el.hasAttribute('multiple');
+                let fieldId = el.dataset.fieldId;
+                let isDropdown = el.classList.contains('qc-dropdown');
+                
+                let tsOptions = {
+                    dropdownParent: 'body',
+                    plugins: isMulti ? ['remove_button'] : [],
+                    sortField: { field: 'text', direction: 'asc' }
+                };
+
+                if (isDropdown && !isMulti) {
+                    tsOptions.create = function(input, callback) {
+                        fetch('/api/modules.php', {
+                            method: 'POST', headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({action: 'add_dropdown_option', field_id: fieldId, label: input})
+                        }).then(r => r.json()).then(r => {
+                            if (r.success) {
+                                callback({value: r.value, text: r.label});
+                            } else {
+                                vyToast(r.error, 'error');
+                                callback();
+                            }
+                        }).catch(() => callback());
+                    };
+                } else {
+                    tsOptions.create = false;
+                }
+
+                qcTomSelectInstances[fieldId] = new TomSelect(el, tsOptions);
+            });
+        }
+        
+        qcPickersInitialized = true;
+    }
+}
+
+function closeQuickCreateModal() {
+    const modal = document.getElementById('quickCreateModal');
+    if (modal) modal.style.display = 'none';
+    
+    // Reset Form
+    const form = document.getElementById('quickCreateForm');
+    if (form) form.reset();
+    
+    // Clear tom select values
+    for (let fid in qcTomSelectInstances) {
+        if (qcTomSelectInstances[fid]) {
+            qcTomSelectInstances[fid].clear();
+        }
+    }
+    
+    // Clear API pickers
+    document.querySelectorAll('#quickCreateModal .qc-api-hidden').forEach(input => {
+        input.value = '';
+    });
+    document.querySelectorAll('#quickCreateModal [id^="qc-api-display-"]').forEach(span => {
+        span.textContent = 'Search & Select...';
+        span.style.color = 'var(--text-muted)';
+    });
+    document.querySelectorAll('#quickCreateModal .rp-clear-btn').forEach(btn => {
+        btn.style.display = 'none';
+    });
+}
+
+// Record Picker Modal logic (Quick Create version)
+let currentPickerFieldId = null;
+let currentPickerModuleId = null;
+let currentPickerPage = 1;
+let currentPickerQuery = '';
+let searchTimeout = null;
+
+function openRecordPickerModal(fieldId, linkedModuleId) {
+    currentPickerFieldId = fieldId;
+    currentPickerModuleId = linkedModuleId;
+    currentPickerPage = 1;
+    currentPickerQuery = '';
+    
+    // Ensure search UI is shown and quick create form is hidden initially
+    togglePickerQuickCreate(false);
+    
+    const searchInput = document.getElementById('recordPickerSearch');
+    if (searchInput) searchInput.value = '';
+    
+    const rpModal = document.getElementById('recordPickerModal');
+    if (rpModal) rpModal.style.display = 'flex';
+    
+    setTimeout(() => { if (searchInput) searchInput.focus(); }, 100);
+    loadRecordPickerData();
+    
+    // Check if linked module supports quick create
+    checkPickerQuickCreateSupport(linkedModuleId);
+}
+
+// Lookup Picker Quick Create Logic
+let currentPickerQcFields = [];
+let currentPickerQcTomSelects = {};
+
+async function checkPickerQuickCreateSupport(moduleId) {
+    const btn = document.getElementById('rpQuickCreateBtn');
+    if (!btn) return;
+    btn.style.display = 'none';
+    currentPickerQcFields = [];
+    
+    try {
+        const response = await fetch(`/api/modules.php?action=get_quick_create_fields&module_id=${moduleId}`);
+        const result = await response.json();
+        if (result.success && result.fields && result.fields.length > 0) {
+            currentPickerQcFields = result.fields;
+            btn.style.display = 'inline-flex';
+        }
+    } catch (e) {
+        console.error('Failed to load Quick Create support for lookup:', e);
+    }
+}
+
+function togglePickerQuickCreate(show) {
+    const searchWrapper = document.querySelector('#recordPickerModal .rp-search-wrapper');
+    const contentDiv = document.getElementById('recordPickerContent');
+    const paginationDiv = document.getElementById('recordPickerPagination');
+    const formContainer = document.getElementById('rpQuickCreateFormContainer');
+    const createBtn = document.getElementById('rpCreateBtn');
+    const qcBtn = document.getElementById('rpQuickCreateBtn');
+    
+    if (show) {
+        if (searchWrapper) searchWrapper.style.display = 'none';
+        if (contentDiv) contentDiv.style.display = 'none';
+        if (paginationDiv) paginationDiv.style.display = 'none';
+        if (formContainer) formContainer.style.display = 'flex';
+        if (createBtn) createBtn.style.display = 'none';
+        if (qcBtn) qcBtn.style.display = 'none';
+        
+        renderPickerQcFields();
+    } else {
+        if (searchWrapper) searchWrapper.style.display = 'block';
+        if (contentDiv) contentDiv.style.display = 'block';
+        if (paginationDiv) paginationDiv.style.display = 'flex';
+        if (formContainer) formContainer.style.display = 'none';
+        if (createBtn) createBtn.style.display = 'inline-flex';
+        if (qcBtn && currentPickerQcFields.length > 0) qcBtn.style.display = 'inline-flex';
+        
+        // Reset form
+        const form = document.getElementById('rpQuickCreateForm');
+        if (form) form.reset();
+        for (let fid in currentPickerQcTomSelects) {
+            if (currentPickerQcTomSelects[fid]) currentPickerQcTomSelects[fid].destroy();
+        }
+        currentPickerQcTomSelects = {};
+    }
+}
+
+function renderPickerQcFields() {
+    const grid = document.getElementById('rpQuickCreateFieldsGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    
+    currentPickerQcFields.forEach(field => {
+        const fid = field.id;
+        const type = field.field_type;
+        const label = field.label;
+        const val = field.default_value || '';
+        const isRequired = !!field.is_required;
+        const reqStar = isRequired ? '<span style="color:#ef4444;">*</span>' : '';
+        const fullWidth = ['textarea', 'attachment', 'name', 'address'].includes(type);
+        
+        const group = document.createElement('div');
+        group.className = 'rp-qc-field-group';
+        group.style.cssText = `display:flex; flex-direction:column; gap:4px; text-align:left; align-items:flex-start; ${fullWidth ? 'grid-column: span 2;' : ''}`;
+        group.dataset.fieldId = fid;
+        group.dataset.fieldType = type;
+        group.dataset.fieldLabel = label;
+        if (isRequired) group.dataset.required = '1';
+        
+        let inputHtml = '';
+        switch (type) {
+            case 'text': case 'email': case 'url': case 'number': case 'currency':
+                const inputType = type === 'email' ? 'email' : (type === 'url' ? 'url' : (type === 'number' || type === 'currency' ? 'number' : 'text'));
+                inputHtml = `<input type="${inputType}" class="form-control rp-qc-input" data-field-id="${fid}" placeholder="${field.placeholder || ''}" value="${val}" ${type === 'currency' ? 'step="0.01"' : ''} style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; box-sizing:border-box;">`;
+                break;
+            case 'phone':
+                inputHtml = `
+                    <div style="display:flex; gap:6px; width:100%;">
+                        <select class="form-control rp-qc-phone-prefix" data-field-id="${fid}" style="width:90px; padding:8px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; background:#fff; box-sizing:border-box;">
+                            <option value="+91" selected>IN (+91)</option>
+                            <option value="+1">US (+1)</option>
+                            <option value="+44">GB (+44)</option>
+                            <option value="+971">AE (+971)</option>
+                        </select>
+                        <input type="text" class="form-control rp-qc-phone-number" data-field-id="${fid}" placeholder="${field.placeholder || ''}" value="${val}" style="flex:1; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; box-sizing:border-box;">
+                    </div>
+                `;
+                break;
+            case 'textarea':
+                inputHtml = `<textarea class="form-control rp-qc-input" data-field-id="${fid}" rows="2" placeholder="${field.placeholder || ''}" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; box-sizing:border-box; font-family:inherit;">${val}</textarea>`;
+                break;
+            case 'checkbox':
+                inputHtml = `
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:4px; user-select:none;">
+                        <input type="checkbox" class="rp-qc-checkbox" data-field-id="${fid}" ${val ? 'checked' : ''} style="accent-color:var(--primary); width:16px; height:16px;">
+                        <span style="font-size:13px;">${field.placeholder || 'Yes'}</span>
+                    </label>
+                `;
+                break;
+            case 'dropdown':
+                let optsHtml = '<option value="">Select...</option>';
+                (field.options || []).forEach(opt => {
+                    optsHtml += `<option value="${escapeHtml(opt.value)}" ${val === opt.value ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`;
+                });
+                inputHtml = `<select class="rp-qc-tom-select rp-qc-dropdown" data-field-id="${fid}" style="width:100%;">${optsHtml}</select>`;
+                break;
+            case 'radio_group':
+                let radios = '';
+                (field.options || []).forEach(opt => {
+                    radios += `
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0;">
+                            <input type="radio" name="rp_qc_radio_${fid}" class="rp-qc-radio" data-field-id="${fid}" value="${escapeHtml(opt.value)}" ${val === opt.value ? 'checked' : ''} style="accent-color:var(--primary); width:14px; height:14px;">
+                            <span style="font-size:13px;">${escapeHtml(opt.label)}</span>
+                        </label>
+                    `;
+                });
+                inputHtml = `<div style="display:flex; gap:12px; flex-wrap:wrap; padding:4px 0;">${radios}</div>`;
+                break;
+            case 'multi_picker':
+                let mOptsHtml = '';
+                (field.options || []).forEach(opt => {
+                    mOptsHtml += `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`;
+                });
+                inputHtml = `<select multiple class="rp-qc-tom-select rp-qc-multi" data-field-id="${fid}" style="width:100%;">${mOptsHtml}</select>`;
+                break;
+            case 'date':
+                inputHtml = `<input type="text" class="form-control rp-qc-date-picker" data-field-id="${fid}" value="${val}" placeholder="Select Date" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; background:#fff; box-sizing:border-box;">`;
+                break;
+            case 'datetime':
+                inputHtml = `<input type="text" class="form-control rp-qc-datetime-picker" data-field-id="${fid}" value="${val}" placeholder="Select Date & Time" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; background:#fff; box-sizing:border-box;">`;
+                break;
+            case 'time':
+                inputHtml = `<input type="text" class="form-control rp-qc-time-picker" data-field-id="${fid}" value="${val}" placeholder="Select Time" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; background:#fff; box-sizing:border-box;">`;
+                break;
+            case 'name':
+                inputHtml = `
+                    <div style="display:flex; gap:8px; width:100%;">
+                        <input type="text" class="form-control rp-qc-name-field" data-field-id="${fid}" data-part="first" placeholder="First Name" style="flex:1; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; box-sizing:border-box;">
+                        <input type="text" class="form-control rp-qc-name-field" data-field-id="${fid}" data-part="last" placeholder="Last Name" style="flex:1; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; box-sizing:border-box;">
+                    </div>
+                `;
+                break;
+            default:
+                inputHtml = `<input type="text" class="form-control rp-qc-input" data-field-id="${fid}" value="${val}" style="width:100%; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; box-sizing:border-box;">`;
+        }
+        
+        group.innerHTML = `<label style="font-size:12px; font-weight:600; color:var(--text-main); margin-bottom: 2px;">${label} ${reqStar}</label>${inputHtml}`;
+        grid.appendChild(group);
+        
+        // Initialize pickers on-demand
+        if (type === 'date' && typeof flatpickr !== 'undefined') {
+            flatpickr(group.querySelector('.rp-qc-date-picker'), { dateFormat: "Y-m-d", allowInput: true });
+        } else if (type === 'datetime' && typeof flatpickr !== 'undefined') {
+            flatpickr(group.querySelector('.rp-qc-datetime-picker'), { enableTime: true, dateFormat: "Y-m-d H:i", allowInput: true });
+        } else if (type === 'time' && typeof flatpickr !== 'undefined') {
+            flatpickr(group.querySelector('.rp-qc-time-picker'), { enableTime: true, noCalendar: true, dateFormat: "H:i", allowInput: true });
+        }
+        
+        if ((type === 'dropdown' || type === 'multi_picker') && typeof TomSelect !== 'undefined') {
+            const selectEl = group.querySelector('.rp-qc-tom-select');
+            if (selectEl) {
+                currentPickerQcTomSelects[fid] = new TomSelect(selectEl, {
+                    dropdownParent: 'body',
+                    plugins: type === 'multi_picker' ? ['remove_button'] : [],
+                    sortField: { field: 'text', direction: 'asc' }
+                });
+            }
+        }
+    });
+}
+
+async function handlePickerQuickCreateSubmit(event) {
+    event.preventDefault();
+    
+    const values = {};
+    let hasErrors = false;
+    
+    const groups = document.querySelectorAll('#rpQuickCreateFormContainer .rp-qc-field-group');
+    groups.forEach(group => {
+        const fid = group.dataset.fieldId;
+        const type = group.dataset.fieldType;
+        const label = group.dataset.fieldLabel;
+        const isRequired = group.dataset.required === '1';
+        
+        let value = '';
+        
+        if (type === 'name') {
+            const firstEl = group.querySelector('.rp-qc-name-field[data-part="first"]');
+            const lastEl = group.querySelector('.rp-qc-name-field[data-part="last"]');
+            const first = firstEl ? firstEl.value.trim() : '';
+            const last = lastEl ? lastEl.value.trim() : '';
+            if (first || last) value = JSON.stringify({first, last});
+        } else if (type === 'phone') {
+            const prefix = group.querySelector('.rp-qc-phone-prefix').value;
+            const number = group.querySelector('.rp-qc-phone-number').value.trim();
+            if (number) value = prefix + ' ' + number;
+        } else if (type === 'checkbox') {
+            value = group.querySelector('.rp-qc-checkbox').checked ? '1' : '0';
+        } else if (type === 'radio_group') {
+            const checked = group.querySelector('.rp-qc-radio:checked');
+            value = checked ? checked.value : '';
+        } else if (type === 'multi_picker') {
+            const ts = currentPickerQcTomSelects[fid];
+            const selected = ts ? ts.getValue() : [];
+            value = JSON.stringify(Array.isArray(selected) ? selected : [selected]);
+        } else if (type === 'dropdown') {
+            const ts = currentPickerQcTomSelects[fid];
+            value = ts ? ts.getValue() : '';
+        } else {
+            const input = group.querySelector('.rp-qc-input');
+            value = input ? input.value.trim() : '';
+        }
+        
+        if (isRequired && (!value || value === '0' || value === '[]' || value === '{"first":"","last":""}')) {
+            if (typeof vyToast !== 'undefined') vyToast(`Field "${label}" is required.`, 'error');
+            else alert(`Field "${label}" is required.`);
+            hasErrors = true;
+        }
+        values[fid] = value;
+    });
+    
+    if (hasErrors) return;
+    
+    // Save record via AJAX
+    const formData = new FormData();
+    formData.append('action', 'save_record');
+    formData.append('module_id', currentPickerModuleId);
+    formData.append('record_id', 0);
+    formData.append('values', JSON.stringify(values));
+    
+    try {
+        const response = await fetch('/api/modules.php', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            if (typeof vyToast !== 'undefined') vyToast('Record created successfully!', 'success');
+            togglePickerQuickCreate(false);
+            loadRecordPickerData();
+        } else {
+            if (typeof vyToast !== 'undefined') vyToast(result.error || 'Failed to save record.', 'error');
+            else alert(result.error || 'Failed to save record.');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Network error occurred: ' + e.message);
+    }
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) {
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+    }
+}
+
+function debouncedSearchRecordPicker() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        searchRecordPicker();
+    }, 300);
+}
+
+function searchRecordPicker() {
+    currentPickerQuery = document.getElementById('recordPickerSearch').value.trim();
+    currentPickerPage = 1;
+    loadRecordPickerData();
+}
+
+function changeRecordPickerPage(dir) {
+    currentPickerPage += dir;
+    loadRecordPickerData();
+}
+
+function createNewRecordFromPicker() {
+    if (!currentPickerModuleId) return;
+    window.open(`module_record.php?module=${currentPickerModuleId}`, '_blank');
+}
+
+function loadRecordPickerData() {
+    const contentDiv = document.getElementById('recordPickerContent');
+    if (!contentDiv) return;
+    
+    contentDiv.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px; margin-bottom:10px; display:block;"></i> Loading...</div>';
+    
+    document.getElementById('rpPrevBtn').disabled = true;
+    document.getElementById('rpNextBtn').disabled = true;
+
+    fetch(`/api/modules.php?action=lookup_records&target_module_id=${currentPickerModuleId}&search=${encodeURIComponent(currentPickerQuery)}&page=${currentPickerPage}`)
+    .then(r => r.json())
+    .then(r => {
+        if (!r.success) {
+            contentDiv.innerHTML = `<div style="color:#ef4444; text-align:center; padding: 20px;">Error: ${r.error}</div>`;
+            return;
+        }
+
+        if (r.records.length === 0) {
+            contentDiv.innerHTML = `
+                <div style="text-align:center; padding:40px; color:var(--text-muted); font-size: 14px;">
+                    <p style="margin-bottom:15px;">No records found.</p>
+                    <button type="button" class="mm-btn mm-btn-primary" onclick="createNewRecordFromPicker()">
+                        <i class="fa-solid fa-plus"></i> Create New Record
+                    </button>
+                </div>
+            `;
+            document.getElementById('rpPageInfo').textContent = 'Page 1 of 1';
+            return;
+        }
+
+        let html = '<div class="rp-list-section">Results</div>';
+        html += '<div style="display:flex; flex-direction:column; gap:4px;">';
+        r.records.forEach(rec => {
+            const firstLetter = rec.display_value ? rec.display_value.charAt(0).toUpperCase() : '#';
+            html += `
+                <div class="rp-item" onclick="selectRecordFromPicker(${rec.id}, '${escapeHtml(rec.display_value)}')" style="display: flex; align-items: center; padding: 10px; border-radius: 8px; cursor: pointer; transition: background 0.2s; gap: 12px; hover: background: rgba(0,0,0,0.03);">
+                    <div class="rp-item-icon" style="width: 32px; height: 32px; border-radius: 50%; background: rgba(123,94,240,0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0;">${firstLetter}</div>
+                    <div class="rp-item-content" style="flex: 1; min-width: 0;">
+                        <div class="rp-item-title" style="font-size: 13px; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;">${escapeHtml(rec.display_value)}</div>
+                        <div class="rp-item-subtitle" style="font-size: 11px; color: var(--text-muted);">Record #${rec.id}</div>
+                    </div>
+                    <div style="font-size: 12px; font-weight: 600; color: var(--primary); flex-shrink: 0;">
+                        Select
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+
+        contentDiv.innerHTML = html;
+
+        const totalPages = Math.ceil(r.total / r.limit) || 1;
+        document.getElementById('rpPageInfo').textContent = `Page ${r.page} of ${totalPages}`;
+        
+        document.getElementById('rpPrevBtn').disabled = r.page <= 1;
+        document.getElementById('rpNextBtn').disabled = r.page >= totalPages;
+    })
+    .catch(() => {
+        contentDiv.innerHTML = `<div style="color:#ef4444; text-align:center; padding: 20px;">Network error occurred.</div>`;
+    });
+}
+
+function selectRecordFromPicker(id, displayValue) {
+    const hiddenInput = document.querySelector(`.qc-api-hidden[data-field-id="${currentPickerFieldId}"]`);
+    if (hiddenInput) {
+        hiddenInput.value = id;
+        hiddenInput.dispatchEvent(new Event('change'));
+    }
+    
+    const displaySpan = document.getElementById(`qc-api-display-${currentPickerFieldId}`);
+    if (displaySpan) {
+        displaySpan.textContent = displayValue + ' (#' + id + ')';
+        displaySpan.style.color = 'var(--text-main)';
+    }
+
+    const clearBtn = document.getElementById(`qc-clear-btn-${currentPickerFieldId}`);
+    if (clearBtn) clearBtn.style.display = 'inline-flex';
+
+    closeModal('recordPickerModal');
+}
+
+function clearQcApiPicker(fieldId) {
+    const hiddenInput = document.querySelector(`.qc-api-hidden[data-field-id="${fieldId}"]`);
+    if (hiddenInput) {
+        hiddenInput.value = '';
+        hiddenInput.dispatchEvent(new Event('change'));
+    }
+    
+    const displaySpan = document.getElementById(`qc-api-display-${fieldId}`);
+    if (displaySpan) {
+        displaySpan.textContent = 'Search & Select...';
+        displaySpan.style.color = 'var(--text-muted)';
+    }
+
+    const clearBtn = document.getElementById(`qc-clear-btn-${fieldId}`);
+    if (clearBtn) clearBtn.style.display = 'none';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+async function handleQuickCreateSubmit(event) {
+    event.preventDefault();
+    
+    // Collect and validate fields
+    const values = {};
+    let hasValidationErrors = false;
+    
+    const fieldGroups = document.querySelectorAll('#quickCreateModal .qc-field-group');
+    fieldGroups.forEach(group => {
+        const fid = group.dataset.fieldId;
+        const type = group.dataset.fieldType;
+        const label = group.dataset.fieldLabel;
+        const isRequired = group.dataset.required === '1';
+        
+        let value = '';
+        
+        if (type === 'name') {
+            const firstInput = group.querySelector('.qc-name-field[data-part="first"]');
+            const lastInput = group.querySelector('.qc-name-field[data-part="last"]');
+            const first = firstInput ? firstInput.value.trim() : '';
+            const last = lastInput ? lastInput.value.trim() : '';
+            if (first || last) {
+                value = JSON.stringify({first, last});
+            }
+        } else if (type === 'phone') {
+            const prefix = group.querySelector('.qc-phone-prefix').value;
+            const number = group.querySelector('.qc-phone-number').value.trim();
+            if (number) {
+                value = prefix + ' ' + number;
+            }
+        } else if (type === 'checkbox') {
+            value = group.querySelector('.qc-checkbox').checked ? '1' : '0';
+        } else if (type === 'radio_group') {
+            const checkedRadio = group.querySelector('.qc-radio:checked');
+            value = checkedRadio ? checkedRadio.value : '';
+        } else if (type === 'multi_picker') {
+            const tsInstance = qcTomSelectInstances[fid];
+            const selected = tsInstance ? tsInstance.getValue() : [];
+            value = JSON.stringify(Array.isArray(selected) ? selected : [selected]);
+        } else if (type === 'dropdown') {
+            const tsInstance = qcTomSelectInstances[fid];
+            value = tsInstance ? tsInstance.getValue() : '';
+        } else if (type === 'api_call_picker') {
+            value = group.querySelector('.qc-api-hidden').value;
+        } else if (type === 'assigned_to') {
+            value = group.querySelector('.qc-select').value;
+        } else {
+            const input = group.querySelector('.qc-input');
+            value = input ? input.value.trim() : '';
+        }
+        
+        if (isRequired && (!value || value === '0' || value === '[]' || value === '{"first":"","last":""}')) {
+            vyToast(`Field "${label}" is required.`, 'error');
+            hasValidationErrors = true;
+        }
+        
+        values[fid] = value;
+    });
+    
+    if (hasValidationErrors) return;
+    
+    // Save record via AJAX
+    const formData = new FormData();
+    formData.append('action', 'save_record');
+    formData.append('module_id', MODULE_ID);
+    formData.append('record_id', 0);
+    formData.append('values', JSON.stringify(values));
+    
+    try {
+        const response = await fetch('/api/modules.php', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            vyToast('Record created successfully!', 'success');
+            closeQuickCreateModal();
+            fetchAndRenderRecords(activeFilterRules, activeFilterId);
+        } else {
+            vyToast(result.error || 'Failed to save record.', 'error');
+        }
+    } catch(e) {
+        vyToast('Network error occurred: ' + e.message, 'error');
+    }
+}
+
+
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
 
 // Column Configurator Logic
@@ -608,6 +1297,7 @@ const USER_ID = <?= (int)($_SESSION['user_id'] ?? 0) ?>;
 const MODULE_ID = <?= $moduleId ?>;
 const STORAGE_KEY = `vycrm_col_vis_${USER_ID}_${MODULE_ID}`;
 const ORDER_KEY = `vycrm_col_order_${USER_ID}_${MODULE_ID}`;
+const CAN_MULTI_DELETE = <?= $canMultiDelete ? 'true' : 'false' ?>;
 
 function toggleColumnSelector(event) {
     event.stopPropagation();
@@ -1212,14 +1902,16 @@ function renderPaginationButtons(total, limit, currentPage) {
     if (!tbody) return;
     
     if (!records || records.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${fields.length + 4}" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=${MODULE_ID}" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${fields.length + (CAN_MULTI_DELETE ? 4 : 3)}" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=${MODULE_ID}" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>`;
         return;
     }
     
     let html = '';
     records.forEach((rec, i) => {
         html += `<tr>`;
-        html += `<td class="checkbox-col" style="text-align: center;"><input type="checkbox" class="record-select" value="${rec.id}" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;" onchange="updateBulkDeleteButton()"></td>`;
+        if (CAN_MULTI_DELETE) {
+            html += `<td class="checkbox-col" style="text-align: center;"><input type="checkbox" class="record-select" value="${rec.id}" style="accent-color:var(--primary); width:16px; height:16px; cursor:pointer;" onchange="updateBulkDeleteButton()"></td>`;
+        }
         html += `<td>${i + 1}</td>`;
         
         fields.forEach(f => {
@@ -1790,6 +2482,196 @@ async function handleImportSubmit(event) {
         <p style="margin:0 0 24px; font-size:14px; color:var(--text-muted); line-height:1.5;" id="deleteResultText">Successfully deleted the selected records.</p>
         <button class="mm-btn" style="background:var(--primary); color:#fff; border:none; border-radius:10px; padding:10px 24px; font-size:14px; font-weight:600; cursor:pointer; width:100%;" onclick="closeDeleteResultModal()">Dismiss</button>
     </div>
+    </div>
 </div>
+
+<?php if (!empty($quickCreateFields)): ?>
+<!-- Quick Create Modal -->
+<div class="mm-modal-overlay" id="quickCreateModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9998; align-items:center; justify-content:center;">
+    <div class="crm-card" style="width:100%; max-width:700px; padding:24px; border-radius:16px; background:var(--surface); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; max-height:90vh;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:12px; flex-shrink:0;">
+            <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                <i class="fa-solid fa-bolt" style="color:var(--primary);"></i> Quick Create - <?= htmlspecialchars($module['name']) ?>
+            </h3>
+            <button class="mm-icon-btn" onclick="closeQuickCreateModal()" style="background:none; border:none; cursor:pointer; font-size:16px; color:var(--text);"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div style="flex:1; overflow-y:auto; padding-right:4px;">
+            <form id="quickCreateForm" onsubmit="handleQuickCreateSubmit(event)">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; padding-bottom:10px;">
+                    <?php 
+                    $defaultCountry = 'IN';
+                    foreach ($quickCreateFields as $field): 
+                        $fid = $field['id'];
+                        $val = $field['default_value'] ?? '';
+                        $fullWidth = in_array($field['field_type'], ['textarea', 'attachment', 'name', 'address']);
+                        $req = $field['is_required'] ? '<span class="required-star" style="color:#ef4444;">*</span>' : '';
+                    ?>
+                        <div style="display:flex; flex-direction:column; gap:6px; <?= $fullWidth ? 'grid-column: span 2;' : '' ?>" class="qc-field-group" data-field-id="<?= $fid ?>" data-field-type="<?= $field['field_type'] ?>" data-field-label="<?= htmlspecialchars($field['label']) ?>" <?= $field['is_required'] ? 'data-required="1"' : '' ?>>
+                            <label style="font-size:13px; font-weight:600; color:var(--text-main); text-align: left; align-self: flex-start;"><?= htmlspecialchars($field['label']) ?> <?= $req ?></label>
+                            
+                            <?php switch($field['field_type']):
+                                case 'text': case 'email': case 'url': case 'number': case 'currency': ?>
+                                    <input type="<?= $field['field_type'] === 'email' ? 'email' : ($field['field_type'] === 'url' ? 'url' : ($field['field_type'] === 'number' || $field['field_type'] === 'currency' ? 'number' : 'text')) ?>"
+                                           class="form-control qc-input" data-field-id="<?= $fid ?>"
+                                           placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
+                                           value="<?= htmlspecialchars($val) ?>"
+                                           <?= $field['field_type'] === 'currency' ? 'step="0.01"' : '' ?>
+                                           style="width:100%; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box;">
+                                <?php break; case 'phone': 
+                                    $dialCodes = [
+                                        'IN' => '+91', 'US' => '+1', 'GB' => '+44', 'AE' => '+971', 'SA' => '+966',
+                                        'AU' => '+61', 'CA' => '+1', 'SG' => '+65', 'MY' => '+60', 'DE' => '+49',
+                                        'FR' => '+33', 'JP' => '+81', 'CN' => '+86', 'KR' => '+82', 'BR' => '+55',
+                                        'ZA' => '+27', 'NZ' => '+64', 'QA' => '+974', 'KW' => '+965', 'BH' => '+973',
+                                        'OM' => '+968', 'NP' => '+977', 'LK' => '+94', 'BD' => '+880'
+                                    ];
+                                    ?>
+                                    <div style="display: flex; gap: 8px; width: 100%;">
+                                        <select class="form-control qc-phone-prefix" data-field-id="<?= $fid ?>" style="width: 110px; flex-shrink: 0; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 14px; background: #fff; box-sizing: border-box;">
+                                            <?php foreach ($dialCodes as $cCode => $prefixCode): ?>
+                                                <option value="<?= htmlspecialchars($prefixCode) ?>" <?= $defaultCountry === $cCode ? 'selected' : '' ?>><?= $cCode ?> (<?= $prefixCode ?>)</option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <input type="text" class="form-control qc-phone-number" data-field-id="<?= $fid ?>"
+                                               placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
+                                               value="<?= htmlspecialchars($val) ?>"
+                                               style="flex-grow: 1; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box;">
+                                    </div>
+                                <?php break; case 'textarea': ?>
+                                    <textarea class="form-control qc-input" data-field-id="<?= $fid ?>" rows="3"
+                                              placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"
+                                              style="width:100%; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box; font-family:inherit;"><?= htmlspecialchars($val) ?></textarea>
+                                <?php break; case 'checkbox': ?>
+                                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;user-select:none;">
+                                        <input type="checkbox" class="qc-checkbox" data-field-id="<?= $fid ?>" <?= $val ? 'checked' : '' ?> style="accent-color:var(--primary);width:18px;height:18px;">
+                                        <span style="font-size:14px;"><?= htmlspecialchars($field['placeholder'] ?: 'Yes') ?></span>
+                                    </label>
+                                <?php break; case 'dropdown': ?>
+                                    <select class="qc-tom-select qc-dropdown" data-field-id="<?= $fid ?>" placeholder="Select or type to add...">
+                                        <option value="">Select...</option>
+                                        <?php foreach($field['options'] as $opt): ?>
+                                        <option value="<?= htmlspecialchars($opt['value']) ?>" <?= $val === $opt['value'] ? 'selected' : '' ?>><?= htmlspecialchars($opt['label']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php break; case 'radio_group': ?>
+                                    <div class="dm-radio-group" style="display:flex; gap:16px; flex-wrap:wrap; padding:8px 0;">
+                                        <?php foreach($field['options'] as $idx => $opt): ?>
+                                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+                                            <input type="radio" name="qc_radio_<?= $fid ?>" class="qc-radio" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($opt['value']) ?>" <?= $val === $opt['value'] ? 'checked' : '' ?> style="accent-color:var(--primary);width:16px;height:16px;">
+                                            <span style="font-size:14px;"><?= htmlspecialchars($opt['label']) ?></span>
+                                        </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php break; case 'multi_picker': ?>
+                                    <select multiple class="qc-multi-picker qc-tom-select" data-field-id="<?= $fid ?>" placeholder="Search and select...">
+                                        <?php foreach($field['options'] as $opt): ?>
+                                        <option value="<?= htmlspecialchars($opt['value']) ?>"><?= htmlspecialchars($opt['label']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php break; case 'date': ?>
+                                    <input type="text" class="form-control qc-date-picker" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" placeholder="Select Date" style="width:100%; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; background:#fff; box-sizing:border-box;">
+                                <?php break; case 'datetime': ?>
+                                    <input type="text" class="form-control qc-datetime-picker" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" placeholder="Select Date & Time" style="width:100%; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; background:#fff; box-sizing:border-box;">
+                                <?php break; case 'time': ?>
+                                    <input type="text" class="form-control qc-time-picker" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" placeholder="Select Time" style="width:100%; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; background:#fff; box-sizing:border-box;">
+                                <?php break; case 'duration': ?>
+                                    <div style="display:flex;gap:10px;align-items:center;">
+                                        <input type="number" class="form-control qc-input" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" min="0" placeholder="e.g. 100" style="flex:1; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box;">
+                                        <span class="text-muted" style="font-size:14px;">seconds</span>
+                                    </div>
+                                <?php break; case 'name': ?>
+                                    <div style="display:flex;gap:12px;">
+                                        <input type="text" class="form-control qc-name-field" data-field-id="<?= $fid ?>" data-part="first" placeholder="First Name" style="flex:1; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box;">
+                                        <input type="text" class="form-control qc-name-field" data-field-id="<?= $fid ?>" data-part="last" placeholder="Last Name" style="flex:1; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box;">
+                                    </div>
+                                <?php break; case 'assigned_to': ?>
+                                    <select class="form-control qc-select" data-field-id="<?= $fid ?>" style="width:100%; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; background:#fff; box-sizing:border-box; height:44px;">
+                                        <option value="">Select User...</option>
+                                        <?php foreach($usersList as $u): ?>
+                                        <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php break; case 'api_call_picker': 
+                                    $cfg = $field['config'] ?? []; $linkedModId = $cfg['linked_module_id'] ?? 0;
+                                    ?>
+                                    <div class="qc-api-picker-wrapper" data-field-id="<?= $fid ?>" data-linked-module="<?= $linkedModId ?>" style="position: relative;">
+                                        <input type="hidden" class="qc-api-hidden" data-field-id="<?= $fid ?>" value="">
+                                        <div style="display:flex; align-items:center; gap:8px;">
+                                            <div class="form-control" style="flex:1; cursor:pointer; background:var(--surface); display:flex; align-items:center; justify-content:space-between; padding: 10px 14px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 14px;" onclick="openRecordPickerModal(<?= $fid ?>, <?= $linkedModId ?>)">
+                                                <span id="qc-api-display-<?= $fid ?>" style="color: var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                                    Search & Select...
+                                                </span>
+                                                <i class="fa-solid fa-chevron-down" style="color:var(--text-muted); font-size:12px; flex-shrink:0;"></i>
+                                            </div>
+                                            <button type="button" class="mm-icon-btn rp-clear-btn" id="qc-clear-btn-<?= $fid ?>" onclick="clearQcApiPicker(<?= $fid ?>)" style="color:#ef4444; flex-shrink:0; display:none;" title="Clear Selection"><i class="fa-solid fa-xmark"></i></button>
+                                        </div>
+                                    </div>
+                                <?php break; case 'address': ?>
+                                    <textarea class="form-control qc-input" data-field-id="<?= $fid ?>" rows="2" placeholder="<?= htmlspecialchars($field['placeholder'] ?? 'Enter address') ?>" style="width:100%; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box; font-family:inherit;"></textarea>
+                                <?php break; default: ?>
+                                    <input type="text" class="form-control qc-input" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" style="width:100%; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box;">
+                            <?php endswitch; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:24px; border-top:1px solid var(--border); padding-top:16px; flex-shrink:0;">
+                    <button type="button" class="mm-btn mm-btn-outline" onclick="closeQuickCreateModal()">Cancel</button>
+                    <button type="submit" class="mm-btn" style="background:var(--primary); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:8px;">
+                        <i class="fa-solid fa-check"></i> Save Record
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Create Record Picker Modal -->
+<div class="mm-modal-overlay" id="recordPickerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center;">
+    <div class="crm-card" style="width:100%; max-width:600px; padding:24px; border-radius:16px; background:var(--surface); box-shadow:var(--shadow-lg); display:flex; flex-direction:column; min-height:450px;">
+        <div class="mm-modal-header" style="display:flex; justify-content:space-between; align-items:center; width:100%; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <h3 id="recordPickerModalTitle" style="margin:0; font-size:16px; font-weight:700;">Select Record</h3>
+                <button type="button" class="mm-btn mm-btn-primary mm-btn-sm" id="rpCreateBtn" onclick="createNewRecordFromPicker()" style="font-size:12px; height:28px; padding:0 12px; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-plus"></i> Create New
+                </button>
+                <button type="button" class="mm-btn mm-btn-outline mm-btn-sm" id="rpQuickCreateBtn" onclick="togglePickerQuickCreate(true)" style="font-size:12px; height:28px; padding:0 12px; display:none; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-bolt" style="color:var(--primary);"></i> Quick Create
+                </button>
+            </div>
+            <button class="mm-icon-btn" onclick="closeModal('recordPickerModal')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="mm-modal-body" style="padding: 0; flex:1; display:flex; flex-direction:column;">
+            <div class="rp-search-wrapper" style="position:relative; margin-bottom:16px;">
+                <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:14px;"></i>
+                <input type="text" id="recordPickerSearch" class="rp-search-input" placeholder="Search item..." oninput="debouncedSearchRecordPicker()" style="width:100%; padding:10px 12px 10px 36px; border-radius:8px; border:1.5px solid var(--border); font-size:14px; box-sizing:border-box; outline:none;">
+            </div>
+            
+            <div id="recordPickerContent" style="flex:1; overflow-y:auto; min-height:220px; border:1px solid var(--border); border-radius:8px; padding:8px; background:var(--surface);">
+                <!-- Content via AJAX -->
+            </div>
+            
+            <div class="rp-pagination" id="recordPickerPagination" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:12px; border-top:1px solid var(--border);">
+                <button class="mm-btn" id="rpPrevBtn" onclick="changeRecordPickerPage(-1)" style="padding:6px 12px; font-size:12px;">Previous</button>
+                <span id="rpPageInfo" style="font-size:13px; font-weight:600; color:var(--text-muted);">Page 1</span>
+                <button class="mm-btn" id="rpNextBtn" onclick="changeRecordPickerPage(1)" style="padding:6px 12px; font-size:12px;">Next</button>
+            </div>
+
+            <!-- Dynamic Quick Create Form inside picker -->
+            <div id="rpQuickCreateFormContainer" style="display:none; flex:1; flex-direction:column; gap:16px;">
+                <form id="rpQuickCreateForm" onsubmit="handlePickerQuickCreateSubmit(event)">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; max-height: 300px; overflow-y: auto; padding: 4px;" id="rpQuickCreateFieldsGrid">
+                        <!-- Dynamic inputs loaded via AJAX -->
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px; border-top:1px solid var(--border); padding-top:12px;">
+                        <button type="button" class="mm-btn mm-btn-sm mm-btn-outline" onclick="togglePickerQuickCreate(false)">Back to Search</button>
+                        <button type="submit" class="mm-btn mm-btn-sm" style="background:var(--primary); color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 </body>
 </html>

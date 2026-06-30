@@ -34,7 +34,7 @@ function dm_field_types(): array
         'state' => ['label' => 'State Picker', 'icon' => 'fa-solid fa-map-location-dot'],
         'district' => ['label' => 'District Picker', 'icon' => 'fa-solid fa-location-crosshairs'],
         'assigned_to' => ['label' => 'Assigned To', 'icon' => 'fa-solid fa-user-check'],
-        'api_call_picker' => ['label' => 'API Call Picker', 'icon' => 'fa-solid fa-plug'],
+        'api_call_picker' => ['label' => 'Module Tagging', 'icon' => 'fa-solid fa-plug'],
         'attachment' => ['label' => 'Attachment Picker', 'icon' => 'fa-solid fa-paperclip'],
         'map_picker' => ['label' => 'Map Picker', 'icon' => 'fa-solid fa-map-pin'],
         'address' => ['label' => 'Address Field', 'icon' => 'fa-solid fa-location-dot'],
@@ -51,6 +51,14 @@ function dm_ensure_tables(PDO $conn, string $p): void
 {
     require_once __DIR__ . '/commerce.php';
     commerce_ensure_tables($conn, $p);
+
+    // Auto-migrate modules controls
+    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_import TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_export TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_multidelete TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_create TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_quickcreate TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_quick_create TINYINT(1) DEFAULT 0 AFTER is_list_visible"); } catch (Throwable $e) {}
 }
 
 /* ──────────────────────────── HELPER FUNCTIONS ──────────────────────────── */

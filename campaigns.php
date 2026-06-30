@@ -46,6 +46,15 @@ try {
     unset($cf);
 } catch (Exception $e) {}
 
+$usersList = [];
+try {
+    $usersQuery = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users ORDER BY username ASC");
+    while ($u = $usersQuery->fetch(PDO::FETCH_ASSOC)) {
+        $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+        $usersList[$u['id']] = $fullName ?: $u['username'];
+    }
+} catch (Exception $e) {}
+
 $v = time();
 ?>
 <!DOCTYPE html>
@@ -316,10 +325,57 @@ $v = time();
                                 
                                 <!-- Saved Filters + Search Bar -->
                                 <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
-                                    <select id="savedFilterSelect_<?= $mm['id'] ?>" class="form-control" style="height:32px; font-size:12px; padding:4px 8px; background:#fff; width:auto; min-width:150px;" onchange="applySavedFilter(<?= $mm['id'] ?>)">
-                                        <option value="">-- No Filter --</option>
-                                    </select>
+                                    <button class="mm-btn mm-btn-sm mm-btn-outline" id="btnCampaignFiltersToggle_<?= $mm['id'] ?>" onclick="toggleCampaignFilterPanel(<?= $mm['id'] ?>)" style="display:inline-flex;align-items:center;gap:6px; height: 32px; padding: 4px 10px; border-radius: 8px;">
+                                        <i class="fa-solid fa-filter"></i> Filters <span id="campaignFiltersActiveCount_<?= $mm['id'] ?>"></span>
+                                    </button>
                                     <input type="text" id="importRecordsSearch_<?= $mm['id'] ?>" class="form-control" placeholder="Search records..." style="flex:1; min-width:150px; height:32px; font-size:12px; padding:4px 10px; background:#fff; box-sizing:border-box;" oninput="debounceRecordSearch(<?= $mm['id'] ?>)">
+                                </div>
+                                
+                                <!-- Filters Configuring Expanding Panel -->
+                                <div id="campaignFilterPanel_<?= $mm['id'] ?>" class="crm-card" style="margin-bottom: 20px; padding: 20px; display: none; background:#fff; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                                        <h4 style="margin: 0; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 8px; font-size:13px;">
+                                            <i class="fa-solid fa-filter" style="color: var(--primary);"></i> Configure Filters
+                                        </h4>
+                                        <div style="display: flex; gap: 10px; align-items: center;">
+                                            <select id="savedFilterSelect_<?= $mm['id'] ?>" class="form-control" style="width: 200px; padding: 4px 10px; font-size: 12px; border-radius: 8px; border: 1.5px solid var(--border); height: 32px; background:#fff;" onchange="applySavedFilter(<?= $mm['id'] ?>)">
+                                                <option value="">-- Apply Saved Filter --</option>
+                                            </select>
+                                            <button class="mm-btn mm-btn-sm mm-btn-outline mm-btn-danger" id="btnDeleteCampaignFilter_<?= $mm['id'] ?>" style="display: none; align-items: center; gap: 4px; height: 32px; padding: 4px 10px; border-radius:8px;" onclick="deleteCampaignActiveFilter(<?= $mm['id'] ?>)">
+                                                <i class="fa-solid fa-trash"></i> Delete
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div id="campaignFilterRulesContainer_<?= $mm['id'] ?>" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                                        <!-- Dynamic rules rows -->
+                                    </div>
+
+                                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                                        <div style="display: flex; gap: 10px;">
+                                            <button class="mm-btn mm-btn-sm mm-btn-outline" style="border-radius: 8px; font-size:12px; padding: 6px 12px;" onclick="createCampaignFilterRuleRow(<?= $mm['id'] ?>)">
+                                                <i class="fa-solid fa-plus"></i> Add Condition
+                                            </button>
+                                            <button class="mm-btn mm-btn-sm mm-btn-outline" style="border-radius: 8px; font-size:12px; padding: 6px 12px;" onclick="clearAllCampaignFilters(<?= $mm['id'] ?>)">
+                                                <i class="fa-solid fa-rotate-right"></i> Reset
+                                            </button>
+                                        </div>
+                                        
+                                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                            <div style="display: flex; gap: 8px; align-items: center;">
+                                                <input type="text" id="campaignFilterSaveName_<?= $mm['id'] ?>" placeholder="Filter Name..." class="form-control" style="width: 150px; height: 32px; font-size: 12px; border-radius: 8px; border: 1.5px solid var(--border); padding: 4px 10px; background:#fff;">
+                                                <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer; color: var(--text-muted); font-weight: 600; user-select: none; margin:0;">
+                                                    <input type="checkbox" id="campaignFilterSetDefault_<?= $mm['id'] ?>" style="accent-color: var(--primary); width: 14px; height: 14px; cursor:pointer;"> Default
+                                                </label>
+                                                <button class="mm-btn mm-btn-sm mm-btn-outline" style="border-radius: 8px; font-size:12px; padding: 6px 12px;" onclick="saveCurrentCampaignFilter(<?= $mm['id'] ?>)">
+                                                    <i class="fa-solid fa-floppy-disk"></i> Save & Apply
+                                                </button>
+                                            </div>
+                                            <button class="mm-btn mm-btn-sm" style="background: var(--primary); color: #fff; border-radius: 8px; font-size:12px; padding: 6px 16px;" onclick="applyCurrentCampaignFilters(<?= $mm['id'] ?>)">
+                                                <i class="fa-solid fa-check"></i> Apply Only
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                                 
                                 <div class="table-responsive" style="max-height: 350px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; background: #fff;">
@@ -1064,10 +1120,13 @@ $v = time();
             }
         }
 
+        const COMPANY_USERS = <?= json_encode($usersList) ?>;
         let activeModuleRecords = {};
         let activeModuleFields = {}; // Store fields per module for import lookup
         let debounceSearchTimeout = null;
         let activeModuleFilters = {}; // { moduleId: filter_rules | null }
+        let campaignFilterRowsCount = {};
+        let campaignSavedFiltersList = {};
 
         function debounceRecordSearch(moduleId) {
             clearTimeout(debounceSearchTimeout);
@@ -1076,14 +1135,347 @@ $v = time();
             }, 300);
         }
 
+        function toggleCampaignFilterPanel(moduleId) {
+            const panel = document.getElementById(`campaignFilterPanel_${moduleId}`);
+            if (!panel) return;
+            const isHidden = panel.style.display === 'none';
+            panel.style.display = isHidden ? 'block' : 'none';
+            
+            // Add default row if empty
+            const container = document.getElementById(`campaignFilterRulesContainer_${moduleId}`);
+            if (isHidden && container && container.children.length === 0) {
+                createCampaignFilterRuleRow(moduleId);
+            }
+        }
+
+        function createCampaignFilterRuleRow(moduleId, ruleData = null) {
+            const container = document.getElementById(`campaignFilterRulesContainer_${moduleId}`);
+            if (!container) return;
+            
+            if (!campaignFilterRowsCount[moduleId]) campaignFilterRowsCount[moduleId] = 0;
+            const count = ++campaignFilterRowsCount[moduleId];
+            const rowId = `campaign-filter-rule-row-${moduleId}-${count}`;
+            
+            const fields = activeModuleFields[moduleId] || [];
+            
+            const rowHtml = `
+                <div class="filter-rule-row" id="${rowId}" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+                    <select class="form-control filter-field-select" style="width: 200px; height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer; padding: 4px 8px;" onchange="onCampaignFilterFieldChange('${rowId}', this.value, ${moduleId})">
+                        <option value="">-- Choose Field --</option>
+                        ${fields.map(f => `<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('')}
+                    </select>
+                    
+                    <select class="form-control filter-operator-select" style="width: 140px; height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer; padding: 4px 8px;">
+                        <option value="=">=</option>
+                        <option value="!=">!=</option>
+                        <option value="LIKE">contains</option>
+                        <option value="NOT LIKE">does not contain</option>
+                        <option value=">">&gt;</option>
+                        <option value="<">&lt;</option>
+                        <option value=">=">&gt;=</option>
+                        <option value="<=">&lt;=</option>
+                    </select>
+                    
+                    <div class="filter-value-container" style="flex: 1; min-width: 150px;">
+                        <input type="text" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; padding:4px 12px; box-sizing:border-box;" placeholder="Enter value...">
+                    </div>
+                    
+                    <button class="btn-icon" style="background: rgba(239, 68, 68, 0.08); color: #ef4444; border: 1.5px solid rgba(239, 68, 68, 0.2); border-radius: 8px; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-sizing:border-box;" onclick="document.getElementById('${rowId}').remove()" title="Remove Condition">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = rowHtml;
+            const element = tempDiv.firstElementChild;
+            container.appendChild(element);
+            
+            if (ruleData) {
+                element.querySelector('.filter-field-select').value = ruleData.field_id;
+                onCampaignFilterFieldChange(rowId, ruleData.field_id, moduleId, ruleData.value);
+                element.querySelector('.filter-operator-select').value = ruleData.operator;
+            }
+        }
+
+        function onCampaignFilterFieldChange(rowId, fieldId, moduleId, value = '') {
+            const rowEl = document.getElementById(rowId);
+            if (!rowEl) return;
+            
+            const valueContainer = rowEl.querySelector('.filter-value-container');
+            const fields = activeModuleFields[moduleId] || [];
+            const field = fields.find(f => f.id == fieldId);
+            
+            if (!field) {
+                valueContainer.innerHTML = `<input type="text" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; padding:4px 12px; box-sizing:border-box;" placeholder="Enter value...">`;
+                return;
+            }
+            
+            let html = '';
+            if (field.field_type === 'user' || field.field_type === 'assigned_to' || field.field_type === 'sys_created_by' || field.field_type === 'sys_updated_by') {
+                html = `
+                    <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer; padding:4px 8px; box-sizing:border-box;">
+                        <option value="">-- Select User --</option>
+                        ${Object.entries(COMPANY_USERS).map(([id, name]) => `
+                            <option value="${id}" ${value == id ? 'selected' : ''}>${escapeHtml(name)}</option>
+                        `).join('')}
+                    </select>
+                `;
+            } else if (field.field_type === 'checkbox') {
+                html = `
+                    <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer; padding:4px 8px; box-sizing:border-box;">
+                        <option value="1" ${value == '1' ? 'selected' : ''}>Yes</option>
+                        <option value="0" ${value == '0' ? 'selected' : ''}>No</option>
+                    </select>
+                `;
+            } else if (field.field_type === 'select' || field.field_type === 'dropdown') {
+                const opts = field.options || [];
+                html = `
+                    <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer; padding:4px 8px; box-sizing:border-box;">
+                        <option value="">-- Choose Option --</option>
+                        ${opts.map(opt => `
+                            <option value="${opt.value || opt.label || opt.option_value}" ${value == (opt.value || opt.label || opt.option_value) ? 'selected' : ''}>${escapeHtml(opt.label || opt.value || opt.option_label || opt.option_value)}</option>
+                        `).join('')}
+                    </select>
+                `;
+            } else if (field.field_type === 'date' || field.field_type === 'sys_created_at' || field.field_type === 'sys_updated_at') {
+                let valStr = value;
+                if (value && value.includes(' ')) {
+                    valStr = value.split(' ')[0];
+                }
+                html = `<input type="date" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; padding:4px 12px; box-sizing:border-box;" value="${escapeHtml(valStr)}">`;
+            } else if (field.field_type === 'datetime') {
+                let valStr = '';
+                if (value) {
+                    valStr = value.replace(' ', 'T').substring(0, 16);
+                }
+                html = `<input type="datetime-local" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; padding:4px 12px; box-sizing:border-box;" value="${escapeHtml(valStr)}">`;
+            } else if (field.field_type === 'time') {
+                html = `<input type="time" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; padding:4px 12px; box-sizing:border-box;" value="${escapeHtml(value)}">`;
+            } else {
+                html = `<input type="text" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; padding:4px 12px; box-sizing:border-box;" placeholder="Enter value..." value="${escapeHtml(value)}">`;
+            }
+            
+            valueContainer.innerHTML = html;
+        }
+
+        function clearAllCampaignFilters(moduleId) {
+            const container = document.getElementById(`campaignFilterRulesContainer_${moduleId}`);
+            if (container) container.innerHTML = '';
+            
+            const saveNameInput = document.getElementById(`campaignFilterSaveName_${moduleId}`);
+            if (saveNameInput) saveNameInput.value = '';
+            
+            const setDefaultInput = document.getElementById(`campaignFilterSetDefault_${moduleId}`);
+            if (setDefaultInput) setDefaultInput.checked = false;
+            
+            activeModuleFilters[moduleId] = null;
+            
+            const pillCount = document.getElementById(`campaignFiltersActiveCount_${moduleId}`);
+            if (pillCount) pillCount.textContent = '';
+            
+            const delBtn = document.getElementById(`btnDeleteCampaignFilter_${moduleId}`);
+            if (delBtn) delBtn.style.display = 'none';
+            
+            const sel = document.getElementById(`savedFilterSelect_${moduleId}`);
+            if (sel) sel.value = '';
+            
+            createCampaignFilterRuleRow(moduleId);
+            loadModuleRecords(moduleId);
+        }
+
+        function getCampaignFilterRules(moduleId) {
+            const rules = [];
+            const container = document.getElementById(`campaignFilterRulesContainer_${moduleId}`);
+            if (!container) return rules;
+            
+            const rows = container.querySelectorAll('.filter-rule-row');
+            rows.forEach(row => {
+                const fieldSelect = row.querySelector('.filter-field-select');
+                const operatorSelect = row.querySelector('.filter-operator-select');
+                const valueInput = row.querySelector('.filter-value-input');
+                
+                if (fieldSelect && fieldSelect.value) {
+                    rules.push({
+                        field_id: parseInt(fieldSelect.value),
+                        operator: operatorSelect.value,
+                        value: valueInput ? valueInput.value : ''
+                    });
+                }
+            });
+            return rules;
+        }
+
+        function applyCurrentCampaignFilters(moduleId) {
+            const rules = getCampaignFilterRules(moduleId);
+            if (rules.length === 0) {
+                activeModuleFilters[moduleId] = null;
+                const pillCount = document.getElementById(`campaignFiltersActiveCount_${moduleId}`);
+                if (pillCount) pillCount.textContent = '';
+            } else {
+                activeModuleFilters[moduleId] = { filter_rules: rules };
+                const pillCount = document.getElementById(`campaignFiltersActiveCount_${moduleId}`);
+                if (pillCount) pillCount.textContent = `(${rules.length})`;
+            }
+            
+            // Hide panel
+            const panel = document.getElementById(`campaignFilterPanel_${moduleId}`);
+            if (panel) panel.style.display = 'none';
+            
+            loadModuleRecords(moduleId);
+        }
+
+        async function saveCurrentCampaignFilter(moduleId) {
+            const nameEl = document.getElementById(`campaignFilterSaveName_${moduleId}`);
+            const name = nameEl ? nameEl.value.trim() : '';
+            if (!name) {
+                vyToast('Please enter a name for the filter.', 'error');
+                return;
+            }
+            
+            const rules = getCampaignFilterRules(moduleId);
+            if (rules.length === 0) {
+                vyToast('Please add at least one filter rule.', 'error');
+                return;
+            }
+            
+            const isDefault = document.getElementById(`campaignFilterSetDefault_${moduleId}`).checked ? 1 : 0;
+            
+            try {
+                const response = await fetch('/api/modules.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'save_filter',
+                        module_id: parseInt(moduleId),
+                        name: name,
+                        is_default: isDefault,
+                        filter_rules: rules
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    vyToast('Filter saved successfully.', 'success');
+                    nameEl.value = '';
+                    document.getElementById(`campaignFilterSetDefault_${moduleId}`).checked = false;
+                    
+                    // Reload filters dropdown list
+                    const filterSel = document.getElementById(`savedFilterSelect_${moduleId}`);
+                    if (filterSel) {
+                        filterSel.innerHTML = '<option value="">-- Apply Saved Filter --</option>';
+                        const fRes = await fetch(`/api/modules.php?action=list_filters&module_id=${moduleId}`);
+                        const fData = await fRes.json();
+                        if (fData.success) {
+                            campaignSavedFiltersList[moduleId] = fData.filters;
+                            fData.filters.forEach(f => {
+                                const opt = document.createElement('option');
+                                opt.value = f.id;
+                                opt.textContent = f.name + (f.is_default ? ' ★' : '');
+                                filterSel.appendChild(opt);
+                            });
+                            filterSel.value = result.id;
+                        }
+                    }
+                    
+                    activeModuleFilters[moduleId] = { filter_id: result.id };
+                    
+                    const pillCount = document.getElementById(`campaignFiltersActiveCount_${moduleId}`);
+                    if (pillCount) pillCount.textContent = `(${rules.length})`;
+                    
+                    const delBtn = document.getElementById(`btnDeleteCampaignFilter_${moduleId}`);
+                    if (delBtn) delBtn.style.display = 'inline-flex';
+                    
+                    // Hide panel
+                    const panel = document.getElementById(`campaignFilterPanel_${moduleId}`);
+                    if (panel) panel.style.display = 'none';
+                    
+                    loadModuleRecords(moduleId);
+                } else {
+                    vyToast('Failed to save filter: ' + result.error, 'error');
+                }
+            } catch (e) {
+                vyToast('Error saving filter: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteCampaignActiveFilter(moduleId) {
+            const sel = document.getElementById(`savedFilterSelect_${moduleId}`);
+            const filterId = sel ? sel.value : '';
+            if (!filterId) return;
+            
+            if (!confirm('Are you sure you want to delete this saved filter?')) return;
+            
+            try {
+                const response = await fetch('/api/modules.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'delete_filter',
+                        id: parseInt(filterId)
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    vyToast('Filter deleted successfully.', 'success');
+                    clearAllCampaignFilters(moduleId);
+                    
+                    // Reload filters dropdown list
+                    const filterSel = document.getElementById(`savedFilterSelect_${moduleId}`);
+                    if (filterSel) {
+                        filterSel.innerHTML = '<option value="">-- Apply Saved Filter --</option>';
+                        const fRes = await fetch(`/api/modules.php?action=list_filters&module_id=${moduleId}`);
+                        const fData = await fRes.json();
+                        if (fData.success) {
+                            campaignSavedFiltersList[moduleId] = fData.filters;
+                            fData.filters.forEach(f => {
+                                const opt = document.createElement('option');
+                                opt.value = f.id;
+                                opt.textContent = f.name + (f.is_default ? ' ★' : '');
+                                filterSel.appendChild(opt);
+                            });
+                        }
+                    }
+                } else {
+                    vyToast('Failed to delete filter: ' + result.error, 'error');
+                }
+            } catch (e) {
+                vyToast('Error deleting filter: ' + e.message, 'error');
+            }
+        }
+
+        function loadCampaignSavedFilter(moduleId, filterId) {
+            if (!filterId) {
+                clearAllCampaignFilters(moduleId);
+                return;
+            }
+            
+            const filters = campaignSavedFiltersList[moduleId] || [];
+            const filter = filters.find(f => f.id == filterId);
+            if (!filter) return;
+            
+            const container = document.getElementById(`campaignFilterRulesContainer_${moduleId}`);
+            if (container) container.innerHTML = '';
+            
+            const rules = filter.filter_rules || [];
+            if (rules.length === 0) {
+                createCampaignFilterRuleRow(moduleId);
+            } else {
+                rules.forEach(rule => createCampaignFilterRuleRow(moduleId, rule));
+            }
+            
+            const delBtn = document.getElementById(`btnDeleteCampaignFilter_${moduleId}`);
+            if (delBtn) delBtn.style.display = 'inline-flex';
+            
+            activeModuleFilters[moduleId] = { filter_id: parseInt(filterId) };
+            
+            const pillCount = document.getElementById(`campaignFiltersActiveCount_${moduleId}`);
+            if (pillCount) pillCount.textContent = `(${rules.length})`;
+        }
+
         function applySavedFilter(moduleId) {
             const sel = document.getElementById(`savedFilterSelect_${moduleId}`);
             const filterId = sel ? sel.value : '';
-            if (filterId) {
-                activeModuleFilters[moduleId] = { filter_id: parseInt(filterId) };
-            } else {
-                activeModuleFilters[moduleId] = null;
-            }
+            loadCampaignSavedFilter(moduleId, filterId);
             loadModuleRecords(moduleId);
         }
 
@@ -1102,6 +1494,7 @@ $v = time();
                     const fRes = await fetch(`/api/modules.php?action=list_filters&module_id=${moduleId}`);
                     const fData = await fRes.json();
                     if (fData.success && fData.filters.length > 0) {
+                        campaignSavedFiltersList[moduleId] = fData.filters;
                         fData.filters.forEach(f => {
                             const opt = document.createElement('option');
                             opt.value = f.id;
