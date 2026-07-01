@@ -55,6 +55,104 @@ $v = time();
         .ck-editor__editable {
             min-height: 250px;
         }
+        /* Signature insert button & dropdown */
+        .sig-insert-wrap {
+            position: relative;
+            display: inline-block;
+        }
+        .sig-insert-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            border: 1.5px solid rgba(123,94,240,0.35);
+            border-radius: 8px;
+            background: rgba(123,94,240,0.06);
+            color: var(--primary);
+            cursor: pointer;
+            transition: all 0.18s;
+            white-space: nowrap;
+        }
+        .sig-insert-btn:hover {
+            background: rgba(123,94,240,0.12);
+            border-color: var(--primary);
+        }
+        .sig-insert-btn i { font-size: 11px; }
+        .sig-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            min-width: 240px;
+            background: #fff;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+            z-index: 9999;
+            overflow: hidden;
+            padding: 6px;
+        }
+        .sig-dropdown.open { display: block; }
+        .sig-drop-header {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            padding: 6px 10px 4px;
+        }
+        .sig-drop-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .sig-drop-item:hover { background: rgba(123,94,240,0.07); }
+        .sig-drop-icon {
+            width: 28px; height: 28px;
+            border-radius: 8px;
+            background: linear-gradient(135deg,rgba(123,94,240,0.14),rgba(168,85,247,0.08));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; color: var(--primary); flex-shrink: 0;
+        }
+        .sig-drop-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-main);
+            flex: 1;
+        }
+        .sig-drop-default-star { color: #f59e0b; font-size: 11px; }
+        .sig-drop-empty {
+            padding: 12px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .sig-drop-footer {
+            border-top: 1px solid var(--border);
+            margin-top: 4px;
+            padding: 6px;
+        }
+        .sig-drop-manage {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 7px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s;
+        }
+        .sig-drop-manage:hover { background: rgba(123,94,240,0.06); }
     </style>
 </head>
 <body>
@@ -129,7 +227,23 @@ $v = time();
                 </div>
 
                 <div class="form-group" style="margin-top: 15px; display: flex; flex-direction: column; gap: 6px;">
-                    <label class="form-label">Message Body *</label>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                        <label class="form-label" style="margin:0;">Message Body *</label>
+                        <div class="sig-insert-wrap" id="sigInsertWrap">
+                            <button type="button" class="sig-insert-btn" onclick="toggleSigDropdown(event)">
+                                <i class="fa-solid fa-signature"></i> Insert Signature <i class="fa-solid fa-chevron-down" style="font-size:9px;"></i>
+                            </button>
+                            <div class="sig-dropdown" id="sigDropdown">
+                                <div class="sig-drop-header">Your Signatures</div>
+                                <div id="sigDropList"><div class="sig-drop-empty"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div></div>
+                                <div class="sig-drop-footer">
+                                    <a href="email_signatures.php" target="_blank" class="sig-drop-manage">
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Manage Signatures
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <textarea id="templateBody" class="form-control" rows="8" placeholder="Message content..." style="width: 100%; box-sizing: border-box; font-family: inherit;"></textarea>
                 </div>
 
@@ -152,6 +266,8 @@ $v = time();
     <script>
         const API = 'api/campaigns_api.php';
         let templatesList = [];
+        let signaturesList = [];
+        let _sigDropOpen = false;
 
         function openModal(id) { document.getElementById(id).classList.add('show'); }
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }
@@ -246,13 +362,22 @@ $v = time();
             document.getElementById('templateName').value = editData ? editData.name : '';
             document.getElementById('templateType').value = editData ? editData.type : 'email';
             document.getElementById('templateSubject').value = editData ? (editData.subject || '') : '';
-            
-            const bodyVal = editData ? editData.body : '';
+
+            let bodyVal = editData ? editData.body : '';
+
+            // Auto-append default signature for new templates
+            if (!editData) {
+                const defSig = signaturesList.find(s => s.is_default == 1);
+                if (defSig) {
+                    bodyVal = (bodyVal ? bodyVal + '<br><br>' : '') + defSig.content;
+                }
+            }
+
             document.getElementById('templateBody').value = bodyVal;
             if (editorInstance) {
                 editorInstance.setData(bodyVal);
             }
-            
+
             onTypeChange();
             openModal('templateModal');
         }
@@ -415,9 +540,64 @@ $v = time();
             }
         }
 
+        /* ── Signature helpers ── */
+        async function loadSignatures() {
+            try {
+                const res = await fetch(`${API}?action=list_signatures`);
+                const data = await res.json();
+                if (data.success) {
+                    signaturesList = data.signatures;
+                    renderSigDropdown();
+                }
+            } catch(e) { /* silent */ }
+        }
+
+        function renderSigDropdown() {
+            const list = document.getElementById('sigDropList');
+            if (!list) return;
+            if (!signaturesList || signaturesList.length === 0) {
+                list.innerHTML = `<div class="sig-drop-empty">No signatures yet. <a href="email_signatures.php" target="_blank" style="color:var(--primary);">Create one →</a></div>`;
+                return;
+            }
+            list.innerHTML = signaturesList.map(s => `
+                <div class="sig-drop-item" onclick="insertSignature(${s.id})">
+                    <div class="sig-drop-icon"><i class="fa-solid fa-signature"></i></div>
+                    <span class="sig-drop-name">${escapeHtml(s.name)}</span>
+                    ${s.is_default ? '<i class="fa-solid fa-star sig-drop-default-star" title="Default"></i>' : ''}
+                </div>`).join('');
+        }
+
+        function toggleSigDropdown(e) {
+            e.stopPropagation();
+            const dd = document.getElementById('sigDropdown');
+            _sigDropOpen = !_sigDropOpen;
+            dd.classList.toggle('open', _sigDropOpen);
+        }
+
+        function insertSignature(id) {
+            const sig = signaturesList.find(s => s.id == id);
+            if (!sig) return;
+            const type = document.getElementById('templateType').value;
+            if (type === 'email' && editorInstance) {
+                const currentData = editorInstance.getData();
+                editorInstance.setData(currentData + (currentData ? '<br><br>' : '') + sig.content);
+            }
+            // close dropdown
+            document.getElementById('sigDropdown').classList.remove('open');
+            _sigDropOpen = false;
+        }
+
+        document.addEventListener('click', (e) => {
+            if (_sigDropOpen && !e.target.closest('#sigInsertWrap')) {
+                document.getElementById('sigDropdown')?.classList.remove('open');
+                _sigDropOpen = false;
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', () => {
             loadTemplates();
             loadCampaignFieldPlaceholders();
+            loadSignatures();
             initCKEditor();
         });
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }

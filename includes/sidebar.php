@@ -142,6 +142,10 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
                 class="nav-item <?= ($currentFile === 'campaign_templates.php') ? 'active' : '' ?>">
                 <i class="fa-solid fa-envelope-open-text"></i><span class="nav-text">Templates</span>
             </a>
+            <a href="email_signatures.php"
+                class="nav-item <?= ($currentFile === 'email_signatures.php') ? 'active' : '' ?>">
+                <i class="fa-solid fa-signature"></i><span class="nav-text">Signatures</span>
+            </a>
         </div>
         </div>
 

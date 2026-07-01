@@ -590,7 +590,21 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             UNIQUE KEY uq_campaign_field_key (field_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    // 18. Email Signatures
+    $conn->exec("
+        CREATE TABLE IF NOT EXISTS {$prefix}email_signatures (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            content MEDIUMTEXT NOT NULL,
+            is_default TINYINT(1) DEFAULT 0,
+            created_by INT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
 }
+
 
 function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = null): array
 {

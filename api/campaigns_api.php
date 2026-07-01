@@ -619,8 +619,63 @@ try {
             
             commerce_json_response(['success' => true, 'contacts' => $contacts]);
 
+        /* ════════════════════ EMAIL SIGNATURES ════════════════════ */
+
+        case 'list_signatures':
+            $stmt = $conn->query("SELECT id, name, content, is_default, created_at FROM {$prefix}email_signatures ORDER BY is_default DESC, created_at DESC");
+            $sigs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($sigs as &$s) { $s['is_default'] = (int)$s['is_default']; }
+            unset($s);
+            commerce_json_response(['success' => true, 'signatures' => $sigs]);
+
+        case 'get_signature':
+            $id = (int)($input['id'] ?? $_GET['id'] ?? 0);
+            if (!$id) throw new RuntimeException('Signature ID required');
+            $stmt = $conn->prepare("SELECT * FROM {$prefix}email_signatures WHERE id = ?");
+            $stmt->execute([$id]);
+            $sig = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$sig) throw new RuntimeException('Signature not found');
+            commerce_json_response(['success' => true, 'signature' => $sig]);
+
+        case 'save_signature':
+            $id = (int)($input['id'] ?? 0);
+            $name = trim($input['name'] ?? '');
+            $content = trim($input['content'] ?? '');
+            $isDefault = (int)($input['is_default'] ?? 0);
+            if (!$name) throw new RuntimeException('Signature name is required');
+            if (!$content) throw new RuntimeException('Signature content is required');
+
+            if ($id > 0) {
+                $stmt = $conn->prepare("UPDATE {$prefix}email_signatures SET name=?, content=?, is_default=?, updated_at=NOW() WHERE id=?");
+                $stmt->execute([$name, $content, $isDefault, $id]);
+                $savedId = $id;
+            } else {
+                $stmt = $conn->prepare("INSERT INTO {$prefix}email_signatures (name, content, is_default, created_by) VALUES (?,?,?,?)");
+                $stmt->execute([$name, $content, $isDefault, $userId]);
+                $savedId = (int)$conn->lastInsertId();
+            }
+            // If this is now default, un-default all others
+            if ($isDefault) {
+                $conn->prepare("UPDATE {$prefix}email_signatures SET is_default=0 WHERE id != ?")->execute([$savedId]);
+            }
+            commerce_json_response(['success' => true, 'id' => $savedId]);
+
+        case 'delete_signature':
+            $id = (int)($input['id'] ?? 0);
+            if (!$id) throw new RuntimeException('Signature ID required');
+            $conn->prepare("DELETE FROM {$prefix}email_signatures WHERE id=?")->execute([$id]);
+            commerce_json_response(['success' => true]);
+
+        case 'set_default_signature':
+            $id = (int)($input['id'] ?? 0);
+            if (!$id) throw new RuntimeException('Signature ID required');
+            $conn->prepare("UPDATE {$prefix}email_signatures SET is_default=0")->execute();
+            $conn->prepare("UPDATE {$prefix}email_signatures SET is_default=1 WHERE id=?")->execute([$id]);
+            commerce_json_response(['success' => true]);
+
         default:
             throw new RuntimeException("Unknown action: $action");
+
     }
 } catch (Throwable $e) {
     commerce_json_response(['success' => false, 'error' => $e->getMessage()], 400);
