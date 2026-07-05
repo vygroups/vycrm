@@ -396,7 +396,7 @@ foreach ($module['blocks'] as $block) {
                                             $cfg = $field['config'] ?? []; $linkedModId = $cfg['linked_module_id'] ?? 0;
                                             $displayTxt = '';
                                             if ($val) {
-                                                // Find first field marked as is_title in config, else fallback to text/name/email field
+                                                // Find the title/display field of the linked module
                                                 $dfStmt = $conn->prepare("SELECT id, field_type, config FROM {$prefix}module_fields WHERE module_id = ? ORDER BY sort_order ASC");
                                                 $dfStmt->execute([$linkedModId]);
                                                 $allFields = $dfStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -412,21 +412,40 @@ foreach ($module['blocks'] as $block) {
                                                         $fallbackFieldId = $f['id'];
                                                     }
                                                 }
-                                                if (!$displayFieldId) {
-                                                    $displayFieldId = $fallbackFieldId;
+                                                if (!$displayFieldId) $displayFieldId = $fallbackFieldId;
+
+                                                // If stored value is non-numeric (e.g. imported by name), resolve to record ID
+                                                if ($val !== '' && !ctype_digit((string)$val) && $displayFieldId) {
+                                                    $resolveStmt = $conn->prepare("
+                                                        SELECT mrv.record_id
+                                                        FROM {$prefix}module_record_values mrv
+                                                        JOIN {$prefix}module_records mr ON mr.id = mrv.record_id
+                                                        WHERE mrv.field_id = ? AND LOWER(mrv.value) = LOWER(?) AND mr.module_id = ?
+                                                        LIMIT 1
+                                                    ");
+                                                    $resolveStmt->execute([$displayFieldId, $val, $linkedModId]);
+                                                    $resolvedId = $resolveStmt->fetchColumn();
+                                                    if ($resolvedId) {
+                                                        // Persist the resolved numeric ID back into the record
+                                                        $updValStmt = $conn->prepare("UPDATE {$prefix}module_record_values SET value = ? WHERE record_id = ? AND field_id = ?");
+                                                        $updValStmt->execute([$resolvedId, $recordId, $fid]);
+                                                        $val = (string)$resolvedId;
+                                                    } else {
+                                                        // No matching record found — show dash
+                                                        $displayTxt = '-';
+                                                    }
                                                 }
 
-                                                if ($displayFieldId) {
+                                                if ($displayTxt === '' && $displayFieldId && ctype_digit((string)$val)) {
                                                     $rvStmt = $conn->prepare("SELECT value FROM {$prefix}module_record_values WHERE record_id = ? AND field_id = ?");
                                                     $rvStmt->execute([$val, $displayFieldId]);
-                                                    $dval = $rvStmt->fetchColumn();
-                                                    $dval = trim((string)$dval);
-                                                    if ($dval === '') $dval = '(Empty)';
-                                                    $displayTxt = $dval . " (#$val)";
+                                                    $dval = trim((string)$rvStmt->fetchColumn());
+                                                    $displayTxt = $dval !== '' ? $dval : '-';
                                                 }
-                                                if (!$displayTxt) $displayTxt = "Record #$val";
+                                                if (!$displayTxt) $displayTxt = "-";
                                             }
                                         ?>
+
                                         <div class="dm-api-picker-wrapper" data-field-id="<?= $fid ?>" data-linked-module="<?= $linkedModId ?>" style="position: relative;">
                                             <input type="hidden" class="dm-field dm-api-hidden" data-field-id="<?= $fid ?>" value="<?= htmlspecialchars($val) ?>" <?= $field['is_required'] ? 'required' : '' ?>>
                                             <div style="display:flex; align-items:center; gap:8px;">

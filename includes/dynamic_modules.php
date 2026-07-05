@@ -470,9 +470,16 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
         $inClause = implode(',', array_map('intval', $recordIds));
         $vStmt = $conn->query("
             SELECT rv.record_id, rv.field_id,
-                IF(f.field_type = 'api_call_picker' AND rv.value REGEXP '^[0-9]+$', 
-                   COALESCE((SELECT value FROM {$p}module_record_values WHERE record_id = CAST(rv.value AS UNSIGNED) ORDER BY field_id ASC LIMIT 1), rv.value), 
-                   rv.value) as value
+                IF(f.field_type = 'api_call_picker',
+                    IF(rv.value REGEXP '^[0-9]+$',
+                        COALESCE(
+                            (SELECT value FROM {$p}module_record_values WHERE record_id = CAST(rv.value AS UNSIGNED) ORDER BY field_id ASC LIMIT 1),
+                            ''
+                        ),
+                        ''
+                    ),
+                    rv.value
+                ) as value
             FROM {$p}module_record_values rv
             JOIN {$p}module_fields f ON f.id = rv.field_id
             WHERE rv.record_id IN ($inClause)
@@ -480,6 +487,7 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
         foreach ($vStmt->fetchAll(PDO::FETCH_ASSOC) as $v) {
             $valueMap[(int) $v['record_id']][(int) $v['field_id']] = $v['value'];
         }
+
     }
 
     foreach ($records as &$rec) {

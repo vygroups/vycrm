@@ -38,15 +38,42 @@ if (empty($_FILES['import_file']) || $_FILES['import_file']['error'] !== UPLOAD_
 $fileTmpPath = $_FILES['import_file']['tmp_name'];
 $fileName = $_FILES['import_file']['name'];
 
-// Fetch all dynamic fields of the module
+// Fetch all dynamic fields of the module (with config for linked_module_id)
 $fStmt = $conn->prepare("
-    SELECT id, field_key, label, field_type 
+    SELECT id, field_key, label, field_type, config
     FROM {$prefix}module_fields 
     WHERE module_id = ? 
     ORDER BY sort_order ASC
 ");
 $fStmt->execute([$moduleId]);
 $fields = $fStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Pre-build: for each api_call_picker field, find its title display field ID in the linked module
+$pickerDisplayField = []; // field_id => [linked_module_id, display_field_id]
+foreach ($fields as $f) {
+    if ($f['field_type'] === 'api_call_picker') {
+        $cfg = json_decode($f['config'] ?: '{}', true);
+        $linkedModId = (int)($cfg['linked_module_id'] ?? 0);
+        if ($linkedModId) {
+            // Find title/display field of the linked module
+            $dfStmt = $conn->prepare("SELECT id, field_type, config FROM {$prefix}module_fields WHERE module_id = ? ORDER BY sort_order ASC");
+            $dfStmt->execute([$linkedModId]);
+            $linkedFields = $dfStmt->fetchAll(PDO::FETCH_ASSOC);
+            $displayFieldId = null; $fallbackFieldId = null;
+            foreach ($linkedFields as $lf) {
+                $lfc = json_decode($lf['config'] ?: '{}', true);
+                if (!empty($lfc['is_title'])) { $displayFieldId = $lf['id']; break; }
+                if (!$fallbackFieldId && in_array($lf['field_type'], ['text','name','email'])) { $fallbackFieldId = $lf['id']; }
+            }
+            $pickerDisplayField[$f['id']] = [
+                'linked_module_id' => $linkedModId,
+                'display_field_id' => $displayFieldId ?: $fallbackFieldId
+            ];
+        }
+    }
+}
+// Cache: linked_module_id + name => record_id (avoids repeated queries per row)
+$pickerResolveCache = [];
 
 try {
     $rows = get_rows_from_file($fileTmpPath, $fileName);
@@ -87,6 +114,7 @@ if (empty($headerMap)) {
     ]);
 }
 
+
 $conn->beginTransaction();
 try {
     $recordsImported = 0;
@@ -112,12 +140,36 @@ try {
                 $fieldId = $headerMap[$index];
                 $fieldType = $fieldTypes[$fieldId];
                 $valClean = trim($val);
+
                 if ($fieldType === 'checkbox') {
                     $valClean = in_array(strtolower($valClean), ['yes', '1', 'true', 'checked', 'on']) ? '1' : '0';
+                } elseif ($fieldType === 'api_call_picker' && $valClean !== '' && !ctype_digit($valClean)) {
+                    // Non-numeric: try to resolve the text name to a real record ID
+                    $pInfo = $pickerDisplayField[$fieldId] ?? null;
+                    if ($pInfo && $pInfo['display_field_id']) {
+                        $cacheKey = $pInfo['linked_module_id'] . '|' . strtolower($valClean);
+                        if (!array_key_exists($cacheKey, $pickerResolveCache)) {
+                            $rStmt = $conn->prepare("
+                                SELECT mrv.record_id
+                                FROM {$prefix}module_record_values mrv
+                                JOIN {$prefix}module_records mr ON mr.id = mrv.record_id
+                                WHERE mrv.field_id = ? AND LOWER(mrv.value) = LOWER(?) AND mr.module_id = ?
+                                LIMIT 1
+                            ");
+                            $rStmt->execute([$pInfo['display_field_id'], $valClean, $pInfo['linked_module_id']]);
+                            $resolvedId = $rStmt->fetchColumn();
+                            $pickerResolveCache[$cacheKey] = $resolvedId ? (string)$resolvedId : '';
+                        }
+                        $valClean = $pickerResolveCache[$cacheKey];
+                    } else {
+                        $valClean = '';
+                    }
                 }
+
                 $upsertStmt->execute([$recordId, $fieldId, $valClean]);
             }
         }
+
         $recordsImported++;
     }
     $conn->commit();
