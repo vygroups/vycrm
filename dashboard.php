@@ -107,7 +107,7 @@ try {
         $trendLabels = [];
         for ($i = 6; $i >= 0; $i--) {
             $date = date('Y-m-d', strtotime("-$i days"));
-            $displayDate = date('M d', strtotime("-$i days"));
+            $displayDate = date('D d', strtotime("-$i days"));
             $trendData[$date] = 0;
             $trendLabels[$date] = $displayDate;
         }
@@ -117,7 +117,31 @@ try {
             }
         }
 
-        $dashboardStats['dyn_' . $dm['slug']][0]['value'] = $total;
+        // Fetch custom saved filters
+        $filtersStmt = $conn->prepare("SELECT id, name, filter_rules FROM {$prefix}module_saved_filters WHERE user_id = ? AND module_id = ? ORDER BY name ASC");
+        $filtersStmt->execute([$user_id, $dm['id']]);
+        $savedFiltersList = $filtersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $moduleFilters = [];
+        foreach ($savedFiltersList as $filterRow) {
+            $filterRules = json_decode($filterRow['filter_rules'], true);
+            $filterCount = 0;
+            try {
+                $res = dm_fetch_records($conn, $prefix, $dm['id'], null, 1, 0, $filterRules);
+                $filterCount = $res['total'];
+            } catch (Exception $ex) {}
+            
+            $moduleFilters[] = [
+                'id' => $filterRow['id'],
+                'name' => $filterRow['name'],
+                'count' => $filterCount
+            ];
+        }
+
+        $dashboardStats['dyn_' . $dm['slug']] = [
+            ['label' => 'Total Records', 'value' => $total, 'icon' => 'fa-solid fa-database', 'desc' => 'Total records in ' . $dm['name']],
+            ['label' => 'Added Today', 'value' => $today, 'icon' => 'fa-solid fa-calendar-day', 'desc' => 'Records created today']
+        ];
         $dashboardModules['dyn_' . $dm['slug']]['chart_data'] = [
             'today' => $today,
             'week' => $week,
@@ -125,6 +149,8 @@ try {
             'trend_labels' => array_values($trendLabels),
             'trend_data' => array_values($trendData)
         ];
+        $dashboardModules['dyn_' . $dm['slug']]['filters'] = $moduleFilters;
+        $dashboardModules['dyn_' . $dm['slug']]['module_id'] = $dm['id'];
     }
 } catch (Exception $e) {
     // Keep default zero-state cards on dashboard.
@@ -286,6 +312,169 @@ try {
                 grid-template-columns: 1fr;
             }
         }
+        .scrollable-cards-container {
+            display: flex;
+            overflow-x: auto;
+            gap: 20px;
+            padding: 10px 5px 20px 5px;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            width: 100%;
+        }
+        .scrollable-cards-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        .scrollable-cards-container::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.02);
+            border-radius: 10px;
+        }
+        .scrollable-cards-container::-webkit-scrollbar-thumb {
+            background: rgba(123, 94, 240, 0.2);
+            border-radius: 10px;
+        }
+        .scrollable-cards-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(123, 94, 240, 0.4);
+        }
+        .scrollable-card {
+            flex: 0 0 280px;
+            height: 160px;
+            background: var(--surface);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(123, 94, 240, 0.08);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+        .scrollable-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--primary);
+        }
+        .scrollable-card .card-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .scrollable-card .card-title-text {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .scrollable-card .card-val-text {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--text-main);
+            line-height: 1.1;
+            margin-top: 8px;
+        }
+        .scrollable-card .card-icon-box {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .scrollable-card .card-footer-action {
+            font-size: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: auto;
+        }
+        .dyn-details-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 24px;
+            margin-top: 24px;
+            width: 100%;
+        }
+        @media (max-width: 1024px) {
+            .dyn-details-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .premium-metric-card {
+            background: linear-gradient(135deg, #ffffff, #fcfbff);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 10px 30px -15px rgba(123, 94, 240, 0.15);
+            border: 1px solid rgba(123, 94, 240, 0.08);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .metric-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .metric-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .metric-row-label-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .metric-progress-bg {
+            height: 8px;
+            background: #f1f0f7;
+            border-radius: 999px;
+            overflow: hidden;
+            width: 100%;
+        }
+        .metric-progress-bar {
+            height: 100%;
+            border-radius: 999px;
+            transition: width 0.8s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .premium-chart-card {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 10px 30px -15px rgba(123, 94, 240, 0.15);
+            border: 1px solid rgba(123, 94, 240, 0.08);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .chart-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chart-canvas-container {
+            width: 100%;
+            height: 280px;
+            position: relative;
+        }
     </style>
 </head>
 <body>
@@ -365,35 +554,136 @@ try {
                 $firstModuleKey = array_key_first($dashboardModules);
                 foreach ($dashboardStats as $moduleKey => $stats): ?>
                     <?php if (strpos($moduleKey, 'dyn_') === 0): 
-                        $dynChart = $dashboardModules[$moduleKey]['chart_data'] ?? ['today'=>0, 'week'=>0, 'month'=>0];
+                        $mId = $dashboardModules[$moduleKey]['module_id'];
+                        $filters = $dashboardModules[$moduleKey]['filters'] ?? [];
+                        $chartData = $dashboardModules[$moduleKey]['chart_data'] ?? ['today'=>0, 'week'=>0, 'month'=>0];
+                        $colorsList = ['#7b5ef0', '#10b981', '#3b82f6', '#ec4899', '#f59e0b', '#8b5cf6', '#06b6d4', '#14b8a6'];
+                        
+                        $totalVal = (int)$stats[0]['value'];
+                        $todayVal = (int)$stats[1]['value'];
+                        $weekVal = (int)$chartData['week'];
+                        $monthVal = (int)$chartData['month'];
+                        
+                        $todayPercent = $totalVal > 0 ? min(100, round(($todayVal / $totalVal) * 100)) : 0;
+                        $weekPercent = $totalVal > 0 ? min(100, round(($weekVal / $totalVal) * 100)) : 0;
+                        $monthPercent = $totalVal > 0 ? min(100, round(($monthVal / $totalVal) * 100)) : 0;
                     ?>
-                        <div class="crm-card module-stat-card dyn-chart-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== $firstModuleKey ? 'style="display:none;"' : '' ?>>
-                            <div class="dyn-stats-header">
-                                <div class="dyn-stat-pill">
-                                    <span>Total Records</span>
-                                    <strong><?= (int) $stats[0]['value'] ?></strong>
-                                </div>
-                                <div class="dyn-stat-pill">
-                                    <span>Added Today</span>
-                                    <strong><?= (int) $dynChart['today'] ?></strong>
-                                </div>
-                                <div class="dyn-stat-pill">
-                                    <span>Added This Week</span>
-                                    <strong><?= (int) $dynChart['week'] ?></strong>
-                                </div>
-                                <div class="dyn-stat-pill">
-                                    <span>Added This Month</span>
-                                    <strong><?= (int) $dynChart['month'] ?></strong>
-                                </div>
+                        <div class="module-stat-card" data-module="<?= htmlspecialchars($moduleKey) ?>" <?= $moduleKey !== $firstModuleKey ? 'style="display:none; width:100%;"' : 'style="width:100%;"' ?>>
+                            <!-- Top: Scrollable filters cards -->
+                            <div class="scrollable-cards-container">
+                                <!-- Card 1: Total Records -->
+                                <a href="module_view.php?module=<?= $mId ?>" class="scrollable-card" style="border-left: 5px solid <?= $colorsList[0] ?>;">
+                                    <div class="card-header-flex">
+                                        <div style="flex:1; min-width:0;">
+                                            <div class="card-title-text" title="Total Records">Total Records</div>
+                                            <div class="card-val-text"><?= number_format($totalVal) ?></div>
+                                        </div>
+                                        <div class="card-icon-box" style="background: <?= $colorsList[0] ?>12; color: <?= $colorsList[0] ?>;">
+                                            <i class="fa-solid fa-database"></i>
+                                        </div>
+                                    </div>
+                                    <div class="card-footer-action" style="color: <?= $colorsList[0] ?>;">
+                                        View All Records <i class="fa-solid fa-arrow-right-long"></i>
+                                    </div>
+                                </a>
+
+                                <!-- Card 2: Added Today -->
+                                <?php 
+                                $todayFilterRules = json_encode([['field_id' => 'created_at', 'operator' => 'today', 'value' => '']]);
+                                ?>
+                                <a href="module_view.php?module=<?= $mId ?>&filter_rules=<?= urlencode($todayFilterRules) ?>" class="scrollable-card" style="border-left: 5px solid <?= $colorsList[1] ?>;">
+                                    <div class="card-header-flex">
+                                        <div style="flex:1; min-width:0;">
+                                            <div class="card-title-text" title="Added Today">Added Today</div>
+                                            <div class="card-val-text"><?= number_format($todayVal) ?></div>
+                                        </div>
+                                        <div class="card-icon-box" style="background: <?= $colorsList[1] ?>12; color: <?= $colorsList[1] ?>;">
+                                            <i class="fa-solid fa-calendar-day"></i>
+                                        </div>
+                                    </div>
+                                    <div class="card-footer-action" style="color: <?= $colorsList[1] ?>;">
+                                        View Today's Records <i class="fa-solid fa-arrow-right-long"></i>
+                                    </div>
+                                </a>
+
+                                <!-- Custom Saved Filters -->
+                                <?php foreach ($filters as $index => $filter): 
+                                    $color = $colorsList[($index + 2) % count($colorsList)];
+                                ?>
+                                    <a href="module_view.php?module=<?= $mId ?>&filter_id=<?= $filter['id'] ?>" class="scrollable-card" style="border-left: 5px solid <?= $color ?>;">
+                                        <div class="card-header-flex">
+                                            <div style="flex:1; min-width:0;">
+                                                <div class="card-title-text" title="<?= htmlspecialchars($filter['name']) ?>"><?= htmlspecialchars($filter['name']) ?></div>
+                                                <div class="card-val-text"><?= number_format((int)$filter['count']) ?></div>
+                                            </div>
+                                            <div class="card-icon-box" style="background: <?= $color ?>12; color: <?= $color ?>;">
+                                                <i class="fa-solid fa-filter"></i>
+                                            </div>
+                                        </div>
+                                        <div class="card-footer-action" style="color: <?= $color ?>;">
+                                            Apply Filter <i class="fa-solid fa-arrow-right-long"></i>
+                                        </div>
+                                    </a>
+                                <?php endforeach; ?>
                             </div>
-                            <div class="dyn-charts-wrapper">
-                                <div class="dyn-chart-container">
-                                    <h4 style="margin-bottom:15px; color:var(--text); font-size:15px; text-align:center;">Creation Overview</h4>
-                                    <canvas id="chart_bar_<?= htmlspecialchars($moduleKey) ?>"></canvas>
+
+                            <!-- Bottom: Metrics & Charts Grid -->
+                            <div class="dyn-details-grid">
+                                <!-- Left Column: Activity Breakdown Summary -->
+                                <div class="premium-metric-card">
+                                    <h4 class="metric-title">
+                                        <i class="fa-solid fa-chart-simple" style="color: #7b5ef0;"></i> Activity Overview
+                                    </h4>
+                                    
+                                    <div class="metric-row">
+                                        <div class="metric-row-label-flex">
+                                            <span>Added Today</span>
+                                            <span style="color: var(--text-main); font-weight:700;"><?= $todayVal ?> records (<?= $todayPercent ?>%)</span>
+                                        </div>
+                                        <div class="metric-progress-bg">
+                                            <div class="metric-progress-bar" style="width: <?= $todayPercent ?>%; background: #10b981;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="metric-row">
+                                        <div class="metric-row-label-flex">
+                                            <span>Added This Week</span>
+                                            <span style="color: var(--text-main); font-weight:700;"><?= $weekVal ?> records (<?= $weekPercent ?>%)</span>
+                                        </div>
+                                        <div class="metric-progress-bg">
+                                            <div class="metric-progress-bar" style="width: <?= $weekPercent ?>%; background: #3b82f6;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="metric-row">
+                                        <div class="metric-row-label-flex">
+                                            <span>Added This Month</span>
+                                            <span style="color: var(--text-main); font-weight:700;"><?= $monthVal ?> records (<?= $monthPercent ?>%)</span>
+                                        </div>
+                                        <div class="metric-progress-bg">
+                                            <div class="metric-progress-bar" style="width: <?= $monthPercent ?>%; background: #ec4899;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div style="background: rgba(123, 94, 240, 0.04); border-radius: 16px; padding: 15px; display: flex; align-items: center; gap: 12px; margin-top: auto; border: 1px dashed rgba(123,94,240,0.15);">
+                                        <div style="font-size: 24px; color: #7b5ef0;"><i class="fa-regular fa-lightbulb"></i></div>
+                                        <div style="font-size: 12px; line-height: 1.4; color: var(--text-muted);">
+                                            <strong>Pro Tip:</strong> Click any saved filter card above to immediately view segmented records in list view.
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="dyn-chart-container">
-                                    <h4 style="margin-bottom:15px; color:var(--text); font-size:15px; text-align:center;">7-Day Trend</h4>
-                                    <canvas id="chart_line_<?= htmlspecialchars($moduleKey) ?>"></canvas>
+
+                                <!-- Right Column: Modern 7-Day Trend Chart -->
+                                <div class="premium-chart-card">
+                                    <div class="chart-header-flex">
+                                        <h4 class="metric-title" style="font-size: 15px;">
+                                            <i class="fa-solid fa-circle-trend" style="color: #7b5ef0;"></i> 7-Day Record Trend
+                                        </h4>
+                                        <span style="font-size: 12px; font-weight:700; color: #7b5ef0; background: rgba(123,94,240,0.08); padding: 4px 10px; border-radius: 8px;">Activity analytics</span>
+                                    </div>
+                                    <div class="chart-canvas-container">
+                                        <canvas id="chart_trend_<?= htmlspecialchars($moduleKey) ?>"></canvas>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -518,69 +808,71 @@ document.addEventListener('DOMContentLoaded', function() {
     const themeColor = '#7b5ef0';
     for (const [key, module] of Object.entries(dashboardModules)) {
         if (key.startsWith('dyn_') && module.chart_data) {
-            const ctxBar = document.getElementById('chart_bar_' + key);
-            const ctxLine = document.getElementById('chart_line_' + key);
-            
-            if (ctxBar) {
-                new Chart(ctxBar, {
-                    type: 'bar',
-                    data: {
-                        labels: ['Today', 'This Week', 'This Month'],
-                        datasets: [{
-                            label: 'Records Created',
-                            data: [module.chart_data.today, module.chart_data.week, module.chart_data.month],
-                            backgroundColor: [
-                                'rgba(123, 94, 240, 0.7)',
-                                'rgba(123, 94, 240, 0.85)',
-                                'rgba(123, 94, 240, 1)'
-                            ],
-                            borderRadius: 6,
-                            barPercentage: 0.5
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
-                        scales: {
-                            y: { beginAtZero: true, ticks: { precision: 0 } },
-                            x: { grid: { display: false } }
-                        }
-                    }
-                });
-            }
-
-            if (ctxLine) {
-                new Chart(ctxLine, {
+            const ctxTrend = document.getElementById('chart_trend_' + key);
+            if (ctxTrend) {
+                const gradient = ctxTrend.getContext('2d').createLinearGradient(0, 0, 0, 250);
+                gradient.addColorStop(0, 'rgba(123, 94, 240, 0.35)');
+                gradient.addColorStop(1, 'rgba(123, 94, 240, 0.00)');
+                
+                new Chart(ctxTrend, {
                     type: 'line',
                     data: {
                         labels: module.chart_data.trend_labels,
                         datasets: [{
-                            label: 'Records',
+                            label: 'Records Created',
                             data: module.chart_data.trend_data,
                             borderColor: themeColor,
-                            backgroundColor: 'rgba(123, 94, 240, 0.1)',
+                            backgroundColor: gradient,
                             borderWidth: 3,
                             fill: true,
-                            tension: 0.4,
+                            tension: 0.35,
                             pointBackgroundColor: '#ffffff',
                             pointBorderColor: themeColor,
                             pointBorderWidth: 2,
                             pointRadius: 4,
-                            pointHoverRadius: 6
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: themeColor,
+                            pointHoverBorderColor: '#ffffff',
+                            pointHoverBorderWidth: 2
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: { display: false }
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#1e293b',
+                                titleColor: '#ffffff',
+                                bodyColor: '#ffffff',
+                                padding: 12,
+                                cornerRadius: 10,
+                                displayColors: false
+                            }
                         },
                         scales: {
-                            y: { beginAtZero: true, ticks: { precision: 0 } },
-                            x: { grid: { display: false } }
+                            y: { 
+                                beginAtZero: true, 
+                                ticks: { 
+                                    precision: 0,
+                                    color: '#94a3b8',
+                                    font: { size: 11, weight: '600' }
+                                },
+                                grid: {
+                                    color: 'rgba(148, 163, 184, 0.1)',
+                                    drawBorder: false
+                                }
+                            },
+                            x: { 
+                                ticks: {
+                                    color: '#94a3b8',
+                                    font: { size: 11, weight: '600' }
+                                },
+                                grid: { 
+                                    display: false,
+                                    drawBorder: false
+                                } 
+                            }
                         }
                     }
                 });
