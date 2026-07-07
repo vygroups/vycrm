@@ -58,6 +58,84 @@ try {
             $modules = dm_fetch_active_modules($conn, $prefix);
             commerce_json_response(['success' => true, 'modules' => $modules]);
 
+        case 'list_active_with_stats':
+            $modules = dm_fetch_active_modules($conn, $prefix);
+            $modulesWithStats = [];
+            foreach ($modules as $m) {
+                // Total Count
+                $stmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ?");
+                $stmt->execute([$m['id']]);
+                $total = (int) $stmt->fetchColumn();
+
+                // Today Count
+                $todayStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND DATE(created_at) = CURDATE()");
+                $todayStmt->execute([$m['id']]);
+                $today = (int) $todayStmt->fetchColumn();
+
+                // Saved Filters
+                $filtersStmt = $conn->prepare("SELECT id, name, filter_rules FROM {$prefix}module_saved_filters WHERE user_id = ? AND module_id = ? ORDER BY name ASC");
+                $filtersStmt->execute([$userId, $m['id']]);
+                $savedFiltersList = $filtersStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $moduleFilters = [];
+                foreach ($savedFiltersList as $filterRow) {
+                    $filterRules = json_decode($filterRow['filter_rules'], true);
+                    $filterCount = 0;
+                    try {
+                        $res = dm_fetch_records($conn, $prefix, $m['id'], null, 1, 0, $filterRules);
+                        $filterCount = $res['total'];
+                    } catch (Exception $ex) {}
+                    
+                    $moduleFilters[] = [
+                        'id' => (int)$filterRow['id'],
+                        'name' => $filterRow['name'],
+                        'count' => $filterCount
+                    ];
+                }
+
+                $modulesWithStats[] = [
+                    'id' => (int)$m['id'],
+                    'name' => $m['name'],
+                    'slug' => $m['slug'],
+                    'icon' => $m['icon'],
+                    'description' => $m['description'],
+                    'total_records' => $total,
+                    'today_records' => $today,
+                    'filters' => $moduleFilters
+                ];
+            }
+
+            // Fetch Dashboard Widgets (Common Settings Filters)
+            $widgets = [];
+            try {
+                $wStmt = $conn->query("SELECT id, module_id, title, rules, color, icon FROM {$prefix}dashboard_widgets ORDER BY sort_order ASC, id ASC");
+                $widgetsList = $wStmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($widgetsList as $w) {
+                    $wRules = json_decode($w['rules'], true);
+                    $wCount = 0;
+                    try {
+                        $res = dm_fetch_records($conn, $prefix, (int)$w['module_id'], null, 1, 0, $wRules);
+                        $wCount = $res['total'];
+                    } catch (Exception $ex) {}
+                    
+                    $widgets[] = [
+                        'id' => (int)$w['id'],
+                        'module_id' => (int)$w['module_id'],
+                        'title' => $w['title'],
+                        'rules' => $w['rules'],
+                        'color' => $w['color'] ?: '#6366F1',
+                        'icon' => $w['icon'] ?: 'fa-solid fa-bell',
+                        'count' => $wCount
+                    ];
+                }
+            } catch (Exception $e) {}
+
+            commerce_json_response([
+                'success' => true, 
+                'modules' => $modulesWithStats,
+                'common_filters' => $widgets
+            ]);
+
         case 'get':
             $id = (int)($input['id'] ?? $_GET['id'] ?? 0);
             if (!$id) throw new RuntimeException('Module ID required');

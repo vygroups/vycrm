@@ -316,45 +316,47 @@ try {
             display: flex;
             overflow-x: auto;
             gap: 20px;
-            padding: 10px 5px 20px 5px;
+            padding: 10px 5px 25px 5px;
             scroll-behavior: smooth;
             -webkit-overflow-scrolling: touch;
             width: 100%;
         }
         .scrollable-cards-container::-webkit-scrollbar {
-            height: 8px;
+            height: 6px;
         }
         .scrollable-cards-container::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.02);
+            background: rgba(0, 0, 0, 0.01);
             border-radius: 10px;
         }
         .scrollable-cards-container::-webkit-scrollbar-thumb {
-            background: rgba(123, 94, 240, 0.2);
+            background: rgba(123, 94, 240, 0.15);
             border-radius: 10px;
+            transition: background 0.2s;
         }
         .scrollable-cards-container::-webkit-scrollbar-thumb:hover {
-            background: rgba(123, 94, 240, 0.4);
+            background: rgba(123, 94, 240, 0.35);
         }
         .scrollable-card {
             flex: 0 0 280px;
-            height: 160px;
-            background: var(--surface);
+            height: 155px;
+            background: #ffffff;
             border-radius: 20px;
-            padding: 20px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid rgba(123, 94, 240, 0.08);
+            padding: 22px;
+            box-shadow: 0 8px 25px -12px rgba(123, 94, 240, 0.12);
+            border: 1px solid rgba(123, 94, 240, 0.06);
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             text-decoration: none;
-            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
             cursor: pointer;
             box-sizing: border-box;
+            position: relative;
+            overflow: hidden;
         }
         .scrollable-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg);
-            border-color: var(--primary);
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px -8px rgba(123, 94, 240, 0.2);
         }
         .scrollable-card .card-header-flex {
             display: flex;
@@ -363,34 +365,38 @@ try {
             gap: 10px;
         }
         .scrollable-card .card-title-text {
-            font-size: 14px;
+            font-size: 11px;
             font-weight: 700;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .scrollable-card .card-val-text {
-            font-size: 32px;
+            font-size: 28px;
             font-weight: 800;
             color: var(--text-main);
             line-height: 1.1;
-            margin-top: 8px;
+            margin-top: 6px;
         }
         .scrollable-card .card-icon-box {
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
+            width: 46px;
+            height: 46px;
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
+            font-size: 18px;
             flex-shrink: 0;
+            transition: all 0.25s ease;
+        }
+        .scrollable-card:hover .card-icon-box {
+            transform: scale(1.08) rotate(5deg);
         }
         .scrollable-card .card-footer-action {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             display: flex;
             align-items: center;
@@ -401,7 +407,7 @@ try {
             display: grid;
             grid-template-columns: 350px 1fr;
             gap: 24px;
-            margin-top: 24px;
+            margin-top: 10px;
             width: 100%;
         }
         @media (max-width: 1024px) {
@@ -410,20 +416,22 @@ try {
             }
         }
         .premium-metric-card {
-            background: linear-gradient(135deg, #ffffff, #fcfbff);
+            background: #ffffff;
             border-radius: 24px;
             padding: 24px;
-            box-shadow: 0 10px 30px -15px rgba(123, 94, 240, 0.15);
-            border: 1px solid rgba(123, 94, 240, 0.08);
+            box-shadow: 0 10px 30px -15px rgba(123, 94, 240, 0.12);
+            border: 1px solid rgba(123, 94, 240, 0.06);
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
             gap: 20px;
         }
         .metric-title {
-            font-size: 16px;
-            font-weight: 700;
-            color: var(--text);
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text-main);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
             margin: 0;
             display: flex;
             align-items: center;
@@ -458,8 +466,8 @@ try {
             background: #ffffff;
             border-radius: 24px;
             padding: 24px;
-            box-shadow: 0 10px 30px -15px rgba(123, 94, 240, 0.15);
-            border: 1px solid rgba(123, 94, 240, 0.08);
+            box-shadow: 0 10px 30px -15px rgba(123, 94, 240, 0.12);
+            border: 1px solid rgba(123, 94, 240, 0.06);
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
@@ -474,6 +482,50 @@ try {
             width: 100%;
             height: 280px;
             position: relative;
+        }
+        .welcome-hero-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f7f5ff 100%);
+            border: 1px solid rgba(123, 94, 240, 0.12);
+            border-radius: 24px;
+            padding: 24px 30px;
+            margin-bottom: 30px;
+            color: #1e1b4b;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 30px -10px rgba(123, 94, 240, 0.12);
+        }
+        .module-selector {
+            background: #f1f0f7;
+            padding: 6px;
+            border-radius: 16px;
+            display: inline-flex;
+            gap: 4px;
+            border: 1px solid rgba(123, 94, 240, 0.08);
+            margin: 0;
+            flex-wrap: wrap;
+        }
+        .module-selector button {
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            border-radius: 12px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .module-selector button:hover:not(.active) {
+            background: rgba(123, 94, 240, 0.04);
+            color: var(--text);
+        }
+        .module-selector button.active {
+            background: #ffffff !important;
+            color: #1e1b4b !important;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05) !important;
         }
     </style>
 </head>
@@ -500,56 +552,56 @@ try {
             </div>
         </header>
         <div class="content-scroll">
-            <?php if (!empty($widgets)): ?>
-            <!-- Dynamic Insights Section -->
-            <div id="dynamicInsightsSection" style="margin-bottom: 15px;">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
-                    <?php foreach ($widgets as $w): 
-                        $wRules = json_decode($w['rules'], true);
-                        $wCount = 0;
-                        try {
-                            $res = dm_fetch_records($conn, $prefix, (int)$w['module_id'], null, 0, 0, $wRules);
-                            $wCount = $res['total'];
-                        } catch (Exception $ex) {}
-                        
-                        $cardColor = htmlspecialchars($w['color'] ?: 'var(--primary)');
-                        $cardIcon = htmlspecialchars($w['icon'] ?: 'fa-solid fa-bell');
-                        
-                        // Link to module view with filter rules
-                        $viewUrl = 'module_view.php?module=' . (int)$w['module_id'] . '&filter_rules=' . urlencode($w['rules']);
-                    ?>
-                        <a href="<?= $viewUrl ?>" class="crm-card" style="display: block; text-decoration: none; padding: 20px; border-left: 5px solid <?= $cardColor ?>; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--shadow-md)';" onmouseout="this.style.transform='none'; this.style.boxShadow='var(--shadow-sm)';">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                <div style="flex: 1; min-width: 0; padding-right: 15px;">
-                                    <div style="font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="<?= htmlspecialchars($w['title']) ?>">
-                                        <?= htmlspecialchars($w['title']) ?>
-                                    </div>
-                                    <div style="font-size: 28px; font-weight: 800; color: var(--text-main); line-height: 1;">
-                                        <?= number_format($wCount) ?>
-                                    </div>
-                                </div>
-                                <div style="width: 42px; height: 42px; border-radius: 12px; background: <?= $cardColor ?>12; color: <?= $cardColor ?>; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">
-                                    <i class="<?= $cardIcon ?>"></i>
-                                </div>
-                            </div>
-                            <div style="font-size: 12px; color: var(--primary); font-weight: 700; margin-top: 15px; display: flex; align-items: center; gap: 4px;">
-                                View Records <i class="fa-solid fa-arrow-right-long" style="font-size:10px;"></i>
-                            </div>
-                        </a>
+            <?php
+            $hour = (int)date('H');
+            $greeting = 'Good day';
+            $greetingIcon = 'fa-regular fa-sun';
+            if ($hour < 12) {
+                $greeting = 'Good Morning';
+                $greetingIcon = 'fa-solid fa-cloud-sun';
+            } elseif ($hour < 17) {
+                $greeting = 'Good Afternoon';
+                $greetingIcon = 'fa-solid fa-sun';
+            } else {
+                $greeting = 'Good Evening';
+                $greetingIcon = 'fa-solid fa-moon';
+            }
+            ?>
+            <!-- Welcome Hero Section -->
+            <div class="welcome-hero-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+                <div style="flex: 1; min-width: 280px; position: relative; z-index: 2;">
+                    <h2 style="font-size: 24px; font-weight: 800; color: #1e1b4b; margin: 0 0 6px; letter-spacing: -0.5px;">
+                        <?= $greeting ?>, <span style="background: linear-gradient(135deg, #7b5ef0 0%, #ec4899 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900;"><?= htmlspecialchars($_SESSION['first_name'] ?: $_SESSION['username']) ?></span>! <span style="font-style: normal;">👋</span>
+                    </h2>
+                    <p style="font-size: 13px; color: #64748b; margin: 0; font-weight: 500; line-height: 1.5;">Here is a summary of your CRM performance. Explore dynamic insights, review active modules, and track your daily targets in real-time.</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 14px; background: rgba(123, 94, 240, 0.05); padding: 12px 20px; border-radius: 16px; border: 1px solid rgba(123, 94, 240, 0.1); position: relative; z-index: 2;">
+                    <div style="width: 40px; height: 40px; border-radius: 12px; background: #7b5ef0; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 6px 15px -4px rgba(123, 94, 240, 0.4);">
+                        <i class="<?= $greetingIcon ?>"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 10px; font-weight: 700; color: #7b5ef0; text-transform: uppercase; letter-spacing: 0.5px;"><?= date('l') ?></div>
+                        <div style="font-size: 13px; font-weight: 800; color: #1e1b4b;"><?= date('M d, Y') ?></div>
+                    </div>
+                </div>
+                <div style="position: absolute; right: -50px; top: -50px; width: 220px; height: 220px; border-radius: 50%; background: rgba(123,94,240,0.03); pointer-events: none;"></div>
+                <div style="position: absolute; right: 80px; bottom: -80px; width: 190px; height: 190px; border-radius: 50%; background: rgba(123,94,240,0.02); pointer-events: none;"></div>
+            </div>
+
+            <!-- Dashboard Modules (Tabs, Cards, Metrics, Trend Chart) -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1.5px solid rgba(123, 94, 240, 0.08); padding-bottom: 15px; flex-wrap: wrap; gap: 15px;">
+                <h3 style="font-size: 14px; font-weight: 800; color: var(--text-main); text-transform: uppercase; letter-spacing: 1px; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-layer-group" style="color: #7b5ef0;"></i> Dashboard Modules
+                </h3>
+                <div class="module-selector" id="moduleSelector">
+                    <?php foreach ($dashboardModules as $moduleKey => $module): ?>
+                    <button type="button" data-module="<?= htmlspecialchars($moduleKey) ?>">
+                        <i class="<?= htmlspecialchars($module['icon']) ?>" style="font-size: 13px;"></i><?= htmlspecialchars($module['title']) ?>
+                    </button>
                     <?php endforeach; ?>
                 </div>
             </div>
-            <?php endif; ?>
-
-            <h3 class="pipeline-header">DASHBOARD MODULES</h3>
-            <div class="module-selector" id="moduleSelector">
-                <?php foreach ($dashboardModules as $moduleKey => $module): ?>
-                <button type="button" data-module="<?= htmlspecialchars($moduleKey) ?>">
-                    <i class="<?= htmlspecialchars($module['icon']) ?>" style="margin-right:8px;"></i><?= htmlspecialchars($module['title']) ?>
-                </button>
-                <?php endforeach; ?>
-            </div>
-            <div class="card-grid stats-panel" id="statsPanel">
+            <div class="card-grid stats-panel" id="statsPanel" style="display: block; width: 100%; margin-bottom: 40px;">
                 <?php 
                 $firstModuleKey = array_key_first($dashboardModules);
                 foreach ($dashboardStats as $moduleKey => $stats): ?>
@@ -572,13 +624,13 @@ try {
                             <!-- Top: Scrollable filters cards -->
                             <div class="scrollable-cards-container">
                                 <!-- Card 1: Total Records -->
-                                <a href="module_view.php?module=<?= $mId ?>" class="scrollable-card" style="border-left: 5px solid <?= $colorsList[0] ?>;">
+                                <a href="module_view.php?module=<?= $mId ?>" class="scrollable-card" style="border-left: 5px solid <?= $colorsList[0] ?>;" onmouseover="this.style.borderColor='<?= $colorsList[0] ?>'; this.style.transform='translateY(-5px)';" onmouseout="this.style.borderColor='rgba(123,94,240,0.06)'; this.style.transform='none';">
                                     <div class="card-header-flex">
                                         <div style="flex:1; min-width:0;">
                                             <div class="card-title-text" title="Total Records">Total Records</div>
                                             <div class="card-val-text"><?= number_format($totalVal) ?></div>
                                         </div>
-                                        <div class="card-icon-box" style="background: <?= $colorsList[0] ?>12; color: <?= $colorsList[0] ?>;">
+                                        <div class="card-icon-box" style="background: <?= $colorsList[0] ?>12; color: <?= $colorsList[0] ?>; box-shadow: 0 6px 14px -4px <?= $colorsList[0] ?>;">
                                             <i class="fa-solid fa-database"></i>
                                         </div>
                                     </div>
@@ -591,13 +643,13 @@ try {
                                 <?php 
                                 $todayFilterRules = json_encode([['field_id' => 'created_at', 'operator' => 'today', 'value' => '']]);
                                 ?>
-                                <a href="module_view.php?module=<?= $mId ?>&filter_rules=<?= urlencode($todayFilterRules) ?>" class="scrollable-card" style="border-left: 5px solid <?= $colorsList[1] ?>;">
+                                <a href="module_view.php?module=<?= $mId ?>&filter_rules=<?= urlencode($todayFilterRules) ?>" class="scrollable-card" style="border-left: 5px solid <?= $colorsList[1] ?>;" onmouseover="this.style.borderColor='<?= $colorsList[1] ?>'; this.style.transform='translateY(-5px)';" onmouseout="this.style.borderColor='rgba(123,94,240,0.06)'; this.style.transform='none';">
                                     <div class="card-header-flex">
                                         <div style="flex:1; min-width:0;">
                                             <div class="card-title-text" title="Added Today">Added Today</div>
                                             <div class="card-val-text"><?= number_format($todayVal) ?></div>
                                         </div>
-                                        <div class="card-icon-box" style="background: <?= $colorsList[1] ?>12; color: <?= $colorsList[1] ?>;">
+                                        <div class="card-icon-box" style="background: <?= $colorsList[1] ?>12; color: <?= $colorsList[1] ?>; box-shadow: 0 6px 14px -4px <?= $colorsList[1] ?>;">
                                             <i class="fa-solid fa-calendar-day"></i>
                                         </div>
                                     </div>
@@ -610,13 +662,13 @@ try {
                                 <?php foreach ($filters as $index => $filter): 
                                     $color = $colorsList[($index + 2) % count($colorsList)];
                                 ?>
-                                    <a href="module_view.php?module=<?= $mId ?>&filter_id=<?= $filter['id'] ?>" class="scrollable-card" style="border-left: 5px solid <?= $color ?>;">
+                                    <a href="module_view.php?module=<?= $mId ?>&filter_id=<?= $filter['id'] ?>" class="scrollable-card" style="border-left: 5px solid <?= $color ?>;" onmouseover="this.style.borderColor='<?= $color ?>'; this.style.transform='translateY(-5px)';" onmouseout="this.style.borderColor='rgba(123,94,240,0.06)'; this.style.transform='none';">
                                         <div class="card-header-flex">
                                             <div style="flex:1; min-width:0;">
                                                 <div class="card-title-text" title="<?= htmlspecialchars($filter['name']) ?>"><?= htmlspecialchars($filter['name']) ?></div>
                                                 <div class="card-val-text"><?= number_format((int)$filter['count']) ?></div>
                                             </div>
-                                            <div class="card-icon-box" style="background: <?= $color ?>12; color: <?= $color ?>;">
+                                            <div class="card-icon-box" style="background: <?= $color ?>12; color: <?= $color ?>; box-shadow: 0 6px 14px -4px <?= $color ?>;">
                                                 <i class="fa-solid fa-filter"></i>
                                             </div>
                                         </div>
@@ -698,6 +750,48 @@ try {
                     <?php endif; ?>
                 <?php endforeach; ?>
             </div>
+
+            <?php if (!empty($widgets)): ?>
+            <!-- Dynamic Insights Section (Common Settings Filters) -->
+            <h3 style="font-size: 14px; font-weight: 800; color: var(--text-main); text-transform: uppercase; letter-spacing: 1px; margin: 30px 0 20px 0; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-sliders" style="color: #7b5ef0;"></i> Common Settings Filters
+            </h3>
+            <div id="dynamicInsightsSection" style="margin-bottom: 30px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
+                    <?php foreach ($widgets as $w): 
+                        $wRules = json_decode($w['rules'], true);
+                        $wCount = 0;
+                        try {
+                            $res = dm_fetch_records($conn, $prefix, (int)$w['module_id'], null, 0, 0, $wRules);
+                            $wCount = $res['total'];
+                        } catch (Exception $ex) {}
+                        
+                        $cardColor = htmlspecialchars($w['color'] ?: 'var(--primary)');
+                        $cardIcon = htmlspecialchars($w['icon'] ?: 'fa-solid fa-bell');
+                        $viewUrl = 'module_view.php?module=' . (int)$w['module_id'] . '&filter_rules=' . urlencode($w['rules']);
+                    ?>
+                        <a href="<?= $viewUrl ?>" class="crm-card" style="display: block; text-decoration: none; padding: 24px; background: #ffffff; border-radius: 24px; border: 1px solid rgba(123, 94, 240, 0.08); border-top: 4px solid <?= $cardColor ?>; box-shadow: 0 10px 25px -12px rgba(123, 94, 240, 0.12); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; overflow: hidden;" onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 30px -8px rgba(123, 94, 240, 0.2)';" onmouseout="this.style.transform='none'; this.style.boxShadow='0 10px 25px -12px rgba(123, 94, 240, 0.12)';">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;">
+                                        <?= htmlspecialchars($w['title']) ?>
+                                    </div>
+                                    <div style="font-size: 32px; font-weight: 800; color: var(--text-main); line-height: 1;">
+                                        <?= number_format($wCount) ?>
+                                    </div>
+                                </div>
+                                <div style="width: 48px; height: 48px; border-radius: 16px; background: <?= $cardColor ?>12; color: <?= $cardColor ?>; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;">
+                                    <i class="<?= $cardIcon ?>"></i>
+                                </div>
+                            </div>
+                            <div style="font-size: 11px; color: <?= $cardColor ?>; font-weight: 700; margin-top: 20px; display: flex; align-items: center; gap: 5px;">
+                                View Records <i class="fa-solid fa-arrow-right-long" style="font-size:10px;"></i>
+                            </div>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
 
         </div>
     </main>
