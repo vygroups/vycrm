@@ -279,8 +279,16 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
         $baseSql .= " AND r.id IN (
             SELECT DISTINCT rv.record_id 
             FROM {$p}module_record_values rv 
+            LEFT JOIN {$p}module_fields f ON f.id = rv.field_id
             WHERE rv.value LIKE ?
+               OR (f.field_type = 'api_call_picker' AND rv.value REGEXP '^[0-9]+$' AND (
+                   SELECT value 
+                   FROM {$p}module_record_values 
+                   WHERE record_id = CAST(rv.value AS UNSIGNED) 
+                   ORDER BY field_id ASC LIMIT 1
+               ) LIKE ?)
         )";
+        $params[] = '%' . $search . '%';
         $params[] = '%' . $search . '%';
     }
 
@@ -356,18 +364,73 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                 // Custom field
                 $fieldId = (int)$fid;
                 if ($fieldId > 0) {
+                    $isRelation = isset($sysFieldTypes[$fieldId]) && $sysFieldTypes[$fieldId] === 'api_call_picker';
                     if ($op === 'LIKE') {
-                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value LIKE ?)";
-                        $params[] = $fieldId;
-                        $params[] = '%' . $val . '%';
+                        if ($isRelation) {
+                            $baseSql .= " AND r.id IN (
+                                SELECT outer_rv.record_id FROM {$p}module_record_values outer_rv
+                                WHERE outer_rv.field_id = ? AND (
+                                    outer_rv.value LIKE ? OR (
+                                        outer_rv.value REGEXP '^[0-9]+$' AND (
+                                            SELECT inner_rv.value FROM {$p}module_record_values inner_rv
+                                            WHERE inner_rv.record_id = CAST(outer_rv.value AS UNSIGNED) 
+                                            ORDER BY inner_rv.field_id ASC LIMIT 1
+                                        ) LIKE ?
+                                    )
+                                )
+                            )";
+                            $params[] = $fieldId;
+                            $params[] = '%' . $val . '%';
+                            $params[] = '%' . $val . '%';
+                        } else {
+                            $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value LIKE ?)";
+                            $params[] = $fieldId;
+                            $params[] = '%' . $val . '%';
+                        }
                     } elseif ($op === 'NOT LIKE') {
-                        $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value LIKE ?)";
-                        $params[] = $fieldId;
-                        $params[] = '%' . $val . '%';
+                        if ($isRelation) {
+                            $baseSql .= " AND r.id NOT IN (
+                                SELECT outer_rv.record_id FROM {$p}module_record_values outer_rv
+                                WHERE outer_rv.field_id = ? AND (
+                                    outer_rv.value LIKE ? OR (
+                                        outer_rv.value REGEXP '^[0-9]+$' AND (
+                                            SELECT inner_rv.value FROM {$p}module_record_values inner_rv
+                                            WHERE inner_rv.record_id = CAST(outer_rv.value AS UNSIGNED) 
+                                            ORDER BY inner_rv.field_id ASC LIMIT 1
+                                        ) LIKE ?
+                                    )
+                                )
+                            )";
+                            $params[] = $fieldId;
+                            $params[] = '%' . $val . '%';
+                            $params[] = '%' . $val . '%';
+                        } else {
+                            $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value LIKE ?)";
+                            $params[] = $fieldId;
+                            $params[] = '%' . $val . '%';
+                        }
                     } elseif ($op === '!=') {
-                        $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value = ?)";
-                        $params[] = $fieldId;
-                        $params[] = $val;
+                        if ($isRelation) {
+                            $baseSql .= " AND r.id NOT IN (
+                                SELECT outer_rv.record_id FROM {$p}module_record_values outer_rv
+                                WHERE outer_rv.field_id = ? AND (
+                                    outer_rv.value = ? OR (
+                                        outer_rv.value REGEXP '^[0-9]+$' AND (
+                                            SELECT inner_rv.value FROM {$p}module_record_values inner_rv
+                                            WHERE inner_rv.record_id = CAST(outer_rv.value AS UNSIGNED) 
+                                            ORDER BY inner_rv.field_id ASC LIMIT 1
+                                        ) = ?
+                                    )
+                                )
+                            )";
+                            $params[] = $fieldId;
+                            $params[] = $val;
+                            $params[] = $val;
+                        } else {
+                            $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value = ?)";
+                            $params[] = $fieldId;
+                            $params[] = $val;
+                        }
                     } elseif ($op === 'today') {
                         $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) = CURDATE())";
                         $params[] = $fieldId;
@@ -386,9 +449,27 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                         $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value IS NOT NULL AND TRIM(value) != '')";
                         $params[] = $fieldId;
                     } else {
-                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value $op ?)";
-                        $params[] = $fieldId;
-                        $params[] = $val;
+                        if ($isRelation && $op === '=') {
+                            $baseSql .= " AND r.id IN (
+                                SELECT outer_rv.record_id FROM {$p}module_record_values outer_rv
+                                WHERE outer_rv.field_id = ? AND (
+                                    outer_rv.value = ? OR (
+                                        outer_rv.value REGEXP '^[0-9]+$' AND (
+                                            SELECT inner_rv.value FROM {$p}module_record_values inner_rv
+                                            WHERE inner_rv.record_id = CAST(outer_rv.value AS UNSIGNED) 
+                                            ORDER BY inner_rv.field_id ASC LIMIT 1
+                                        ) = ?
+                                    )
+                                )
+                            )";
+                            $params[] = $fieldId;
+                            $params[] = $val;
+                            $params[] = $val;
+                        } else {
+                            $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value $op ?)";
+                            $params[] = $fieldId;
+                            $params[] = $val;
+                        }
                     }
                 }
             }
