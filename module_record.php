@@ -1538,7 +1538,7 @@ function selectRecordFromPicker(id, displayValue) {
     
     const displaySpan = document.getElementById(`api-display-${currentPickerFieldId}`);
     if (displaySpan) {
-        displaySpan.textContent = displayValue + ' (#' + id + ')';
+        displaySpan.textContent = displayValue;
         displaySpan.style.color = 'var(--text-main)';
     }
 

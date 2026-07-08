@@ -14,15 +14,75 @@ $v = time();
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
-    <!-- CKEditor 5 -->
-    <script src="https://cdn.ckeditor.com/ckeditor5/38.1.0/classic/ckeditor.js"></script>
+    <!-- Include jQuery (required for Summernote) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Summernote Lite -->
+    <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
     <style>
+        /* Summernote Premium Styling Overrides */
+        .note-editor.note-frame {
+            border: 1.5px solid var(--border) !important;
+            border-radius: 12px !important;
+            overflow: hidden !important;
+            background: #fff !important;
+            box-shadow: var(--shadow-sm) !important;
+        }
+        .note-toolbar {
+            background: #f8fafc !important;
+            border-bottom: 1px solid var(--border) !important;
+            padding: 8px 12px !important;
+        }
+        .note-btn {
+            background: #fff !important;
+            border: 1.5px solid var(--border) !important;
+            color: var(--text-main) !important;
+            border-radius: 8px !important;
+            padding: 6px 12px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            transition: all 0.15s !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+        }
+        .note-btn:hover {
+            background: rgba(123,94,240,0.06) !important;
+            color: var(--primary) !important;
+            border-color: rgba(123,94,240,0.25) !important;
+        }
+        .note-btn.active {
+            background: rgba(123,94,240,0.1) !important;
+            border-color: var(--primary) !important;
+            color: var(--primary) !important;
+        }
+        .note-editable {
+            font-family: inherit !important;
+            font-size: 14px !important;
+            color: var(--text-main) !important;
+            line-height: 1.6 !important;
+            min-height: 250px;
+        }
+        .note-statusbar {
+            background: #f8fafc !important;
+            border-top: 1px solid var(--border) !important;
+        }
+        
         .tabs { display: flex; border-bottom: 1px solid #e2e8f0; margin-bottom: 20px; }
         .tab { padding: 12px 24px; cursor: pointer; color: #64748b; font-weight: 600; border-bottom: 2px solid transparent; transition: all 0.2s; }
         .tab:hover { color: var(--primary); }
         .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
+        
+        /* Hide direct Image URL insertion inputs in insert image dialog */
+        .note-group-image-url {
+            display: none !important;
+        }
+
+        /* Hide direct Image URL insertion inputs in insert image dialog */
+        .note-group-image-url {
+            display: none !important;
+        }
         
         .badge { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
         .month-picker { padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; font-family: inherit; font-size: 14px; outline: none; }
@@ -549,25 +609,102 @@ async function processAllUnpaid() {
 // ================= TEMPLATE =================
 async function initEditor() {
     const editorConfig = {
-        ckfinder: {
-            uploadUrl: '/api/upload_image.php'
+        placeholder: 'Template body...',
+        tabsize: 2,
+        height: 280,
+        toolbar: [
+            ['style', ['style']],
+            ['font', ['bold', 'italic', 'underline', 'strikethrough', 'clear']],
+            ['color', ['color']],
+            ['alignment', ['align']],
+            ['para', ['ul', 'ol', 'paragraph']],
+            ['table', ['table']],
+            ['insert', ['link', 'picture', 'video']],
+            ['view', ['fullscreen', 'codeview', 'help']]
+        ],
+        popover: {
+            image: [
+                ['custom', ['imageLinkPrompt']],
+                ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
+                ['float', ['floatLeft', 'floatRight', 'floatNone']],
+                ['remove', ['removeMedia']]
+            ]
+        },
+        buttons: {
+            imageLinkPrompt: function(context) {
+                var ui = $.summernote.ui;
+                return ui.button({
+                    contents: '<i class="note-icon-link"/>',
+                    tooltip: 'Insert Image Link',
+                    click: function() {
+                        var $img = $(context.invoke('editor.restoreTarget'));
+                        if (!$img.length || !$img.is('img')) {
+                            $img = $(document.getSelection().anchorNode).find('img');
+                        }
+                        if (!$img.length) {
+                            $img = $('.note-control-selection-area').prev();
+                        }
+                        if (!$img.length || !$img.is('img')) {
+                            alert('Please select an image first.');
+                            return;
+                        }
+                        
+                        var parentA = $img.parent('a');
+                        var currentUrl = parentA.length ? parentA.attr('href') : '';
+                        
+                        var url = prompt('To what URL should this link go?', currentUrl || 'https://');
+                        if (url === null) return; // user cancelled
+                        
+                        url = url.trim();
+                        if (url) {
+                            if (parentA.length) {
+                                parentA.attr('href', url);
+                            } else {
+                                $img.wrap('<a href="' + url + '" target="_blank"></a>');
+                            }
+                        } else {
+                            if (parentA.length) {
+                                $img.unwrap();
+                            }
+                        }
+                        context.invoke('editor.afterCommand');
+                    }
+                }).render();
+            }
+        },
+        callbacks: {
+            onImageUpload: function(files) {
+                uploadSummernoteImage(files[0], this);
+            }
         }
     };
 
     if (!editorInstance) {
         try {
-            editorInstance = await ClassicEditor.create(document.querySelector('#body'), editorConfig);
-            editorInstance.ui.focusTracker.on('change:isFocused', (evt, name, isFocused) => {
-                if (isFocused) lastFocusedEditor = editorInstance;
-            });
+            editorInstance = true; // flag to prevent duplicate init
+            $('#body').summernote(Object.assign({}, editorConfig, {
+                callbacks: {
+                    onFocus: function() { lastFocusedEditor = '#body'; },
+                    onKeyup: function() { $(this).summernote('saveRange'); },
+                    onMouseup: function() { $(this).summernote('saveRange'); },
+                    onBlur: function() { $(this).summernote('saveRange'); },
+                    onImageUpload: function(files) { uploadSummernoteImage(files[0], this); }
+                }
+            }));
         } catch (e) { console.error(e); }
     }
     if (!pdfEditorInstance) {
         try {
-            pdfEditorInstance = await ClassicEditor.create(document.querySelector('#pdf_body'), editorConfig);
-            pdfEditorInstance.ui.focusTracker.on('change:isFocused', (evt, name, isFocused) => {
-                if (isFocused) lastFocusedEditor = pdfEditorInstance;
-            });
+            pdfEditorInstance = true; // flag to prevent duplicate init
+            $('#pdf_body').summernote(Object.assign({}, editorConfig, {
+                callbacks: {
+                    onFocus: function() { lastFocusedEditor = '#pdf_body'; },
+                    onKeyup: function() { $(this).summernote('saveRange'); },
+                    onMouseup: function() { $(this).summernote('saveRange'); },
+                    onBlur: function() { $(this).summernote('saveRange'); },
+                    onImageUpload: function(files) { uploadSummernoteImage(files[0], this); }
+                }
+            }));
         } catch (e) { console.error(e); }
     }
 
@@ -579,9 +716,9 @@ async function initEditor() {
                 document.getElementById('subject').value = data.template.subject;
                 document.getElementById('cc_email').value = data.cc_email || '';
                 document.getElementById('bcc_email').value = data.bcc_email || '';
-                editorInstance.setData(data.template.body || '');
-                if (pdfEditorInstance && data.pdf_template) {
-                    pdfEditorInstance.setData(data.pdf_template.body || '');
+                $('#body').summernote('code', data.template.body || '');
+                if (data.pdf_template) {
+                    $('#pdf_body').summernote('code', data.pdf_template.body || '');
                 }
             }
             
@@ -601,19 +738,68 @@ async function initEditor() {
     } catch (e) {}
 }
 
-function insertTag(tag) {
-    // Insert into the last focused editor, or default to email body if none.
-    let activeEditor = lastFocusedEditor || editorInstance;
-    
-    // In case the user is actively typing in one, use that
-    if (editorInstance && editorInstance.ui.focusTracker.isFocused) activeEditor = editorInstance;
-    if (pdfEditorInstance && pdfEditorInstance.ui.focusTracker.isFocused) activeEditor = pdfEditorInstance;
-    
-    if (activeEditor) {
-        const viewFragment = activeEditor.data.processor.toView(tag);
-        const modelFragment = activeEditor.data.toModel(viewFragment);
-        activeEditor.model.insertContent(modelFragment);
+async function uploadSummernoteImage(file, editor) {
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+        vyToast('Only JPG, PNG, GIF, and WebP images are allowed.', 'error');
+        return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+        vyToast('Image must be smaller than 5 MB.', 'error');
+        return;
+    }
+    const formData = new FormData();
+    formData.append('upload', file);
+    try {
+        const res = await fetch('/api/upload_image.php', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (data.uploaded && data.url) {
+            $(editor).summernote('insertImage', data.url);
+        } else {
+            vyToast(data.error?.message || 'Failed to upload image.', 'error');
+        }
+    } catch(e) {
+        vyToast('Upload error: ' + e.message, 'error');
+    }
+}
+
+function placeCursorAtEnd(editorSelector) {
+    const $editable = $(editorSelector).next('.note-editor').find('.note-editable');
+    if ($editable.length) {
+        $editable.focus();
+        if (typeof window.getSelection !== "undefined" && typeof document.createRange !== "undefined") {
+            const range = document.createRange();
+            range.selectNodeContents($editable[0]);
+            range.collapse(false); // collapse to end (bottom)
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    }
+}
+
+function insertTag(tag) {
+    let selector = lastFocusedEditor || '#body';
+    $(selector).summernote('focus');
+    
+    var hasRange = false;
+    try {
+        var r = $(selector).summernote('createRange');
+        var $editable = $(selector).next('.note-editor').find('.note-editable');
+        if (r && $editable.length && ($editable[0] === r.sc || $.contains($editable[0], r.sc))) {
+            hasRange = true;
+        }
+    } catch(e) {}
+
+    if (hasRange) {
+        $(selector).summernote('restoreRange');
+    } else {
+        placeCursorAtEnd(selector);
+    }
+    $(selector).summernote('insertText', tag);
 }
 
 document.getElementById('templateForm').addEventListener('submit', async function(e) {
@@ -627,10 +813,8 @@ document.getElementById('templateForm').addEventListener('submit', async functio
     formData.append('subject', document.getElementById('subject').value);
     formData.append('cc_email', document.getElementById('cc_email').value);
     formData.append('bcc_email', document.getElementById('bcc_email').value);
-    formData.append('body', editorInstance.getData());
-    if (pdfEditorInstance) {
-        formData.append('pdf_body', pdfEditorInstance.getData());
-    }
+    formData.append('body', $('#body').summernote('code'));
+    formData.append('pdf_body', $('#pdf_body').summernote('code'));
     
     try {
         const res = await fetch('/api/payroll_api.php', { method: 'POST', body: formData });

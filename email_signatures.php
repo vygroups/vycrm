@@ -24,9 +24,60 @@ $v = time();
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
     <!-- CKEditor 5 Full build (includes image upload plugin) -->
-    <script src="https://cdn.ckeditor.com/ckeditor5/38.1.0/classic/ckeditor.js"></script>
+    <!-- Include jQuery (required for Summernote) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Summernote Lite -->
+    <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
     <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
     <style>
+        /* Summernote Premium Styling Overrides */
+        .note-editor.note-frame {
+            border: 1.5px solid var(--border) !important;
+            border-radius: 12px !important;
+            overflow: hidden !important;
+            background: #fff !important;
+            box-shadow: var(--shadow-sm) !important;
+        }
+        .note-toolbar {
+            background: #f8fafc !important;
+            border-bottom: 1px solid var(--border) !important;
+            padding: 8px 12px !important;
+        }
+        .note-btn {
+            background: #fff !important;
+            border: 1.5px solid var(--border) !important;
+            color: var(--text-main) !important;
+            border-radius: 8px !important;
+            padding: 6px 12px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            transition: all 0.15s !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+        }
+        .note-btn:hover {
+            background: rgba(123,94,240,0.06) !important;
+            color: var(--primary) !important;
+            border-color: rgba(123,94,240,0.25) !important;
+        }
+        .note-btn.active {
+            background: rgba(123,94,240,0.1) !important;
+            border-color: var(--primary) !important;
+            color: var(--primary) !important;
+        }
+        .note-editable {
+            font-family: inherit !important;
+            font-size: 14px !important;
+            color: var(--text-main) !important;
+            line-height: 1.6 !important;
+            min-height: 250px;
+        }
+        .note-statusbar {
+            background: #f8fafc !important;
+            border-top: 1px solid var(--border) !important;
+        }
+        
         /* ═══════════════════════ SIGNATURES PAGE ═══════════════════════ */
         .sig-page-header {
             display: flex;
@@ -389,6 +440,93 @@ $v = time();
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
         }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Full-Screen Builder Styles for Signature Editor */
+        #sigModal.show {
+            display: flex !important;
+            background: #f1f5f9 !important;
+            align-items: flex-start !important;
+            justify-content: flex-start !important;
+            overflow-y: auto !important;
+        }
+        #sigModal.show .mm-modal {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+            background: #f8fafc !important;
+            animation: none !important;
+        }
+        #sigModal.show .mm-modal-header {
+            background: #fff !important;
+            border-bottom: 1.5px solid var(--border) !important;
+            padding: 16px 40px !important;
+        }
+        #sigModal.show .mm-modal-header h3 {
+            font-size: 20px !important;
+            font-weight: 800 !important;
+            color: var(--text-main) !important;
+            letter-spacing: -0.3px;
+        }
+        #sigModal.show .mm-modal-body {
+            flex: 1 !important;
+            max-height: none !important;
+            overflow-y: auto !important;
+            padding: 40px 40px 60px 40px !important;
+            max-width: 1000px !important;
+            width: 100% !important;
+            margin: 0 auto !important;
+            box-sizing: border-box !important;
+        }
+        #sigModal.show .mm-modal-footer {
+            background: #fff !important;
+            border-top: 1.5px solid var(--border) !important;
+            padding: 16px 40px !important;
+            display: flex !important;
+            justify-content: flex-end !important;
+            gap: 12px !important;
+        }
+        #sigModal.show .mm-modal-footer .mm-btn {
+            background: #fff !important;
+            border: 1.5px solid var(--border) !important;
+            color: var(--text-muted) !important;
+            border-radius: 8px !important;
+            padding: 10px 20px !important;
+            font-weight: 700 !important;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        #sigModal.show .mm-modal-footer .mm-btn:hover {
+            background: #f1f5f9 !important;
+            color: var(--text-main) !important;
+        }
+        #sigModal.show .mm-modal-footer .mm-btn-primary {
+            background: var(--primary) !important;
+            border: 1.5px solid var(--primary) !important;
+            color: #fff !important;
+            border-radius: 8px !important;
+            padding: 10px 24px !important;
+            font-weight: 700 !important;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        #sigModal.show .mm-modal-footer .mm-btn-primary:hover {
+            background: var(--primary-hover) !important;
+            border-color: var(--primary-hover) !important;
+        }
+
+        /* Hide direct Image URL insertion inputs in insert image dialog */
+        .note-group-image-url {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -529,7 +667,9 @@ function openSigModal(data = null) {
 
     const content = data ? data.content : '';
     document.getElementById('sigContent').value = content;
-    if (sigEditorInstance) sigEditorInstance.setData(content);
+    try {
+        $('#sigContent').summernote('code', content);
+    } catch (e) {}
 
     toggleDefaultStyle();
     openModal('sigModal');
@@ -546,54 +686,78 @@ function toggleDefaultStyle() {
     toggle.classList.toggle('is-checked', cb.checked);
 }
 
-/* ─── Custom CKEditor Upload Adapter ─── */
-class SigUploadAdapter {
-    constructor(loader) { this.loader = loader; }
-
-    upload() {
-        return this.loader.file.then(file => new Promise((resolve, reject) => {
-            const formData = new FormData();
-            formData.append('upload', file);
-
-            fetch('/api/upload_image.php', { method: 'POST', body: formData })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.uploaded && data.url) {
-                        resolve({ default: data.url });
-                    } else {
-                        reject(data.error?.message || 'Upload failed');
-                    }
-                })
-                .catch(err => reject(err.message || 'Network error'));
-        }));
-    }
-
-    abort() {}
-}
-
-function SigUploadAdapterPlugin(editor) {
-    editor.plugins.get('FileRepository').createUploadAdapter = (loader) => new SigUploadAdapter(loader);
-}
-
-/* ─── Init CKEditor ─── */
+/* ─── Init Summernote Editor ─── */
 async function initSigEditor() {
     try {
-        sigEditorInstance = await ClassicEditor.create(document.getElementById('sigContent'), {
-            extraPlugins: [SigUploadAdapterPlugin],
+        $('#sigContent').summernote({
+            placeholder: 'Type your signature here...',
+            tabsize: 2,
+            height: 280,
             toolbar: [
-                'heading', '|',
-                'bold', 'italic', 'underline', '|',
-                'fontColor', 'fontBackgroundColor', '|',
-                'link', 'imageUpload', '|',
-                'bulletedList', 'numberedList', '|',
-                'blockQuote', '|',
-                'undo', 'redo'
+                ['style', ['style']],
+                ['font', ['bold', 'italic', 'underline', 'clear']],
+                ['color', ['color']],
+                ['alignment', ['align']],
+                ['para', ['ul', 'ol', 'paragraph']],
+                ['table', ['table']],
+                ['insert', ['link', 'picture', 'video']],
+                ['view', ['fullscreen', 'codeview', 'help']]
             ],
-            image: {
-                toolbar: ['imageTextAlternative', '|', 'imageStyle:block', 'imageStyle:side'],
-                upload: { types: ['jpeg', 'png', 'gif', 'webp'] }
+            popover: {
+                image: [
+                    ['custom', ['imageLinkPrompt']],
+                    ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
+                    ['float', ['floatLeft', 'floatRight', 'floatNone']],
+                    ['remove', ['removeMedia']]
+                ]
             },
-            placeholder: 'Type your signature here...'
+            buttons: {
+                imageLinkPrompt: function(context) {
+                    var ui = $.summernote.ui;
+                    return ui.button({
+                        contents: '<i class="note-icon-link"/>',
+                        tooltip: 'Insert Image Link',
+                        click: function() {
+                            var $img = $(context.invoke('editor.restoreTarget'));
+                            if (!$img.length || !$img.is('img')) {
+                                $img = $(document.getSelection().anchorNode).find('img');
+                            }
+                            if (!$img.length) {
+                                $img = $('.note-control-selection-area').prev();
+                            }
+                            if (!$img.length || !$img.is('img')) {
+                                alert('Please select an image first.');
+                                return;
+                              }
+                            
+                            var parentA = $img.parent('a');
+                            var currentUrl = parentA.length ? parentA.attr('href') : '';
+                            
+                            var url = prompt('To what URL should this link go?', currentUrl || 'https://');
+                            if (url === null) return; // user cancelled
+                            
+                            url = url.trim();
+                            if (url) {
+                                if (parentA.length) {
+                                    parentA.attr('href', url);
+                                } else {
+                                    $img.wrap('<a href="' + url + '" target="_blank"></a>');
+                                }
+                            } else {
+                                if (parentA.length) {
+                                    $img.unwrap();
+                                }
+                            }
+                            context.invoke('editor.afterCommand');
+                        }
+                    }).render();
+                }
+            },
+            callbacks: {
+                onImageUpload: function(files) {
+                    uploadSigImage(files[0]);
+                }
+            }
         });
 
         // Wire up drag-and-drop zone
@@ -612,9 +776,8 @@ async function initSigEditor() {
             });
             dropZone.addEventListener('click', () => document.getElementById('sigImgFileInput').click());
         }
-    } catch(e) { console.error('CKEditor init:', e); }
+    } catch(e) { console.error('Summernote init:', e); }
 }
-
 
 /* ─── Image Upload helpers ─── */
 function handleSigImageUpload(input) {
@@ -643,13 +806,8 @@ async function uploadSigImage(file) {
         const res = await fetch('/api/upload_image.php', { method: 'POST', body: formData });
         const data = await res.json();
         if (data.uploaded && data.url) {
-            // Insert image into CKEditor at cursor
-            if (sigEditorInstance) {
-                sigEditorInstance.model.change(writer => {
-                    const imageElement = writer.createElement('imageBlock', { src: data.url, alt: '' });
-                    sigEditorInstance.model.insertContent(imageElement, sigEditorInstance.model.document.selection);
-                });
-            }
+            // Insert image into Summernote
+            $('#sigContent').summernote('insertImage', data.url);
             vyToast('Image inserted!', 'success');
         } else {
             vyToast(data.error?.message || 'Upload failed.', 'error');
@@ -755,7 +913,7 @@ async function editSig(id) {
 async function saveSig() {
     const id = parseInt(document.getElementById('sigId').value);
     const name = document.getElementById('sigName').value.trim();
-    const content = sigEditorInstance ? sigEditorInstance.getData().trim() : document.getElementById('sigContent').value.trim();
+    const content = $('#sigContent').summernote('code').trim();
     const isDefault = document.getElementById('sigIsDefault').checked ? 1 : 0;
 
     if (!name) {
@@ -763,7 +921,7 @@ async function saveSig() {
         document.getElementById('sigName').focus();
         return;
     }
-    if (!content) {
+    if (!content || content === '<p><br></p>' || content === '<br>') {
         vyToast('Signature content cannot be empty.', 'error');
         return;
     }

@@ -24,9 +24,59 @@ $v = time();
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
     <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
-    <!-- CKEditor 5 -->
-    <script src="https://cdn.ckeditor.com/ckeditor5/38.1.0/classic/ckeditor.js"></script>
+    <!-- Include jQuery (required for Summernote) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Summernote Lite -->
+    <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.js"></script>
     <style>
+        /* Summernote Premium Styling Overrides */
+        .note-editor.note-frame {
+            border: 1.5px solid var(--border) !important;
+            border-radius: 12px !important;
+            overflow: hidden !important;
+            background: #fff !important;
+            box-shadow: var(--shadow-sm) !important;
+        }
+        .note-toolbar {
+            background: #f8fafc !important;
+            border-bottom: 1px solid var(--border) !important;
+            padding: 8px 12px !important;
+        }
+        .note-btn {
+            background: #fff !important;
+            border: 1.5px solid var(--border) !important;
+            color: var(--text-main) !important;
+            border-radius: 8px !important;
+            padding: 6px 12px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            transition: all 0.15s !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+        }
+        .note-btn:hover {
+            background: rgba(123,94,240,0.06) !important;
+            color: var(--primary) !important;
+            border-color: rgba(123,94,240,0.25) !important;
+        }
+        .note-btn.active {
+            background: rgba(123,94,240,0.1) !important;
+            border-color: var(--primary) !important;
+            color: var(--primary) !important;
+        }
+        .note-editable {
+            font-family: inherit !important;
+            font-size: 14px !important;
+            color: var(--text-main) !important;
+            line-height: 1.6 !important;
+            min-height: 250px;
+        }
+        .note-statusbar {
+            background: #f8fafc !important;
+            border-top: 1px solid var(--border) !important;
+        }
+        
         .placeholder-btn {
             background: #fff;
             border: 1px solid var(--primary);
@@ -153,6 +203,75 @@ $v = time();
             transition: background 0.15s;
         }
         .sig-drop-manage:hover { background: rgba(123,94,240,0.06); }
+
+        /* Full-Screen Builder Styles for Template Editor */
+        #templateModal.show {
+            display: flex !important;
+            background: #f1f5f9 !important;
+            align-items: flex-start !important;
+            justify-content: flex-start !important;
+            overflow-y: auto !important;
+        }
+        #templateModal.show .mm-modal {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+            background: #f8fafc !important;
+            animation: none !important;
+        }
+        #templateModal.show .mm-modal-header {
+            background: #fff !important;
+            border-bottom: 1.5px solid var(--border) !important;
+            padding: 16px 40px !important;
+        }
+        #templateModal.show .mm-modal-header h3 {
+            font-size: 20px !important;
+            font-weight: 800 !important;
+            color: var(--text-main) !important;
+            letter-spacing: -0.3px;
+        }
+        #templateModal.show .mm-modal-body {
+            flex: 1 !important;
+            max-height: none !important;
+            overflow-y: auto !important;
+            padding: 40px 40px 60px 40px !important;
+            max-width: 1000px !important;
+            width: 100% !important;
+            margin: 0 auto !important;
+            box-sizing: border-box !important;
+        }
+        #templateModal.show .mm-modal-footer {
+            background: #fff !important;
+            border-top: 1.5px solid var(--border) !important;
+            padding: 16px 40px !important;
+            display: flex !important;
+            justify-content: flex-end !important;
+            gap: 12px !important;
+        }
+        #templateModal.show .mm-modal-footer .mm-btn {
+            background: #fff !important;
+            border: 1.5px solid var(--border) !important;
+            color: var(--text-muted) !important;
+            border-radius: 8px !important;
+            padding: 10px 20px !important;
+            font-weight: 700 !important;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        #templateModal.show .mm-modal-footer .mm-btn:hover {
+            background: #f1f5f9 !important;
+            color: var(--text-main) !important;
+        }
+
+        /* Hide direct Image URL insertion inputs in insert image dialog */
+        .note-group-image-url {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -318,19 +437,120 @@ $v = time();
             }).join('');
         }
 
-        let editorInstance = null;
+        let editorInstance = null; // kept for backwards compatibility / code references
 
         async function initCKEditor() {
-            const editorConfig = {
-                ckfinder: {
-                    uploadUrl: '/api/upload_image.php'
-                }
-            };
             try {
-                editorInstance = await ClassicEditor.create(document.querySelector('#templateBody'), editorConfig);
+                $('#templateBody').summernote({
+                    placeholder: 'Message content...',
+                    tabsize: 2,
+                    height: 280,
+                    toolbar: [
+                        ['style', ['style']],
+                        ['font', ['bold', 'italic', 'underline', 'strikethrough', 'clear']],
+                        ['color', ['color']],
+                        ['alignment', ['align']],
+                        ['para', ['ul', 'ol', 'paragraph']],
+                        ['table', ['table']],
+                        ['insert', ['link', 'picture', 'video']],
+                        ['view', ['fullscreen', 'codeview', 'help']]
+                    ],
+                    popover: {
+                        image: [
+                            ['custom', ['imageLinkPrompt']],
+                            ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
+                            ['float', ['floatLeft', 'floatRight', 'floatNone']],
+                            ['remove', ['removeMedia']]
+                        ]
+                    },
+                    buttons: {
+                        imageLinkPrompt: function(context) {
+                            var ui = $.summernote.ui;
+                            return ui.button({
+                                contents: '<i class="note-icon-link"/>',
+                                tooltip: 'Insert Image Link',
+                                click: function() {
+                                    var $img = $(context.invoke('editor.restoreTarget'));
+                                    if (!$img.length || !$img.is('img')) {
+                                        $img = $(document.getSelection().anchorNode).find('img');
+                                    }
+                                    if (!$img.length) {
+                                        $img = $('.note-control-selection-area').prev();
+                                    }
+                                    if (!$img.length || !$img.is('img')) {
+                                        alert('Please select an image first.');
+                                        return;
+                                    }
+                                    
+                                    var parentA = $img.parent('a');
+                                    var currentUrl = parentA.length ? parentA.attr('href') : '';
+                                    
+                                    var url = prompt('To what URL should this link go?', currentUrl || 'https://');
+                                    if (url === null) return; // user cancelled
+                                    
+                                    url = url.trim();
+                                    if (url) {
+                                        if (parentA.length) {
+                                            parentA.attr('href', url);
+                                        } else {
+                                            $img.wrap('<a href="' + url + '" target="_blank"></a>');
+                                        }
+                                    } else {
+                                        if (parentA.length) {
+                                            $img.unwrap();
+                                        }
+                                    }
+                                    context.invoke('editor.afterCommand');
+                                }
+                            }).render();
+                        }
+                    },
+                    callbacks: {
+                        onImageUpload: function(files) {
+                            uploadSummernoteImage(files[0], this);
+                        },
+                        onKeyup: function() {
+                            $(this).summernote('saveRange');
+                        },
+                        onMouseup: function() {
+                            $(this).summernote('saveRange');
+                        },
+                        onBlur: function() {
+                            $(this).summernote('saveRange');
+                        }
+                    }
+                });
                 onTypeChange();
             } catch (e) {
-                console.error('CKEditor init error:', e);
+                console.error('Summernote init error:', e);
+            }
+        }
+
+        async function uploadSummernoteImage(file, editor) {
+            const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowed.includes(file.type)) {
+                vyToast('Only JPG, PNG, GIF, and WebP images are allowed.', 'error');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                vyToast('Image must be smaller than 5 MB.', 'error');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('upload', file);
+            try {
+                const res = await fetch('/api/upload_image.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.uploaded && data.url) {
+                    $(editor).summernote('insertImage', data.url);
+                } else {
+                    vyToast(data.error?.message || 'Failed to upload image.', 'error');
+                }
+            } catch(e) {
+                vyToast('Upload error: ' + e.message, 'error');
             }
         }
 
@@ -338,21 +558,25 @@ $v = time();
             const type = document.getElementById('templateType').value;
             document.getElementById('subjectGroup').style.display = type === 'email' ? 'flex' : 'none';
 
-            const ckEditorEl = document.querySelector('.ck-editor');
+            const noteEditor = document.querySelector('.note-editor');
             const textareaEl = document.getElementById('templateBody');
             
             if (type === 'email') {
-                if (ckEditorEl) ckEditorEl.style.display = 'block';
-                textareaEl.style.display = 'none';
+                if (noteEditor) {
+                    noteEditor.style.display = 'block';
+                    textareaEl.style.display = 'none';
+                } else {
+                    textareaEl.style.display = 'block';
+                }
             } else {
-                if (ckEditorEl) ckEditorEl.style.display = 'none';
-                textareaEl.style.display = 'block';
-                if (editorInstance) {
-                    // Sync text back from CKEditor, stripping HTML tags
+                if (noteEditor) {
+                    noteEditor.style.display = 'none';
+                    // Sync plain text content back to textarea from Summernote
                     const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = editorInstance.getData();
+                    tempDiv.innerHTML = $('#templateBody').summernote('code');
                     textareaEl.value = tempDiv.textContent || tempDiv.innerText || '';
                 }
+                textareaEl.style.display = 'block';
             }
         }
 
@@ -374,9 +598,9 @@ $v = time();
             }
 
             document.getElementById('templateBody').value = bodyVal;
-            if (editorInstance) {
-                editorInstance.setData(bodyVal);
-            }
+            try {
+                $('#templateBody').summernote('code', bodyVal);
+            } catch (e) {}
 
             onTypeChange();
             openModal('templateModal');
@@ -404,6 +628,8 @@ $v = time();
             document.getElementById('templateName').style.border = '';
             document.getElementById('templateBody').style.border = '';
             document.getElementById('templateSubject').style.border = '';
+            const noteEditor = document.querySelector('.note-editor');
+            if (noteEditor) noteEditor.style.border = '';
             
             const nameEl = document.getElementById('templateName');
             const bodyEl = document.getElementById('templateBody');
@@ -414,7 +640,7 @@ $v = time();
             const type = document.getElementById('templateType').value;
             const subject = subEl.value.trim();
             
-            const body = (type === 'email' && editorInstance) ? editorInstance.getData().trim() : bodyEl.value.trim();
+            const body = (type === 'email') ? $('#templateBody').summernote('code').trim() : bodyEl.value.trim();
 
             if (!name) {
                 vyToast('Template name is required.', 'error');
@@ -430,11 +656,10 @@ $v = time();
                 subEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
             }
-            if (!body) {
+            if (!body || body === '<p><br></p>' || body === '<br>') {
                 vyToast('Message body is required.', 'error');
-                if (type === 'email' && editorInstance) {
-                    const editable = document.querySelector('.ck-editor__editable');
-                    if (editable) editable.style.border = '1px solid #ef4444';
+                if (type === 'email' && noteEditor) {
+                    noteEditor.style.border = '1px solid #ef4444';
                 } else {
                     bodyEl.classList.add('is-invalid');
                     bodyEl.style.border = '1px solid #ef4444';
@@ -483,6 +708,21 @@ $v = time();
             }
         }
 
+        function placeCursorAtEnd(editorSelector) {
+            const $editable = $(editorSelector).next('.note-editor').find('.note-editable');
+            if ($editable.length) {
+                $editable.focus();
+                if (typeof window.getSelection !== "undefined" && typeof document.createRange !== "undefined") {
+                    const range = document.createRange();
+                    range.selectNodeContents($editable[0]);
+                    range.collapse(false); // collapse to end (bottom)
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            }
+        }
+
         function insertPlaceholder(placeholder) {
             const bodyEl = document.getElementById('templateBody');
             const subEl = document.getElementById('templateSubject');
@@ -495,10 +735,23 @@ $v = time();
                 subEl.focus();
                 subEl.selectionStart = subEl.selectionEnd = start + placeholder.length;
             } else {
-                if (type === 'email' && editorInstance) {
-                    const viewFragment = editorInstance.data.processor.toView(placeholder);
-                    const modelFragment = editorInstance.data.toModel(viewFragment);
-                    editorInstance.model.insertContent(modelFragment);
+                if (type === 'email') {
+                    $('#templateBody').summernote('focus');
+                    var hasRange = false;
+                    try {
+                        var r = $('#templateBody').summernote('createRange');
+                        var $editable = $('#templateBody').next('.note-editor').find('.note-editable');
+                        if (r && $editable.length && ($editable[0] === r.sc || $.contains($editable[0], r.sc))) {
+                            hasRange = true;
+                        }
+                    } catch(e) {}
+
+                    if (hasRange) {
+                        $('#templateBody').summernote('restoreRange');
+                    } else {
+                        placeCursorAtEnd('#templateBody');
+                    }
+                    $('#templateBody').summernote('insertText', placeholder);
                 } else {
                     bodyEl.focus();
                     const start = bodyEl.selectionStart;
@@ -578,9 +831,23 @@ $v = time();
             const sig = signaturesList.find(s => s.id == id);
             if (!sig) return;
             const type = document.getElementById('templateType').value;
-            if (type === 'email' && editorInstance) {
-                const currentData = editorInstance.getData();
-                editorInstance.setData(currentData + (currentData ? '<br><br>' : '') + sig.content);
+            if (type === 'email') {
+                $('#templateBody').summernote('focus');
+                var hasRange = false;
+                try {
+                    var r = $('#templateBody').summernote('createRange');
+                    var $editable = $('#templateBody').next('.note-editor').find('.note-editable');
+                    if (r && $editable.length && ($editable[0] === r.sc || $.contains($editable[0], r.sc))) {
+                        hasRange = true;
+                    }
+                } catch(e) {}
+
+                if (hasRange) {
+                    $('#templateBody').summernote('restoreRange');
+                } else {
+                    placeCursorAtEnd('#templateBody');
+                }
+                $('#templateBody').summernote('pasteHTML', '<br><br>' + sig.content);
             }
             // close dropdown
             document.getElementById('sigDropdown').classList.remove('open');
