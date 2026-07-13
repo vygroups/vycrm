@@ -272,6 +272,23 @@ $v = time();
         .note-group-image-url {
             display: none !important;
         }
+
+        /* Hide image popover by default */
+        .note-popover.note-image-popover {
+            display: none !important;
+        }
+        /* Show only when show-popover class is added */
+        .note-popover.note-image-popover.show-popover {
+            display: block !important;
+        }
+
+        /* Hide image selection black background overlay and dimensions tooltip */
+        .note-control-selection-bg {
+            display: none !important;
+        }
+        .note-control-selection-info {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -438,6 +455,7 @@ $v = time();
         }
 
         let editorInstance = null; // kept for backwards compatibility / code references
+        let userInteractedWithEditor = false;
 
         async function initCKEditor() {
             try {
@@ -509,10 +527,16 @@ $v = time();
                         onImageUpload: function(files) {
                             uploadSummernoteImage(files[0], this);
                         },
-                        onKeyup: function() {
+                        onKeyup: function(e) {
+                            if (e && (e.isTrusted || e.originalEvent)) {
+                                userInteractedWithEditor = true;
+                            }
                             $(this).summernote('saveRange');
                         },
-                        onMouseup: function() {
+                        onMouseup: function(e) {
+                            if (e && (e.isTrusted || e.originalEvent)) {
+                                userInteractedWithEditor = true;
+                            }
                             $(this).summernote('saveRange');
                         },
                         onBlur: function() {
@@ -581,6 +605,7 @@ $v = time();
         }
 
         function openTemplateModal(editData = null) {
+            userInteractedWithEditor = false;
             document.getElementById('templateId').value = editData ? editData.id : '0';
             document.getElementById('modalTitle').textContent = editData ? 'Edit Template' : 'New Template';
             document.getElementById('templateName').value = editData ? editData.name : '';
@@ -736,22 +761,14 @@ $v = time();
                 subEl.selectionStart = subEl.selectionEnd = start + placeholder.length;
             } else {
                 if (type === 'email') {
-                    $('#templateBody').summernote('focus');
-                    var hasRange = false;
-                    try {
-                        var r = $('#templateBody').summernote('createRange');
-                        var $editable = $('#templateBody').next('.note-editor').find('.note-editable');
-                        if (r && $editable.length && ($editable[0] === r.sc || $.contains($editable[0], r.sc))) {
-                            hasRange = true;
-                        }
-                    } catch(e) {}
-
-                    if (hasRange) {
-                        $('#templateBody').summernote('restoreRange');
+                    if (!userInteractedWithEditor) {
+                        var currentHtml = $('#templateBody').summernote('code');
+                        $('#templateBody').summernote('code', currentHtml + placeholder);
                     } else {
-                        placeCursorAtEnd('#templateBody');
+                        $('#templateBody').summernote('focus');
+                        $('#templateBody').summernote('restoreRange');
+                        $('#templateBody').summernote('insertText', placeholder);
                     }
-                    $('#templateBody').summernote('insertText', placeholder);
                 } else {
                     bodyEl.focus();
                     const start = bodyEl.selectionStart;
@@ -832,22 +849,8 @@ $v = time();
             if (!sig) return;
             const type = document.getElementById('templateType').value;
             if (type === 'email') {
-                $('#templateBody').summernote('focus');
-                var hasRange = false;
-                try {
-                    var r = $('#templateBody').summernote('createRange');
-                    var $editable = $('#templateBody').next('.note-editor').find('.note-editable');
-                    if (r && $editable.length && ($editable[0] === r.sc || $.contains($editable[0], r.sc))) {
-                        hasRange = true;
-                    }
-                } catch(e) {}
-
-                if (hasRange) {
-                    $('#templateBody').summernote('restoreRange');
-                } else {
-                    placeCursorAtEnd('#templateBody');
-                }
-                $('#templateBody').summernote('pasteHTML', '<br><br>' + sig.content);
+                var currentHtml = $('#templateBody').summernote('code');
+                $('#templateBody').summernote('code', currentHtml + '<br><br>' + sig.content);
             }
             // close dropdown
             document.getElementById('sigDropdown').classList.remove('open');
@@ -866,6 +869,23 @@ $v = time();
             loadCampaignFieldPlaceholders();
             loadSignatures();
             initCKEditor();
+
+            // Trigger popover ONLY on right click for image elements inside the editor
+            $(document).on('contextmenu', '.note-editable img', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                var $img = $(this);
+                $img.trigger('click');
+                $('.note-popover.note-image-popover').addClass('show-popover');
+            });
+
+            // Hide popover on clicking anywhere else
+            $(document).on('click mousedown', function(e) {
+                if (!$(e.target).closest('.note-popover.note-image-popover').length) {
+                    $('.note-popover.note-image-popover').removeClass('show-popover');
+                }
+            });
         });
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
     </script>

@@ -527,6 +527,23 @@ $v = time();
         .note-group-image-url {
             display: none !important;
         }
+
+        /* Hide image popover by default */
+        .note-popover.note-image-popover {
+            display: none !important;
+        }
+        /* Show only when show-popover class is added */
+        .note-popover.note-image-popover.show-popover {
+            display: block !important;
+        }
+
+        /* Hide image selection black background overlay and dimensions tooltip */
+        .note-control-selection-bg {
+            display: none !important;
+        }
+        .note-control-selection-info {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -1009,6 +1026,23 @@ function escHtml(str) {
 document.addEventListener('DOMContentLoaded', () => {
     loadSigs();
     initSigEditor();
+
+    // Trigger popover ONLY on right click for image elements inside the editor
+    $(document).on('contextmenu', '.note-editable img', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        var $img = $(this);
+        $img.trigger('click');
+        $('.note-popover.note-image-popover').addClass('show-popover');
+    });
+
+    // Hide popover on clicking anywhere else
+    $(document).on('click mousedown', function(e) {
+        if (!$(e.target).closest('.note-popover.note-image-popover').length) {
+            $('.note-popover.note-image-popover').removeClass('show-popover');
+        }
+    });
 
     // Close modal on backdrop click
     document.getElementById('sigModal').addEventListener('click', function(e) {

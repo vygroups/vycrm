@@ -83,6 +83,23 @@ $v = time();
         .note-group-image-url {
             display: none !important;
         }
+
+        /* Hide image popover by default */
+        .note-popover.note-image-popover {
+            display: none !important;
+        }
+        /* Show only when show-popover class is added */
+        .note-popover.note-image-popover.show-popover {
+            display: block !important;
+        }
+
+        /* Hide image selection black background overlay and dimensions tooltip */
+        .note-control-selection-bg {
+            display: none !important;
+        }
+        .note-control-selection-info {
+            display: none !important;
+        }
         
         .badge { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
         .month-picker { padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; font-family: inherit; font-size: 14px; outline: none; }
@@ -838,6 +855,23 @@ if (activeTab === 'monthly') {
 } else {
     switchTab('tab-config', document.querySelectorAll('.tab')[0]);
 }
+
+// Trigger popover ONLY on right click for image elements inside the editor
+$(document).on('contextmenu', '.note-editable img', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    var $img = $(this);
+    $img.trigger('click');
+    $('.note-popover.note-image-popover').addClass('show-popover');
+});
+
+// Hide popover on clicking anywhere else
+$(document).on('click mousedown', function(e) {
+    if (!$(e.target).closest('.note-popover.note-image-popover').length) {
+        $('.note-popover.note-image-popover').removeClass('show-popover');
+    }
+});
 </script>
 </body>
 </html>
