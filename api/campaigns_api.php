@@ -56,7 +56,17 @@ try {
             $key = "campaign_mapping_" . $moduleId;
             $value = dm_get_system_setting($conn, $prefix, $key, null);
             $mapping = $value ? json_decode($value, true) : null;
-            commerce_json_response(['success' => true, 'mapping' => $mapping]);
+
+            // Fetch all fields for this module so the client can map fields regardless of is_list_visible
+            $fieldsStmt = $conn->prepare("SELECT id, field_key, label FROM {$prefix}module_fields WHERE module_id = ?");
+            $fieldsStmt->execute([$moduleId]);
+            $allFields = $fieldsStmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            commerce_json_response([
+                'success' => true, 
+                'mapping' => $mapping, 
+                'all_fields' => $allFields
+            ]);
 
         case 'delete_field_mapping':
             $moduleId = (int)($input['module_id'] ?? 0);

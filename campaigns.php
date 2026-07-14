@@ -1598,7 +1598,7 @@ $v = time();
                     }
                     
                     const mapping = mapData.mapping; // { first_name: 'field_key', email: 'field_key', ... }
-                    const fields = activeModuleFields[moduleId] || [];
+                    const fields = mapData.all_fields || activeModuleFields[moduleId] || [];
                     const records = activeModuleRecords[moduleId] || [];
                     
                     // Build field_key -> field_id map
