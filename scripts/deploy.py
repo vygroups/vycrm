@@ -27,7 +27,7 @@ def custom_makepasv(self):
 ftplib.FTP.makepasv = custom_makepasv
 
 # FTP Credentials
-HOST = "147.93.99.228"
+HOST = "vycrm.vygroups.com"
 USER = "u495954467.vycrm"
 PASS = "Tn02aps2391*"
 PORT = 21
@@ -65,7 +65,18 @@ def upload_dir(ftp, local_dir, remote_dir):
 def main():
     try:
         ftp = ftplib.FTP()
-        ftp.connect(HOST, PORT)
+        # Try IPv6 first, then fall back to IPv4
+        try:
+            print("Connecting via IPv6...")
+            ftp.af = socket.AF_INET6
+            ftp.connect(HOST, PORT, timeout=10)
+        except Exception as e6:
+            print(f"IPv6 connection failed: {e6}. Retrying via IPv4...")
+            ftp = ftplib.FTP()
+            ftp.af = socket.AF_INET
+            ftp.connect(HOST, PORT, timeout=10)
+            
+        print("Logging in...")
         ftp.login(USER, PASS)
         ftp.cwd(REMOTE_PATH)
         

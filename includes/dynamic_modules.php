@@ -1368,10 +1368,52 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
 }
 
 /**
+ * Converts rich HTML formatting into Meta Cloud API's WhatsApp markdown syntax.
+ */
+function dm_html_to_whatsapp_format(string $html): string
+{
+    if (strpos($html, '<') === false) {
+        return trim(html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+
+    // 1. Convert <br> and <br/> tags to newline
+    $text = preg_replace('/<br\s*\/?>/i', "\n", $html);
+
+    // 2. Handle block tag closures to insert newlines
+    $text = preg_replace('/<\/p>/i', "\n\n", $text);
+    $text = preg_replace('/<\/div>/i', "\n", $text);
+
+    // 3. Convert bold
+    $text = preg_replace('/<(b|strong)>(.*?)<\/\1>/is', '*$2*', $text);
+
+    // 4. Convert italics
+    $text = preg_replace('/<(i|em)>(.*?)<\/\1>/is', '_$2_', $text);
+
+    // 5. Convert strikethrough
+    $text = preg_replace('/<(s|strike|del)>(.*?)<\/\1>/is', '~$2~', $text);
+
+    // 6. Convert codeblocks
+    $text = preg_replace('/<(code)>(.*?)<\/\1>/is', '`$2`', $text);
+
+    // 7. Strip all other HTML tags
+    $text = strip_tags($text);
+
+    // 8. Decode HTML entities
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    // 9. Normalize consecutive newlines (max 2 consecutive newlines)
+    $text = preg_replace("/\n{3,}/", "\n\n", $text);
+
+    return trim($text);
+}
+
+/**
  * Sends a WhatsApp text message using curl to Meta Cloud API or standard webhook gateway.
  */
 function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, string $body): bool
 {
+    $body = dm_html_to_whatsapp_format($body);
+
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $apiUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

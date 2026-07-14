@@ -24,11 +24,19 @@ def custom_makepasv(self):
 
 ftplib.FTP.makepasv = custom_makepasv
 
-HOST = "147.93.99.228"
+HOST = "vycrm.vygroups.com"
 USER = "u495954467.vycrm"
 PASS = "Tn02aps2391*"
 
-ftp = ftplib.FTP(HOST, USER, PASS)
+ftp = ftplib.FTP()
+try:
+    ftp.af = socket.AF_INET6
+    ftp.connect(HOST, 21, timeout=10)
+except Exception:
+    ftp = ftplib.FTP()
+    ftp.af = socket.AF_INET
+    ftp.connect(HOST, 21, timeout=10)
+ftp.login(USER, PASS)
 ftp.cwd("/")
 
 file_path = "web/cron_campaigns.php"

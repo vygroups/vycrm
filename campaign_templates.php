@@ -42,28 +42,74 @@ $v = time();
         .note-toolbar {
             background: #f8fafc !important;
             border-bottom: 1px solid var(--border) !important;
-            padding: 8px 12px !important;
+            padding: 6px 8px !important;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
         }
-        .note-btn {
-            background: #fff !important;
-            border: 1.5px solid var(--border) !important;
+        .note-toolbar .note-btn-group {
+            margin-right: 4px !important;
+            display: inline-flex;
+            gap: 2px;
+        }
+        .note-toolbar .note-btn-group > .note-btn {
+            background: transparent !important;
+            border: 1px solid transparent !important;
             color: var(--text-main) !important;
-            border-radius: 8px !important;
-            padding: 6px 12px !important;
+            border-radius: 6px !important;
+            padding: 5px 8px !important;
             font-size: 13px !important;
-            font-weight: 600 !important;
             transition: all 0.15s !important;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+            box-shadow: none !important;
         }
-        .note-btn:hover {
-            background: rgba(123,94,240,0.06) !important;
+        .note-toolbar .note-btn-group > .note-btn:hover {
+            background: rgba(123,94,240,0.08) !important;
+            color: var(--primary) !important;
+            border-color: rgba(123,94,240,0.15) !important;
+        }
+        .note-toolbar .note-btn-group > .note-btn.active {
+            background: rgba(123,94,240,0.12) !important;
             color: var(--primary) !important;
             border-color: rgba(123,94,240,0.25) !important;
         }
-        .note-btn.active {
-            background: rgba(123,94,240,0.1) !important;
-            border-color: var(--primary) !important;
-            color: var(--primary) !important;
+
+        /* Summernote Modal / Dialog styles fixing bottom cutoff and look */
+        .note-modal {
+            box-sizing: border-box !important;
+        }
+        .note-modal * {
+            box-sizing: border-box !important;
+        }
+        .note-modal-content {
+            padding: 0 !important;
+            border-radius: 12px !important;
+            border: 1px solid rgba(0,0,0,0.1) !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1) !important;
+            overflow: hidden !important;
+        }
+        .note-modal-body {
+            padding: 20px !important;
+        }
+        .note-modal-footer {
+            height: auto !important;
+            padding: 16px 20px !important;
+            border-top: 1px solid #f1f5f9 !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        .note-modal-footer .note-btn {
+            background: var(--primary) !important;
+            color: #fff !important;
+            border: none !important;
+            padding: 8px 20px !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            border-radius: 6px !important;
+            height: auto !important;
+            width: auto !important;
+            box-shadow: none !important;
+            cursor: pointer !important;
         }
         .note-editable {
             font-family: inherit !important;
@@ -268,19 +314,9 @@ $v = time();
             color: var(--text-main) !important;
         }
 
-        /* Hide direct Image URL insertion inputs in insert image dialog */
-        .note-group-image-url {
-            display: none !important;
-        }
+        /* Let standard image URL insertion show by default */
 
-        /* Hide image popover by default */
-        .note-popover.note-image-popover {
-            display: none !important;
-        }
-        /* Show only when show-popover class is added */
-        .note-popover.note-image-popover.show-popover {
-            display: block !important;
-        }
+        /* Let standard image popover show by default */
 
         /* Hide image selection black background overlay and dimensions tooltip */
         .note-control-selection-bg {
@@ -464,22 +500,20 @@ $v = time();
                     tabsize: 2,
                     height: 280,
                     toolbar: [
+                        ['history', ['undo', 'redo']],
                         ['style', ['style']],
-                        ['font', ['bold', 'italic', 'underline', 'strikethrough', 'clear']],
+                        ['fontname', ['fontname']],
+                        ['fontsize', ['fontsize']],
+                        ['font', ['bold', 'italic', 'underline', 'strikethrough', 'superscript', 'subscript', 'clear']],
                         ['color', ['color']],
+                        ['para', ['ul', 'ol', 'paragraph', 'height']],
                         ['alignment', ['align']],
-                        ['para', ['ul', 'ol', 'paragraph']],
                         ['table', ['table']],
-                        ['insert', ['link', 'picture', 'video']],
+                        ['insert', ['link', 'picture', 'video', 'hr']],
                         ['view', ['fullscreen', 'codeview', 'help']]
                     ],
                     popover: {
-                        image: [
-                            ['custom', ['imageLinkPrompt']],
-                            ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
-                            ['float', ['floatLeft', 'floatRight', 'floatNone']],
-                            ['remove', ['removeMedia']]
-                        ]
+                        image: []
                     },
                     buttons: {
                         imageLinkPrompt: function(context) {
@@ -489,6 +523,9 @@ $v = time();
                                 tooltip: 'Insert Image Link',
                                 click: function() {
                                     var $img = $(context.invoke('editor.restoreTarget'));
+                                    if (!$img.length || !$img.is('img')) {
+                                        $img = lastClickedImage ? $(lastClickedImage) : $();
+                                    }
                                     if (!$img.length || !$img.is('img')) {
                                         $img = $(document.getSelection().anchorNode).find('img');
                                     }
@@ -500,7 +537,7 @@ $v = time();
                                         return;
                                     }
                                     
-                                    var parentA = $img.parent('a');
+                                    var parentA = $img.closest('a');
                                     var currentUrl = parentA.length ? parentA.attr('href') : '';
                                     
                                     var url = prompt('To what URL should this link go?', currentUrl || 'https://');
@@ -585,21 +622,10 @@ $v = time();
             const noteEditor = document.querySelector('.note-editor');
             const textareaEl = document.getElementById('templateBody');
             
-            if (type === 'email') {
-                if (noteEditor) {
-                    noteEditor.style.display = 'block';
-                    textareaEl.style.display = 'none';
-                } else {
-                    textareaEl.style.display = 'block';
-                }
+            if (noteEditor) {
+                noteEditor.style.display = 'block';
+                textareaEl.style.display = 'none';
             } else {
-                if (noteEditor) {
-                    noteEditor.style.display = 'none';
-                    // Sync plain text content back to textarea from Summernote
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = $('#templateBody').summernote('code');
-                    textareaEl.value = tempDiv.textContent || tempDiv.innerText || '';
-                }
                 textareaEl.style.display = 'block';
             }
         }
@@ -665,7 +691,7 @@ $v = time();
             const type = document.getElementById('templateType').value;
             const subject = subEl.value.trim();
             
-            const body = (type === 'email') ? $('#templateBody').summernote('code').trim() : bodyEl.value.trim();
+            const body = $('#templateBody').summernote('code').trim();
 
             if (!name) {
                 vyToast('Template name is required.', 'error');
@@ -683,7 +709,7 @@ $v = time();
             }
             if (!body || body === '<p><br></p>' || body === '<br>') {
                 vyToast('Message body is required.', 'error');
-                if (type === 'email' && noteEditor) {
+                if (noteEditor) {
                     noteEditor.style.border = '1px solid #ef4444';
                 } else {
                     bodyEl.classList.add('is-invalid');
@@ -760,22 +786,13 @@ $v = time();
                 subEl.focus();
                 subEl.selectionStart = subEl.selectionEnd = start + placeholder.length;
             } else {
-                if (type === 'email') {
-                    if (!userInteractedWithEditor) {
-                        var currentHtml = $('#templateBody').summernote('code');
-                        $('#templateBody').summernote('code', currentHtml + placeholder);
-                    } else {
-                        $('#templateBody').summernote('focus');
-                        $('#templateBody').summernote('restoreRange');
-                        $('#templateBody').summernote('insertText', placeholder);
-                    }
+                if (!userInteractedWithEditor) {
+                    var currentHtml = $('#templateBody').summernote('code');
+                    $('#templateBody').summernote('code', currentHtml + placeholder);
                 } else {
-                    bodyEl.focus();
-                    const start = bodyEl.selectionStart;
-                    const end = bodyEl.selectionEnd;
-                    bodyEl.value = bodyEl.value.substring(0, start) + placeholder + bodyEl.value.substring(end);
-                    bodyEl.focus();
-                    bodyEl.selectionStart = bodyEl.selectionEnd = start + placeholder.length;
+                    $('#templateBody').summernote('focus');
+                    $('#templateBody').summernote('restoreRange');
+                    $('#templateBody').summernote('insertText', placeholder);
                 }
             }
         }
@@ -847,11 +864,8 @@ $v = time();
         function insertSignature(id) {
             const sig = signaturesList.find(s => s.id == id);
             if (!sig) return;
-            const type = document.getElementById('templateType').value;
-            if (type === 'email') {
-                var currentHtml = $('#templateBody').summernote('code');
-                $('#templateBody').summernote('code', currentHtml + '<br><br>' + sig.content);
-            }
+            var currentHtml = $('#templateBody').summernote('code');
+            $('#templateBody').summernote('code', currentHtml + '<br><br>' + sig.content);
             // close dropdown
             document.getElementById('sigDropdown').classList.remove('open');
             _sigDropOpen = false;
@@ -864,29 +878,266 @@ $v = time();
             }
         });
 
+        let lastClickedImage = null;
+
+        function showImageLinkEditBar(img) {
+            var $img = $(img);
+            var $editor = $img.closest('.note-editor');
+            var $toolbar = $editor.find('.note-toolbar');
+            if (!$toolbar.length) return;
+
+            var $bar = $toolbar.find('.note-image-link-edit-bar');
+            if (!$bar.length) {
+                $bar = $(`
+                    <div class="note-image-link-edit-bar" style="display: flex; align-items: center; gap: 6px; margin-left: 10px; padding: 2px 6px; background: rgba(123,94,240,0.06); border-radius: 6px; border: 1px solid rgba(123,94,240,0.15); align-self: center;">
+                        <span style="font-size: 12px; font-weight: 600; color: var(--primary); display: flex; align-items: center; gap: 4px;">
+                            <i class="fa-solid fa-image"></i> Image Settings:
+                        </span>
+                        
+                        <span style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">Link:</span>
+                        <input type="text" class="note-image-link-input" placeholder="https://..." style="height: 28px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; width: 150px; outline: none; box-sizing: border-box; background:#fff; color:var(--text-main);">
+                        <button type="button" class="note-image-link-btn-apply" style="height: 28px; background: var(--primary); color: #fff; border: none; padding: 0 8px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: normal;">Apply</button>
+                        
+                        <div style="width: 1px; height: 18px; background: rgba(123,94,240,0.15); margin: 0 4px;"></div>
+                        
+                        <span style="font-size: 11px; color: var(--text-muted);">Align:</span>
+                        <button type="button" class="note-image-btn-float-left" title="Float Left" style="height: 28px; width: 28px; background: #fff; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-main);"><i class="fa-solid fa-align-left"></i></button>
+                        <button type="button" class="note-image-btn-float-none" title="No Float" style="height: 28px; width: 28px; background: #fff; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-main);"><i class="fa-solid fa-align-center"></i></button>
+                        <button type="button" class="note-image-btn-float-right" title="Float Right" style="height: 28px; width: 28px; background: #fff; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-main);"><i class="fa-solid fa-align-right"></i></button>
+                        
+                        <div style="width: 1px; height: 18px; background: rgba(123,94,240,0.15); margin: 0 4px;"></div>
+                        
+                        <span style="font-size: 11px; color: var(--text-muted);">Size:</span>
+                        <button type="button" class="note-image-btn-size-100" style="height: 28px; padding: 0 6px; background: #fff; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text-main);">100%</button>
+                        <button type="button" class="note-image-btn-size-50" style="height: 28px; padding: 0 6px; background: #fff; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text-main);">50%</button>
+                        <button type="button" class="note-image-btn-size-25" style="height: 28px; padding: 0 6px; background: #fff; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--text-main);">25%</button>
+                        
+                        <div style="width: 1px; height: 18px; background: rgba(123,94,240,0.15); margin: 0 4px;"></div>
+                        
+                        <button type="button" class="note-image-btn-delete" title="Delete Image" style="height: 28px; background: #ef4444; color: #fff; border: none; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; line-height: normal;"><i class="fa-solid fa-trash"></i> Delete</button>
+                    </div>
+                `);
+                $toolbar.append($bar);
+
+                $bar.find('.note-image-link-btn-apply').on('click', function(e) {
+                    e.stopPropagation();
+                    if (!lastClickedImage) return;
+                    var $targetImg = $(lastClickedImage);
+                    var $input = $bar.find('.note-image-link-input');
+                    var url = $input.val().trim();
+                    var parentA = $targetImg.closest('a');
+
+                    if (url) {
+                        if (parentA.length) {
+                            parentA.attr('href', url);
+                        } else {
+                            $targetImg.wrap('<a href="' + url + '" target="_blank"></a>');
+                        }
+                    } else {
+                        if (parentA.length) {
+                            $targetImg.unwrap();
+                        }
+                    }
+                    
+                    var $note = $targetImg.closest('.note-editor').prev();
+                    var context = $note.data('summernote');
+                    if (context) {
+                        context.invoke('editor.afterCommand');
+                    }
+                    hideImageLinkEditBar();
+                    lastClickedImage = null;
+                });
+
+                // Float Buttons
+                $bar.find('.note-image-btn-float-left').on('click', function(e) {
+                    e.stopPropagation();
+                    if (!lastClickedImage) return;
+                    var $targetImg = $(lastClickedImage);
+                    $targetImg.css('float', 'left');
+                    
+                    $bar.find('.note-image-btn-float-left, .note-image-btn-float-none, .note-image-btn-float-right').css('background', '#fff').css('border-color', 'var(--border)');
+                    $(this).css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+
+                    var $note = $targetImg.closest('.note-editor').prev();
+                    var context = $note.data('summernote');
+                    if (context) context.invoke('editor.afterCommand');
+                });
+                
+                $bar.find('.note-image-btn-float-none').on('click', function(e) {
+                    e.stopPropagation();
+                    if (!lastClickedImage) return;
+                    var $targetImg = $(lastClickedImage);
+                    $targetImg.css('float', 'none');
+                    
+                    $bar.find('.note-image-btn-float-left, .note-image-btn-float-none, .note-image-btn-float-right').css('background', '#fff').css('border-color', 'var(--border)');
+                    $(this).css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+
+                    var $note = $targetImg.closest('.note-editor').prev();
+                    var context = $note.data('summernote');
+                    if (context) context.invoke('editor.afterCommand');
+                });
+
+                $bar.find('.note-image-btn-float-right').on('click', function(e) {
+                    e.stopPropagation();
+                    if (!lastClickedImage) return;
+                    var $targetImg = $(lastClickedImage);
+                    $targetImg.css('float', 'right');
+                    
+                    $bar.find('.note-image-btn-float-left, .note-image-btn-float-none, .note-image-btn-float-right').css('background', '#fff').css('border-color', 'var(--border)');
+                    $(this).css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+
+                    var $note = $targetImg.closest('.note-editor').prev();
+                    var context = $note.data('summernote');
+                    if (context) context.invoke('editor.afterCommand');
+                });
+
+                // Size Buttons
+                $bar.find('.note-image-btn-size-100').on('click', function(e) {
+                    e.stopPropagation();
+                    if (!lastClickedImage) return;
+                    var $targetImg = $(lastClickedImage);
+                    $targetImg.css('width', '100%');
+                    $targetImg.css('height', 'auto');
+                    
+                    $bar.find('.note-image-btn-size-100, .note-image-btn-size-50, .note-image-btn-size-25').css('background', '#fff').css('border-color', 'var(--border)');
+                    $(this).css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+
+                    var $note = $targetImg.closest('.note-editor').prev();
+                    var context = $note.data('summernote');
+                    if (context) context.invoke('editor.afterCommand');
+                });
+
+                $bar.find('.note-image-btn-size-50').on('click', function(e) {
+                    e.stopPropagation();
+                    if (!lastClickedImage) return;
+                    var $targetImg = $(lastClickedImage);
+                    $targetImg.css('width', '50%');
+                    $targetImg.css('height', 'auto');
+                    
+                    $bar.find('.note-image-btn-size-100, .note-image-btn-size-50, .note-image-btn-size-25').css('background', '#fff').css('border-color', 'var(--border)');
+                    $(this).css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+
+                    var $note = $targetImg.closest('.note-editor').prev();
+                    var context = $note.data('summernote');
+                    if (context) context.invoke('editor.afterCommand');
+                });
+
+                $bar.find('.note-image-btn-size-25').on('click', function(e) {
+                    e.stopPropagation();
+                    if (!lastClickedImage) return;
+                    var $targetImg = $(lastClickedImage);
+                    $targetImg.css('width', '25%');
+                    $targetImg.css('height', 'auto');
+                    
+                    $bar.find('.note-image-btn-size-100, .note-image-btn-size-50, .note-image-btn-size-25').css('background', '#fff').css('border-color', 'var(--border)');
+                    $(this).css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+
+                    var $note = $targetImg.closest('.note-editor').prev();
+                    var context = $note.data('summernote');
+                    if (context) context.invoke('editor.afterCommand');
+                });
+
+                // Delete Button
+                $bar.find('.note-image-btn-delete').on('click', function(e) {
+                    e.stopPropagation();
+                    if (!lastClickedImage) return;
+                    var $targetImg = $(lastClickedImage);
+                    
+                    var $note = $targetImg.closest('.note-editor').prev();
+                    $targetImg.remove();
+                    
+                    var context = $note.data('summernote');
+                    if (context) {
+                        context.invoke('editor.afterCommand');
+                    }
+                    hideImageLinkEditBar();
+                    lastClickedImage = null;
+                });
+
+                $bar.find('.note-image-link-input').on('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        $bar.find('.note-image-link-btn-apply').trigger('click');
+                    }
+                });
+            }
+
+            var parentA = $img.closest('a');
+            var currentUrl = parentA.length ? parentA.attr('href') : '';
+            $bar.find('.note-image-link-input').val(currentUrl || 'https://');
+
+            // Set active states on buttons
+            var currentFloat = $img.css('float') || 'none';
+            $bar.find('.note-image-btn-float-left, .note-image-btn-float-none, .note-image-btn-float-right').css('background', '#fff').css('border-color', 'var(--border)');
+            if (currentFloat === 'left') {
+                $bar.find('.note-image-btn-float-left').css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+            } else if (currentFloat === 'right') {
+                $bar.find('.note-image-btn-float-right').css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+            } else {
+                $bar.find('.note-image-btn-float-none').css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+            }
+
+            var currentWidth = $img.css('width') || '';
+            $bar.find('.note-image-btn-size-100, .note-image-btn-size-50, .note-image-btn-size-25').css('background', '#fff').css('border-color', 'var(--border)');
+            if (currentWidth.indexOf('50%') !== -1 || $img.attr('width') === '50%') {
+                $bar.find('.note-image-btn-size-50').css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+            } else if (currentWidth.indexOf('25%') !== -1 || $img.attr('width') === '25%') {
+                $bar.find('.note-image-btn-size-25').css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+            } else {
+                $bar.find('.note-image-btn-size-100').css('background', 'rgba(123,94,240,0.12)').css('border-color', 'var(--primary)');
+            }
+
+            $bar.show();
+        }
+
+        function hideImageLinkEditBar() {
+            $('.note-image-link-edit-bar').hide();
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             loadTemplates();
             loadCampaignFieldPlaceholders();
             loadSignatures();
             initCKEditor();
-
-            // Trigger popover ONLY on right click for image elements inside the editor
-            $(document).on('contextmenu', '.note-editable img', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                var $img = $(this);
-                $img.trigger('click');
-                $('.note-popover.note-image-popover').addClass('show-popover');
-            });
-
-            // Hide popover on clicking anywhere else
-            $(document).on('click mousedown', function(e) {
-                if (!$(e.target).closest('.note-popover.note-image-popover').length) {
-                    $('.note-popover.note-image-popover').removeClass('show-popover');
-                }
-            });
         });
+
+        // Capture image mousedown in capturing phase to show the bar before Summernote overlays handles
+        document.addEventListener('mousedown', function(e) {
+            if (e.target && e.target.tagName === 'IMG' && e.target.closest('.note-editable')) {
+                lastClickedImage = e.target;
+                showImageLinkEditBar(e.target);
+            }
+        }, true);
+
+        // Capture image clicks in capturing phase to override stopPropagation
+        document.addEventListener('click', function(e) {
+            if (e.target && e.target.tagName === 'IMG' && e.target.closest('.note-editable')) {
+                lastClickedImage = e.target;
+                showImageLinkEditBar(e.target);
+            } else if (e.target && (e.target.closest('.note-control-selection') || e.target.closest('.note-control-selection-area') || e.target.closest('.note-control-holder') || e.target.closest('.note-control-handle'))) {
+                // Click on selection handles keeps the edit bar open. Find the image if not set
+                if (!lastClickedImage) {
+                    const editor = e.target.closest('.note-editor');
+                    const img = editor ? editor.querySelector('.note-editable img') : null;
+                    if (img) {
+                        lastClickedImage = img;
+                        showImageLinkEditBar(img);
+                    }
+                }
+            } else if (lastClickedImage && !e.target.closest('.note-image-link-edit-bar') && !e.target.closest('.note-popover')) {
+                hideImageLinkEditBar();
+                lastClickedImage = null;
+            }
+        }, true);
+
+        // Support right click triggers
+        $(document).on('contextmenu', '.note-editable img', function(e) {
+            lastClickedImage = this;
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).trigger('click');
+        });
+
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
     </script>
 </body>
