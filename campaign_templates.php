@@ -543,18 +543,7 @@ $v = time();
                                     var url = prompt('To what URL should this link go?', currentUrl || 'https://');
                                     if (url === null) return; // user cancelled
                                     
-                                    url = url.trim();
-                                    if (url) {
-                                        if (parentA.length) {
-                                            parentA.attr('href', url);
-                                        } else {
-                                            $img.wrap('<a href="' + url + '" target="_blank"></a>');
-                                        }
-                                    } else {
-                                        if (parentA.length) {
-                                            $img.unwrap();
-                                        }
-                                    }
+                                    if (!applyImageLinkToImage($img, url)) return;
                                     context.invoke('editor.afterCommand');
                                 }
                             }).render();
@@ -878,6 +867,53 @@ $v = time();
             }
         });
 
+        function normalizeImageLinkUrl(url) {
+            url = (url || '').trim();
+            if (!url) return '';
+
+            if (url.startsWith('//')) {
+                return 'https:' + url;
+            }
+
+            const schemeMatch = url.match(/^([a-z][a-z0-9+.-]*):/i);
+            if (schemeMatch) {
+                const scheme = schemeMatch[1].toLowerCase();
+                if (['http', 'https', 'mailto', 'tel'].includes(scheme)) return url;
+                vyToast('That link type is not allowed.', 'error');
+                return null;
+            }
+
+            return 'https://' + url;
+        }
+
+        function applyImageLinkToImage($img, rawUrl) {
+            const url = normalizeImageLinkUrl(rawUrl);
+            if (url === null) return false;
+
+            const parentA = $img.closest('a');
+            if (!url) {
+                if (parentA.length) $img.unwrap();
+                return true;
+            }
+
+            if (parentA.length) {
+                parentA.attr({
+                    href: url,
+                    target: '_blank',
+                    rel: 'noopener noreferrer'
+                });
+            } else {
+                const $link = $('<a></a>').attr({
+                    href: url,
+                    target: '_blank',
+                    rel: 'noopener noreferrer'
+                });
+                $img.wrap($link);
+            }
+
+            return true;
+        }
+
         let lastClickedImage = null;
 
         function showImageLinkEditBar(img) {
@@ -924,20 +960,7 @@ $v = time();
                     if (!lastClickedImage) return;
                     var $targetImg = $(lastClickedImage);
                     var $input = $bar.find('.note-image-link-input');
-                    var url = $input.val().trim();
-                    var parentA = $targetImg.closest('a');
-
-                    if (url) {
-                        if (parentA.length) {
-                            parentA.attr('href', url);
-                        } else {
-                            $targetImg.wrap('<a href="' + url + '" target="_blank"></a>');
-                        }
-                    } else {
-                        if (parentA.length) {
-                            $targetImg.unwrap();
-                        }
-                    }
+                    if (!applyImageLinkToImage($targetImg, $input.val())) return;
                     
                     var $note = $targetImg.closest('.note-editor').prev();
                     var context = $note.data('summernote');
@@ -1064,7 +1087,7 @@ $v = time();
 
             var parentA = $img.closest('a');
             var currentUrl = parentA.length ? parentA.attr('href') : '';
-            $bar.find('.note-image-link-input').val(currentUrl || 'https://');
+            $bar.find('.note-image-link-input').val(currentUrl || '');
 
             // Set active states on buttons
             var currentFloat = $img.css('float') || 'none';
@@ -1101,32 +1124,21 @@ $v = time();
             initCKEditor();
         });
 
-        // Capture image mousedown in capturing phase to show the bar before Summernote overlays handles
+        // Manage image edit bar visibility on mousedown to get 100% accurate targets before overlays
         document.addEventListener('mousedown', function(e) {
-            if (e.target && e.target.tagName === 'IMG' && e.target.closest('.note-editable')) {
-                lastClickedImage = e.target;
-                showImageLinkEditBar(e.target);
-            }
-        }, true);
-
-        // Capture image clicks in capturing phase to override stopPropagation
-        document.addEventListener('click', function(e) {
-            if (e.target && e.target.tagName === 'IMG' && e.target.closest('.note-editable')) {
-                lastClickedImage = e.target;
-                showImageLinkEditBar(e.target);
-            } else if (e.target && (e.target.closest('.note-control-selection') || e.target.closest('.note-control-selection-area') || e.target.closest('.note-control-holder') || e.target.closest('.note-control-handle'))) {
-                // Click on selection handles keeps the edit bar open. Find the image if not set
-                if (!lastClickedImage) {
-                    const editor = e.target.closest('.note-editor');
-                    const img = editor ? editor.querySelector('.note-editable img') : null;
-                    if (img) {
-                        lastClickedImage = img;
-                        showImageLinkEditBar(img);
-                    }
+            const clickedImg = e.target.tagName === 'IMG' ? e.target : (e.target.closest('a') ? e.target.closest('a').querySelector('img') : null);
+            
+            if (clickedImg && clickedImg.closest('.note-editable')) {
+                lastClickedImage = clickedImg;
+                showImageLinkEditBar(clickedImg);
+            } else if (e.target.closest('.note-image-link-edit-bar') || e.target.closest('.note-popover') || e.target.closest('.note-control-selection') || e.target.closest('.note-control-selection-area') || e.target.closest('.note-control-holder') || e.target.closest('.note-control-handle')) {
+                // Do nothing, keep the bar open when clicking inside the edit bar, popovers, or selection handles
+            } else {
+                // Clicked outside the image and its controls, hide the bar
+                if (lastClickedImage) {
+                    hideImageLinkEditBar();
+                    lastClickedImage = null;
                 }
-            } else if (lastClickedImage && !e.target.closest('.note-image-link-edit-bar') && !e.target.closest('.note-popover')) {
-                hideImageLinkEditBar();
-                lastClickedImage = null;
             }
         }, true);
 
@@ -1135,7 +1147,7 @@ $v = time();
             lastClickedImage = this;
             e.preventDefault();
             e.stopPropagation();
-            $(this).trigger('click');
+            showImageLinkEditBar(this);
         });
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
