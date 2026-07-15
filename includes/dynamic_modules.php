@@ -1219,6 +1219,18 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
  */
 function dm_send_smtp_email(string $host, int $port, string $user, string $pass, string $fromEmail, string $fromName, string $to, string $subject, string $body, string $encryption = 'none', string $ccEmail = '', array $attachments = [], string $bccEmail = ''): bool
 {
+    // Inline paragraph styles to prevent email clients from adding large margins
+    $body = preg_replace_callback('/<p(\b[^>]*)>/i', function($matches) {
+        $attrs = $matches[1];
+        if (preg_match('/style=["\']([^"\']*)["\']/i', $attrs, $styleMatch)) {
+            $existingStyle = rtrim(trim($styleMatch[1]), ';');
+            $newStyle = "margin: 0; padding: 0; " . $existingStyle;
+            return '<p' . preg_replace('/style=["\'][^"\']*["\']/i', 'style="' . $newStyle . '"', $attrs) . '>';
+        } else {
+            return '<p' . $attrs . ' style="margin: 0; padding: 0;">';
+        }
+    }, $body);
+
     $timeout = 15;
     $socketHost = ($encryption === 'ssl') ? 'ssl://' . $host : $host;
     $socket = @fsockopen($socketHost, $port, $errno, $errstr, $timeout);
@@ -1336,7 +1348,7 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
 
     if (empty($attachments)) {
         $headers[] = "Content-Type: text/html; charset=UTF-8";
-        $message = implode("\r\n", $headers) . "\r\n\r\n" . nl2br($body) . "\r\n.";
+        $message = implode("\r\n", $headers) . "\r\n\r\n" . $body . "\r\n.";
     } else {
         $headers[] = "Content-Type: multipart/mixed; boundary=\"$boundary\"";
         
@@ -1344,7 +1356,7 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
         $message .= "--$boundary\r\n";
         $message .= "Content-Type: text/html; charset=UTF-8\r\n";
         $message .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
-        $message .= nl2br($body) . "\r\n\r\n";
+        $message .= $body . "\r\n\r\n";
         
         foreach ($attachments as $att) {
             $message .= "--$boundary\r\n";

@@ -53,7 +53,7 @@ $v = time();
             display: inline-flex;
             gap: 2px;
         }
-        .note-toolbar .note-btn-group > .note-btn {
+        .note-toolbar .note-btn-group > .note-btn:not(.note-color-btn) {
             background: transparent !important;
             border: 1px solid transparent !important;
             color: var(--text-main) !important;
@@ -63,12 +63,12 @@ $v = time();
             transition: all 0.15s !important;
             box-shadow: none !important;
         }
-        .note-toolbar .note-btn-group > .note-btn:hover {
+        .note-toolbar .note-btn-group > .note-btn:not(.note-color-btn):hover {
             background: rgba(123,94,240,0.08) !important;
             color: var(--primary) !important;
             border-color: rgba(123,94,240,0.15) !important;
         }
-        .note-toolbar .note-btn-group > .note-btn.active {
+        .note-toolbar .note-btn-group > .note-btn:not(.note-color-btn).active {
             background: rgba(123,94,240,0.12) !important;
             color: var(--primary) !important;
             border-color: rgba(123,94,240,0.25) !important;
