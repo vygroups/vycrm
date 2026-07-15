@@ -36,7 +36,7 @@ $v = time();
         .note-editor.note-frame {
             border: 1.5px solid var(--border) !important;
             border-radius: 12px !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             background: #fff !important;
             box-shadow: var(--shadow-sm) !important;
         }
@@ -47,6 +47,8 @@ $v = time();
             display: flex;
             flex-wrap: wrap;
             gap: 4px;
+            border-top-left-radius: 11px !important;
+            border-top-right-radius: 11px !important;
         }
         .note-toolbar .note-btn-group {
             margin-right: 4px !important;
@@ -746,6 +748,7 @@ async function initSigEditor() {
             placeholder: 'Type your signature here...',
             tabsize: 2,
             height: 280,
+            lineHeights: ['0.5', '1.0', '1.2', '1.4', '1.5', '1.6', '1.8', '2.0', '3.0'],
             toolbar: [
                 ['history', ['undo', 'redo']],
                 ['style', ['style']],
