@@ -1896,13 +1896,13 @@ function renderPaginationButtons(total, limit, currentPage) {
 }function renderRecordsTable(fields, records) {
     const selectAllCheckbox = document.getElementById('selectAllRecords');
     if (selectAllCheckbox) selectAllCheckbox.checked = false;
-    updateBulkDeleteButton();
 
     const tbody = document.getElementById('moduleRecordsTableBody');
     if (!tbody) return;
     
     if (!records || records.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${fields.length + (CAN_MULTI_DELETE ? 4 : 3)}" style="text-align:center;padding:40px;color:var(--text-muted);">No records found. <a href="module_record.php?module=${MODULE_ID}" style="color:var(--primary);font-weight:600;">Create one</a></td></tr>`;
+        updateBulkDeleteButton();
         return;
     }
     
@@ -1944,6 +1944,7 @@ function renderPaginationButtons(total, limit, currentPage) {
     
     tbody.innerHTML = html;
     
+    updateBulkDeleteButton();
     applyColumnVisibility();
     const orderList = JSON.parse(localStorage.getItem(ORDER_KEY)) || [];
     applyColumnOrder(orderList);
