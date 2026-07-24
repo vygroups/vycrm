@@ -2,7 +2,6 @@
  * VY-AI CRM Unified CKEditor 4 Helper
  * Centralizes editor loading, image resizing, and upload configuration.
  */
-
 window.vyEditorInstances = {};
 
 async function vyInitEditor(selector, options = {}) {
