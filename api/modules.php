@@ -45,6 +45,18 @@ try {
     }
 } catch (Exception $e) {}
 
+// Token-based requests (mobile app) never populate $_SESSION, but record
+// visibility (dm_fetch_records) and the upload tenant path below still read
+// it directly. Mirror the resolved token context into $_SESSION for this
+// request so those session-era helpers see the same identity as $userId/
+// $userRole/$isAdmin above instead of silently falling back to 0/false.
+if (($context['auth_mode'] ?? '') === 'token') {
+    $_SESSION['user_id'] = $userId;
+    $_SESSION['role_id'] = $userRole;
+    $_SESSION['is_admin'] = $isAdmin ? 1 : 0;
+    $_SESSION['tenant_slug'] = $context['tenant_slug'] ?? '';
+}
+
 try {
     switch ($action) {
 

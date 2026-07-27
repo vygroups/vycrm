@@ -422,7 +422,7 @@ if (!$hasUpdatedAt) {
                                     <?php endif; ?>
                                     <th>#</th>
                                     <?php foreach($fields as $f): ?>
-                                    <th data-field-id="<?= $f['id'] ?>"><?= htmlspecialchars($f['label']) ?></th>
+                                    <th data-field-id="<?= $f['id'] ?>" <?= $f['field_type'] === 'url' ? 'style="white-space: normal; word-break: break-all; min-width: 220px; max-width: 400px;"' : '' ?>><?= htmlspecialchars($f['label']) ?></th>
                                     <?php endforeach; ?>
                                     <?php if (!$hasSysCreatedAt): ?>
                                     <th data-column="created">Created</th>
@@ -441,7 +441,13 @@ if (!$hasUpdatedAt) {
                                     <?php endif; ?>
                                     <td><?= $i + 1 ?></td>
                                     <?php foreach($fields as $f): ?>
-                                    <td data-field-id="<?= $f['id'] ?>" <?= in_array($f['field_type'], ['date', 'datetime', 'time', 'phone']) ? 'style="white-space: nowrap;"' : '' ?>><?php
+                                    <td data-field-id="<?= $f['id'] ?>" <?php
+                                        if (in_array($f['field_type'], ['date', 'datetime', 'time', 'phone'])) {
+                                            echo 'style="white-space: nowrap;"';
+                                        } elseif ($f['field_type'] === 'url') {
+                                            echo 'style="white-space: normal; word-break: break-all; min-width: 220px; max-width: 400px;"';
+                                        }
+                                    ?>><?php
                                         $val = $rec['values'][(int)$f['id']] ?? '';
                                         if ($f['field_type'] === 'checkbox') {
                                             echo $val ? '<i class="fa-solid fa-check" style="color:#10b981;"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--text-muted);"></i>';
@@ -491,7 +497,7 @@ if (!$hasUpdatedAt) {
                                                 $lastSegment = $cleanUrl;
                                             }
                                             $display = '.../' . $lastSegment;
-                                            echo '<a href="' . htmlspecialchars($hrefUrl) . '" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-weight: 600; text-decoration: none;"><i class="fa-solid fa-link" style="font-size:11px; margin-right:4px;"></i>' . htmlspecialchars($display) . '</a>';
+                                            echo '<a href="' . htmlspecialchars($hrefUrl) . '" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-weight: 600; text-decoration: none; display: -webkit-inline-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; word-break: break-all;"><i class="fa-solid fa-link" style="font-size:11px; margin-right:4px; flex-shrink: 0; vertical-align: middle;"></i>' . htmlspecialchars($display) . '</a>';
                                         } else {
                                             $display = mb_strlen($val) > 50 ? mb_substr($val, 0, 50) . '…' : $val;
                                             echo htmlspecialchars($display ?: '-');
@@ -1916,9 +1922,14 @@ function renderPaginationButtons(total, limit, currentPage) {
         
         fields.forEach(f => {
             const val = rec.values[f.id] !== undefined ? rec.values[f.id] : '';
-            const isNowrap = ['date', 'datetime', 'time', 'phone'].includes(f.field_type) ? 'style="white-space: nowrap;"' : '';
+            let cellStyle = '';
+            if (['date', 'datetime', 'time', 'phone'].includes(f.field_type)) {
+                cellStyle = 'style="white-space: nowrap;"';
+            } else if (f.field_type === 'url') {
+                cellStyle = 'style="white-space: normal; word-break: break-all; min-width: 220px; max-width: 400px;"';
+            }
             
-            html += `<td data-field-id="${f.id}" ${isNowrap}>${formatFieldValue(val, f.field_type, f.options)}</td>`;
+            html += `<td data-field-id="${f.id}" ${cellStyle}>${formatFieldValue(val, f.field_type, f.options)}</td>`;
         });
         
         const hasSysCreatedAt = fields.some(f => f.field_type === 'sys_created_at');
@@ -1970,7 +1981,7 @@ function formatFieldValue(val, fieldType, fieldOptions = []) {
             lastSegment = cleanUrl;
         }
         let display = '.../' + lastSegment;
-        return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); font-weight:600; text-decoration:none;"><i class="fa-solid fa-link" style="font-size:11px; margin-right:4px;"></i>${escapeHtml(display)}</a>`;
+        return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:var(--primary); font-weight:600; text-decoration:none; display: -webkit-inline-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; word-break: break-all;"><i class="fa-solid fa-link" style="font-size:11px; margin-right:4px; flex-shrink: 0; vertical-align: middle;"></i>${escapeHtml(display)}</a>`;
     }
     if (fieldType === 'checkbox') {
         return val ? '<i class="fa-solid fa-check" style="color:#10b981;"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--text-muted);"></i>';

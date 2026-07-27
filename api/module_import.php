@@ -97,9 +97,19 @@ if (substr($headers[0], 0, 3) == "\xEF\xBB\xBF") {
 $headerMap = [];
 $fieldTypes = [];
 foreach ($headers as $index => $headerName) {
-    $headerName = trim(strtolower($headerName));
+    $headerName = trim($headerName);
+    $normalizedHeader = normalize_import_header_name($headerName);
+
     foreach ($fields as $f) {
-        if (trim(strtolower($f['label'])) === $headerName) {
+        $label = trim($f['label'] ?? '');
+        $fieldKey = trim($f['field_key'] ?? '');
+        $normalizedLabel = normalize_import_header_name($label);
+        $normalizedFieldKey = normalize_import_header_name($fieldKey);
+
+        if (
+            $normalizedHeader !== '' &&
+            ($normalizedHeader === $normalizedLabel || $normalizedHeader === $normalizedFieldKey)
+        ) {
             $headerMap[$index] = $f['id'];
             $fieldTypes[$f['id']] = $f['field_type'];
             break;
@@ -109,7 +119,7 @@ foreach ($headers as $index => $headerName) {
 
 if (empty($headerMap)) {
     commerce_json_response([
-        'success' => false, 
+        'success' => false,
         'error' => 'No columns matched the module field labels. Please download the template to check headers.'
     ]);
 }
@@ -132,7 +142,7 @@ try {
         // Create record
         $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by) VALUES (?, ?)")->execute([$moduleId, $userId]);
         $recordId = (int)$conn->lastInsertId();
-        
+
         // Insert values
         $upsertStmt = $conn->prepare("INSERT INTO {$prefix}module_record_values (record_id, field_id, value) VALUES (?, ?, ?)");
         foreach ($row as $index => $val) {
@@ -183,19 +193,27 @@ try {
 /**
  * Helper to dynamically load rows based on file format.
  */
+function normalize_import_header_name(string $value): string {
+    $value = trim($value);
+    $value = strtolower($value);
+    $value = preg_replace('/[^a-z0-9]+/', ' ', $value);
+    $value = preg_replace('/\s+/', ' ', $value);
+    return trim($value);
+}
+
 function get_rows_from_file($filePath, $originalName) {
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    
+
     if ($ext === 'xlsx') {
         return parse_xlsx($filePath);
     }
-    
+
     // Check if it's HTML-based XLS
     $contentStart = file_get_contents($filePath, false, null, 0, 1000);
     if (strpos($contentStart, '<html') !== false || strpos($contentStart, '<table') !== false) {
         return parse_html_xls($filePath);
     }
-    
+
     // Otherwise, assume CSV
     $rows = [];
     if (($handle = fopen($filePath, "r")) !== FALSE) {
@@ -214,12 +232,12 @@ function parse_xlsx($filePath) {
     if (!class_exists('ZipArchive')) {
         throw new Exception("ZipArchive PHP extension is missing. Please save files as CSV or HTML XLS.");
     }
-    
+
     $zip = new ZipArchive();
     if ($zip->open($filePath) !== TRUE) {
         throw new Exception("Unable to open XLSX container.");
     }
-    
+
     // 1. Read shared strings table
     $sharedStrings = [];
     $sharedStringsXml = $zip->getFromName('xl/sharedStrings.xml');
@@ -241,87 +259,121 @@ function parse_xlsx($filePath) {
             }
         }
     }
-    
-    // 2. Read sheet1.xml
-    $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
-    if (!$sheetXml) {
-        $zip->close();
-        throw new Exception("Missing worksheet data sheet1.xml in XLSX.");
-    }
-    
-    $xml = simplexml_load_string($sheetXml);
-    $rows = [];
-    
-    if ($xml && $xml->sheetData && $xml->sheetData->row) {
-        foreach ($xml->sheetData->row as $rNode) {
-            $row = [];
-            foreach ($rNode->c as $cNode) {
-                $ref = (string)$cNode['r']; // e.g. A1, B1
-                preg_match('/^[A-Z]+/', $ref, $matches);
-                $colLetters = $matches[0] ?? '';
-                
-                // Convert column letters to 0-based index
-                $colIndex = 0;
-                $len = strlen($colLetters);
-                for ($i = 0; $i < $len; $i++) {
-                    $colIndex = $colIndex * 26 + (ord($colLetters[$i]) - 64);
-                }
-                $colIndex--;
-                
-                $val = '';
-                if (isset($cNode->v)) {
-                    $val = (string)$cNode->v;
-                    $type = (string)$cNode['t']; // 's' for sharedString references
-                    if ($type === 's' && isset($sharedStrings[(int)$val])) {
-                        $val = $sharedStrings[(int)$val];
-                    }
-                }
-                $row[$colIndex] = $val;
-            }
-            
-            // Fill empty intermediate cells
-            if (!empty($row)) {
-                $maxIndex = max(array_keys($row));
-                for ($i = 0; $i <= $maxIndex; $i++) {
-                    if (!isset($row[$i])) {
-                        $row[$i] = '';
-                    }
-                }
-                ksort($row);
-            }
-            $rows[] = $row;
-        }
-    }
-    
-    $zip->close();
-    return $rows;
-}
+   // 2. Read sheet1.xml
+      $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+      if (!$sheetXml) {
+          $zip->close();
+          throw new Exception("Missing worksheet data sheet1.xml in XLSX.");
+      }
 
-/**
- * Parses exported HTML-based XLS table files.
- */
-function parse_html_xls($filePath) {
-    $html = file_get_contents($filePath);
-    $doc = new DOMDocument();
-    // Disable libxml warnings for broken markup
-    libxml_use_internal_errors(true);
-    $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
-    libxml_clear_errors();
-    
-    $rows = [];
-    $trElements = $doc->getElementsByTagName('tr');
-    foreach ($trElements as $tr) {
-        $row = [];
-        $tdElements = $tr->getElementsByTagName('td');
-        if ($tdElements->length === 0) {
-            $tdElements = $tr->getElementsByTagName('th');
-        }
-        foreach ($tdElements as $td) {
-            $row[] = trim($td->nodeValue);
-        }
-        if (!empty($row)) {
-            $rows[] = $row;
-        }
-    }
-    return $rows;
-}
+      // Read relationships for hyperlinks
+      $hyperlinks = [];
+      $relsXml = $zip->getFromName('xl/worksheets/_rels/sheet1.xml.rels');
+      if ($relsXml) {
+          $rels = [];
+          $dom = new DOMDocument();
+          @$dom->loadXML($relsXml);
+          foreach ($dom->getElementsByTagName('Relationship') as $rel) {
+              $id = $rel->getAttribute('Id');
+              $target = $rel->getAttribute('Target');
+              $rels[$id] = $target;
+          }
+
+          // Parse hyperlinks block in sheet1.xml
+          $domSheet = new DOMDocument();
+          @$domSheet->loadXML($sheetXml);
+          foreach ($domSheet->getElementsByTagName('hyperlink') as $hl) {
+              $ref = $hl->getAttribute('ref');
+              $rId = $hl->getAttribute('r:id');
+              if (!$rId) {
+                  foreach ($hl->attributes as $attr) {
+                      if ($attr->localName === 'id') {
+                          $rId = $attr->nodeValue;
+                          break;
+                      }
+                  }
+              }
+              if ($ref && $rId && isset($rels[$rId])) {
+                  $hyperlinks[$ref] = $rels[$rId];
+              }
+          }
+      }
+
+      $xml = simplexml_load_string($sheetXml);
+      $rows = [];
+
+      if ($xml && $xml->sheetData && $xml->sheetData->row) {
+          foreach ($xml->sheetData->row as $rNode) {
+              $row = [];
+              foreach ($rNode->c as $cNode) {
+                  $ref = (string)$cNode['r']; // e.g. A1, B1
+                  preg_match('/^[A-Z]+/', $ref, $matches);
+                  $colLetters = $matches[0] ?? '';
+
+                  // Convert column letters to 0-based index
+                  $colIndex = 0;
+                  $len = strlen($colLetters);
+                  for ($i = 0; $i < $len; $i++) {
+                      $colIndex = $colIndex * 26 + (ord($colLetters[$i]) - 64);
+                  }
+                  $colIndex--;
+
+                  $val = '';
+                  if (isset($hyperlinks[$ref]) && preg_match('/^(https?|mailto):/i', trim($hyperlinks[$ref]))) {
+                      $val = trim($hyperlinks[$ref]);
+                  } elseif (isset($cNode->v)) {
+                      $val = (string)$cNode->v;
+                      $type = (string)$cNode['t']; // 's' for sharedString references
+                      if ($type === 's' && isset($sharedStrings[(int)$val])) {
+                          $val = $sharedStrings[(int)$val];
+                      }
+                  }
+                  $row[$colIndex] = $val;
+              }
+
+              // Fill empty intermediate cells
+              if (!empty($row)) {
+                  $maxIndex = max(array_keys($row));
+                  for ($i = 0; $i <= $maxIndex; $i++) {
+                      if (!isset($row[$i])) {
+                          $row[$i] = '';
+                      }
+                  }
+                  ksort($row);
+              }
+              $rows[] = $row;
+          }
+      }
+
+      $zip->close();
+      return $rows;
+  }
+
+  /**
+   * Parses exported HTML-based XLS table files.
+   */
+  function parse_html_xls($filePath) {
+      $html = file_get_contents($filePath);
+      $doc = new DOMDocument();
+      // Disable libxml warnings for broken markup
+      libxml_use_internal_errors(true);
+      $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+      libxml_clear_errors();
+
+      $rows = [];
+      $trElements = $doc->getElementsByTagName('tr');
+      foreach ($trElements as $tr) {
+          $row = [];
+          $tdElements = $tr->getElementsByTagName('td');
+          if ($tdElements->length === 0) {
+              $tdElements = $tr->getElementsByTagName('th');
+          }
+          foreach ($tdElements as $td) {
+              $row[] = trim($td->nodeValue);
+          }
+          if (!empty($row)) {
+              $rows[] = $row;
+          }
+      }
+      return $rows;
+  }

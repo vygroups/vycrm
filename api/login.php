@@ -67,13 +67,18 @@ try {
         if ($expiryHours <= 0) $expiryHours = 8;
         $_SESSION['expiry'] = time() + ($expiryHours * 3600);
         $apiToken = api_issue_token($user, $companySlug, $company['db_name'], $tenantPrefix);
-        
+
         echo json_encode([
-            'success' => true, 
+            'success' => true,
             'message' => 'Login successful',
             'redirect' => '/dashboard.php',
             'api_token' => $apiToken,
-            'token_type' => 'Bearer'
+            'token_type' => 'Bearer',
+            'id' => (int)$user['id'],
+            'username' => $user['username'],
+            'first_name' => $user['first_name'] ?? '',
+            'last_name' => $user['last_name'] ?? '',
+            'is_admin' => (int)($user['is_admin'] ?? 0)
         ]);
     } else {
         echo json_encode(['success' => false, 'message' => 'Invalid username or password']);
