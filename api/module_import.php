@@ -144,7 +144,11 @@ try {
         $recordId = (int)$conn->lastInsertId();
 
         // Insert values
-        $upsertStmt = $conn->prepare("INSERT INTO {$prefix}module_record_values (record_id, field_id, value) VALUES (?, ?, ?)");
+        $upsertStmt = $conn->prepare("
+            INSERT INTO {$prefix}module_record_values (record_id, field_id, value) 
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE value = VALUES(value)
+        ");
         foreach ($row as $index => $val) {
             if (isset($headerMap[$index])) {
                 $fieldId = $headerMap[$index];
@@ -196,9 +200,9 @@ try {
 function normalize_import_header_name(string $value): string {
     $value = trim($value);
     $value = strtolower($value);
-    $value = preg_replace('/[^a-z0-9]+/', ' ', $value);
-    $value = preg_replace('/\s+/', ' ', $value);
-    return trim($value);
+    // Remove all non-alphanumeric characters and whitespaces to match spaces-insensitively
+    $value = preg_replace('/[^a-z0-9]/', '', $value);
+    return $value;
 }
 
 function get_rows_from_file($filePath, $originalName) {
