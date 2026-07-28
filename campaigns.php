@@ -487,7 +487,7 @@ $v = time();
                 </div>
 
                 <div class="form-group" id="scheduleTimeGroup" style="display: none; flex-direction: column; gap: 6px; margin-top: 15px;">
-                    <label class="form-label">Schedule Date & Time (5 Min Intervals) *</label>
+                    <label class="form-label">Schedule Date & Time *</label>
                     <input type="text" id="campaignScheduledAt" class="form-control" placeholder="Select date & time..." style="width: 100%; box-sizing: border-box;">
                 </div>
 
@@ -701,9 +701,7 @@ $v = time();
                 group.style.display = 'flex';
                 const now = new Date();
                 now.setHours(now.getHours() + 1);
-                // Round to the nearest 5 minutes
-                const coeff = 1000 * 60 * 5;
-                const rounded = new Date(Math.round(now.getTime() / coeff) * coeff);
+                const rounded = now;
                 
                 if (fpCampaignSchedule) {
                     fpCampaignSchedule.setDate(rounded);
@@ -1909,28 +1907,8 @@ $v = time();
                 dateFormat: "Y-m-d H:i",
                 altInput: true,
                 altFormat: "d/m/Y, h:i K",
-                minuteIncrement: 5,
-                allowInput: false,
-                onChange: function(selectedDates, dateStr, instance) {
-                    if (selectedDates.length > 0) {
-                        const d = selectedDates[0];
-                        const m = d.getMinutes();
-                        if (m % 5 !== 0) {
-                            const rounded = new Date(Math.round(d.getTime() / 300000) * 300000);
-                            instance.setDate(rounded, false);
-                        }
-                    }
-                },
-                onClose: function(selectedDates, dateStr, instance) {
-                    if (selectedDates.length > 0) {
-                        const d = selectedDates[0];
-                        const m = d.getMinutes();
-                        if (m % 5 !== 0) {
-                            const rounded = new Date(Math.round(d.getTime() / 300000) * 300000);
-                            instance.setDate(rounded, false);
-                        }
-                    }
-                }
+                minuteIncrement: 1,
+                allowInput: false
             });
         });
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }

@@ -27,7 +27,6 @@ cron_log('Cron Campaigns Started', $logFile);
 try {
     $masterConn = Database::getMasterConn();
     $prefix = Database::getMasterPrefix();
-    $masterDB = Database::getMasterDBName();
 
     // Fetch all active company tenants
     $stmt = $masterConn->query("SELECT db_name, slug FROM {$prefix}companies");
@@ -36,10 +35,6 @@ try {
     foreach ($tenants as $tenant) {
         $dbName = $tenant['db_name'];
         $slug = $tenant['slug'];
-
-        if ($dbName === $masterDB) {
-            continue;
-        }
 
         $isIsolated = true;
         $tenantPrefix = $isIsolated ? "" : $slug . "_";
