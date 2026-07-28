@@ -259,7 +259,17 @@ try {
                 if (!$rawScheduledAt) {
                     throw new RuntimeException('Schedule date and time required for scheduled campaigns');
                 }
-                $scheduledAt = date('Y-m-d H:i:s', strtotime($rawScheduledAt));
+
+                $appTz = new DateTimeZone('Asia/Kolkata');
+                $scheduleDate = DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $rawScheduledAt, $appTz);
+                if (!$scheduleDate) {
+                    $scheduleDate = new DateTimeImmutable($rawScheduledAt, $appTz);
+                }
+                if (!$scheduleDate) {
+                    throw new RuntimeException('Invalid schedule date and time format');
+                }
+
+                $scheduledAt = $scheduleDate->format('Y-m-d H:i:s');
                 $status = 'scheduled';
             }
 

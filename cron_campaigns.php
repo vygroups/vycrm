@@ -6,14 +6,23 @@ set_time_limit(0);
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/dynamic_modules.php';
 
+$appTz = new DateTimeZone('Asia/Kolkata');
+$logFile = __DIR__ . '/cron_campaigns.log';
+
+function cron_log(string $message, string $logFile): void {
+    $line = '[' . date('Y-m-d H:i:s') . '] ' . $message . PHP_EOL;
+    echo $line;
+    @file_put_contents($logFile, $line, FILE_APPEND);
+}
+
 $lockFile = __DIR__ . '/cron.lock';
 $fp = fopen($lockFile, "w+");
 if (!flock($fp, LOCK_EX | LOCK_NB)) {
-    echo "Cron is already running. Exiting to prevent duplicates.\n";
+    cron_log('Cron is already running. Exiting to prevent duplicates.', $logFile);
     exit;
 }
 
-echo "Cron Campaigns Started at " . date('Y-m-d H:i:s') . "\n";
+cron_log('Cron Campaigns Started', $logFile);
 
 try {
     $masterConn = Database::getMasterConn();
@@ -24,16 +33,15 @@ try {
     $stmt = $masterConn->query("SELECT db_name, slug FROM {$prefix}companies");
     $tenants = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Also add the master tenant itself (it's not in the companies table)
-    // Extract the slug from the master prefix (e.g., 'master_' -> 'master')
-    $masterSlug = rtrim($prefix, '_');
-    array_unshift($tenants, ['db_name' => $masterDB, 'slug' => $masterSlug]);
-
     foreach ($tenants as $tenant) {
         $dbName = $tenant['db_name'];
         $slug = $tenant['slug'];
 
-        $isIsolated = ($dbName != $masterDB);
+        if ($dbName === $masterDB) {
+            continue;
+        }
+
+        $isIsolated = true;
         $tenantPrefix = $isIsolated ? "" : $slug . "_";
 
         $conn = Database::getTenantConn($dbName);
@@ -51,12 +59,13 @@ try {
 
         try {
             // Find campaigns marked as scheduled where scheduled_at is in the past or present
-            $now = date('Y-m-d H:i:s');
+            $now = (new DateTimeImmutable('now', $appTz))->format('Y-m-d H:i:s');
             $cStmt = $conn->prepare("
                 SELECT c.*, t.subject, t.body
                 FROM {$tenantPrefix}campaigns c
                 JOIN {$tenantPrefix}campaign_templates t ON t.id = c.template_id
-                WHERE (c.status = 'scheduled' AND c.scheduled_at <= ?) OR c.status = 'sending'
+                WHERE (c.status = 'scheduled' AND c.scheduled_at IS NOT NULL AND c.scheduled_at <= ?)
+                   OR c.status = 'sending'
             ");
             $cStmt->execute([$now]);
             $dueCampaigns = $cStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -65,14 +74,14 @@ try {
                 continue;
             }
 
-            echo "Processing tenant: $dbName\n";
+            cron_log("Processing tenant: {$dbName}", $logFile);
 
             foreach ($dueCampaigns as $campaign) {
                 $campaignId = (int)$campaign['id'];
                 $sendDelay = (int)$campaign['send_delay'];
                 $campaignType = $campaign['type'];
 
-                echo "  Campaign #{$campaignId} ('{$campaign['name']}'): starting processing...\n";
+                cron_log("  Campaign #{$campaignId} ('{$campaign['name']}'): starting processing...", $logFile);
 
                 // Mark campaign status as 'sending'
                 $conn->prepare("UPDATE {$tenantPrefix}campaigns SET status = 'sending' WHERE id = ?")->execute([$campaignId]);
@@ -82,7 +91,7 @@ try {
                 $rStmt->execute([$campaignId]);
                 $recipients = $rStmt->fetchAll(PDO::FETCH_ASSOC);
 
-                echo "    Found " . count($recipients) . " pending recipients.\n";
+                cron_log('    Found ' . count($recipients) . ' pending recipients.', $logFile);
 
                 foreach ($recipients as $recipient) {
                     // Check if user paused or stopped campaign from UI
@@ -91,7 +100,7 @@ try {
                     $currentStatus = $statusCheck->fetchColumn();
 
                     if ($currentStatus !== 'sending') {
-                        echo "    Campaign sending paused or cancelled by user. Aborting loop.\n";
+                        cron_log('    Campaign sending paused or cancelled by user. Aborting loop.', $logFile);
                         break;
                     }
 
@@ -99,7 +108,7 @@ try {
                     $cfStmt = $conn->query("SELECT field_key, label FROM {$tenantPrefix}campaign_fields");
                     $campaignFields = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
                     $extraData = !empty($recipient['extra_data']) ? json_decode($recipient['extra_data'], true) : [];
-                    
+
                     $replacements = [];
                     foreach ($campaignFields as $cf) {
                         $fKey = $cf['field_key'];
@@ -201,7 +210,8 @@ try {
                     $upStmt = $conn->prepare("UPDATE {$tenantPrefix}campaign_recipients SET status = ?, sent_at = NOW(), error_message = ? WHERE id = ?");
                     $upStmt->execute([$newStatus, $errorMsg, $recipient['id']]);
 
-                    echo "      Recipient #{$recipient['id']} ({$recipient['email']}/{$recipient['phone']}): {$newStatus}" . ($errorMsg ? " (Error: {$errorMsg})" : "") . "\n";
+                    $recipientLog = '      Recipient #' . $recipient['id'] . ' (' . ($recipient['email'] ?? '') . '/' . ($recipient['phone'] ?? '') . '): ' . $newStatus . ($errorMsg ? ' (Error: ' . $errorMsg . ')' : '');
+                    cron_log($recipientLog, $logFile);
 
                     // Respect delay between messages
                     if ($sendDelay > 0) {
@@ -231,18 +241,18 @@ try {
 
                         $finalStatus = ($failed === $total && $total > 0) ? 'failed' : 'completed';
                         $conn->prepare("UPDATE {$tenantPrefix}campaigns SET status = ? WHERE id = ?")->execute([$finalStatus, $campaignId]);
-                        echo "    Campaign #{$campaignId} completed processing. Status set to: {$finalStatus}\n";
+                        cron_log("    Campaign #{$campaignId} completed processing. Status set to: {$finalStatus}", $logFile);
                     } else {
-                        echo "    Campaign #{$campaignId} has {$pending} recipients left. Will resume in next cron tick.\n";
+                        cron_log("    Campaign #{$campaignId} has {$pending} recipients left. Will resume in next cron tick.", $logFile);
                     }
                 }
             }
         } catch (Exception $e) {
-            echo "  [ERROR] Tenant {$dbName} failed: " . $e->getMessage() . "\n";
+            cron_log("  [ERROR] Tenant {$dbName} failed: " . $e->getMessage(), $logFile);
         }
     }
 } catch (Exception $e) {
-    echo "Global Connection Error: " . $e->getMessage() . "\n";
+    cron_log('Global Connection Error: ' . $e->getMessage(), $logFile);
 }
 
-echo "Cron Campaigns Completed at " . date('Y-m-d H:i:s') . "\n";
+cron_log('Cron Campaigns Completed', $logFile);
