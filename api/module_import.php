@@ -325,6 +325,9 @@ function parse_xlsx($filePath) {
                   $val = '';
                   if (isset($hyperlinks[$ref]) && preg_match('/^(https?|mailto):/i', trim($hyperlinks[$ref]))) {
                       $val = trim($hyperlinks[$ref]);
+                      if (stripos($val, 'mailto:') === 0) {
+                          $val = substr($val, 7);
+                      }
                   } elseif (isset($cNode->v)) {
                       $val = (string)$cNode->v;
                       $type = (string)$cNode['t']; // 's' for sharedString references
