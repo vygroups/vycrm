@@ -78,7 +78,14 @@ try {
             'username' => $user['username'],
             'first_name' => $user['first_name'] ?? '',
             'last_name' => $user['last_name'] ?? '',
-            'is_admin' => (int)($user['is_admin'] ?? 0)
+            'is_admin' => (int)($user['is_admin'] ?? 0),
+            'profile_picture' => !empty($user['profile_picture']) 
+                ? '/serve_file.php?path=' . urlencode(ltrim($user['profile_picture'], '/'))
+                : 'https://ui-avatars.com/api/?name=' . urlencode(trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')) ?: $user['username']) . '&background=0A4D3E&color=FFFFFF&bold=true&format=png',
+            'company_logo' => !empty($company['logo']) 
+                ? '/serve_file.php?path=' . urlencode(ltrim($company['logo'], '/'))
+                : '/images/logo.png',
+            'company_name' => $company['name'] ?? 'VY AI CRM',
         ]);
     } else {
         echo json_encode(['success' => false, 'message' => 'Invalid username or password']);

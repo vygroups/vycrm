@@ -142,10 +142,14 @@ try {
                 }
             } catch (Exception $e) {}
 
+            // Fetch System Settings
+            $attendanceEnabled = dm_get_system_setting($conn, $prefix, 'attendance_enabled', '1') === '1';
+
             commerce_json_response([
                 'success' => true, 
                 'modules' => $modulesWithStats,
-                'common_filters' => $widgets
+                'common_filters' => $widgets,
+                'attendance_enabled' => $attendanceEnabled
             ]);
 
         case 'get':
