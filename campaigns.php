@@ -465,6 +465,15 @@ $v = time();
                 </div>
 
                 <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; margin-top: 15px;">
+                    <label class="form-label">Target Field Option *</label>
+                    <select id="campaignTargetOption" class="form-control" style="width: 100%;">
+                        <option value="primary">Primary Only</option>
+                        <option value="additional">Additional Only</option>
+                        <option value="both">Both (Primary & Additional)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" style="display: flex; flex-direction: column; gap: 6px; margin-top: 15px;">
                     <label class="form-label">Message Template *</label>
                     <select id="campaignTemplateSelect" class="form-control" style="width: 100%;">
                         <option value="">-- Select Template --</option>
@@ -632,6 +641,23 @@ $v = time();
                     configSelect.innerHTML += `<option value="${c.id}">${escapeHtml(c.name)}${c.is_default == 1 ? ' (Default)' : ''}</option>`;
                 });
             }
+
+            const targetSelect = document.getElementById('campaignTargetOption');
+            if (targetSelect) {
+                if (type === 'email') {
+                    targetSelect.innerHTML = `
+                        <option value="primary">Primary Email Only</option>
+                        <option value="additional">Additional Email Only</option>
+                        <option value="both">Both Emails (Primary & Additional)</option>
+                    `;
+                } else {
+                    targetSelect.innerHTML = `
+                        <option value="primary">Primary Phone Only</option>
+                        <option value="additional">Additional Phone Only</option>
+                        <option value="both">Both Phones (Primary & Additional)</option>
+                    `;
+                }
+            }
         }
 
         function openCreateModal() {
@@ -648,6 +674,7 @@ $v = time();
             document.getElementById('campaignCommConfig').value = '';
             onCampaignSendModeChange();
             onCampaignTypeChange();
+            document.getElementById('campaignTargetOption').value = 'primary';
             openModal('createCampaignModal');
         }
 
@@ -673,6 +700,7 @@ $v = time();
             // Now select template and communication config
             document.getElementById('campaignTemplateSelect').value = activeCampaign.template_id;
             document.getElementById('campaignCommConfig').value = activeCampaign.communication_config_id || '';
+            document.getElementById('campaignTargetOption').value = activeCampaign.target_option || 'primary';
             
             // Scheduled at / Send mode
             const sendModeSelect = document.getElementById('campaignSendMode');
@@ -766,11 +794,12 @@ $v = time();
             }
 
             const campaignId = document.getElementById('createCampaignModal').getAttribute('data-campaign-id');
+            const target_option = document.getElementById('campaignTargetOption').value;
             try {
                 const res = await fetch(API, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'save_campaign', id: campaignId ? parseInt(campaignId) : 0, name, type, template_id, send_mode, send_delay, scheduled_at, communication_config_id: comm_config_id })
+                    body: JSON.stringify({ action: 'save_campaign', id: campaignId ? parseInt(campaignId) : 0, name, type, template_id, send_mode, send_delay, scheduled_at, communication_config_id: comm_config_id, target_option })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -849,8 +878,11 @@ $v = time();
 
             document.getElementById('detailName').textContent = c.name;
             const chanLabel = c.type === 'email' ? 'Email Channel' : 'WhatsApp Channel';
+            const targetLabel = c.type === 'email' 
+                ? (c.target_option === 'additional' ? 'Additional Email Only' : (c.target_option === 'both' ? 'Both Emails' : 'Primary Email Only'))
+                : (c.target_option === 'additional' ? 'Additional Phone Only' : (c.target_option === 'both' ? 'Both Phones' : 'Primary Phone Only'));
             
-            let metaText = `Channel: ${chanLabel} | Template: ${c.template_name}`;
+            let metaText = `Channel: ${chanLabel} | Target: ${targetLabel} | Template: ${c.template_name}`;
             if (c.scheduled_at) {
                 metaText += ` | Scheduled: ${formatVyDate(c.scheduled_at)} ${formatVyTime(c.scheduled_at)}`;
             }
@@ -948,10 +980,10 @@ $v = time();
                 }).join('');
 
                 return `
-                    <tr>
+                    <tr data-recipient-id="${r.id}">
                         ${fieldCells}
-                        <td style="padding:10px 12px; border-bottom:1px solid var(--border);">${badge}</td>
-                        <td style="padding:10px 12px; border-bottom:1px solid var(--border);">${logMsg}</td>
+                        <td class="recipient-status-cell" style="padding:10px 12px; border-bottom:1px solid var(--border);">${badge}</td>
+                        <td class="recipient-log-cell" style="padding:10px 12px; border-bottom:1px solid var(--border);">${logMsg}</td>
                     </tr>
                 `;
             }).join('');
@@ -1623,11 +1655,13 @@ $v = time();
                             const first_name = getVal(mapping.first_name);
                             const last_name = getVal(mapping.last_name);
                             const email = getVal(mapping.email);
+                            const email2 = getVal(mapping.email2);
                             const phone = getVal(mapping.phone);
+                            const phone2 = getVal(mapping.phone2);
                             const company = getVal(mapping.company);
                             const designation = getVal(mapping.designation);
                             
-                            if (!email && !phone) {
+                            if (!email && !email2 && !phone && !phone2) {
                                 skippedNoContact++;
                                 return;
                             }
@@ -1641,7 +1675,7 @@ $v = time();
                             }
                             
                             parsedRecipients.push({
-                                first_name, last_name, email, phone,
+                                first_name, last_name, email, email2, phone, phone2,
                                 company_name: company, designation
                             });
                             count++;
@@ -1814,6 +1848,33 @@ $v = time();
                             </div>
                         `);
                         logsBox.scrollTop = logsBox.scrollHeight;
+
+                        // Dynamic live update for Recipients Log table
+                        const rRow = document.querySelector(`tr[data-recipient-id="${rc.id}"]`);
+                        if (rRow) {
+                            const statusCell = rRow.querySelector('.recipient-status-cell');
+                            if (statusCell) {
+                                let badge = '';
+                                if (rc.status === 'pending') badge = '<span class="mm-badge" style="background:rgba(245,158,11,0.08); color:#f59e0b;">Pending</span>';
+                                else if (rc.status === 'sent') badge = '<span class="mm-badge" style="background:rgba(16,185,129,0.08); color:#10b981;">Sent</span>';
+                                else badge = '<span class="mm-badge" style="background:rgba(239,68,68,0.08); color:#ef4444;">Failed</span>';
+                                statusCell.innerHTML = badge;
+                            }
+                            
+                            const logCell = rRow.querySelector('.recipient-log-cell');
+                            if (logCell) {
+                                let logMsg = '';
+                                if (rc.status === 'failed' && rc.error) {
+                                    logMsg = `<span style="color:#ef4444; font-size:11px;" title="${escapeHtml(rc.error)}"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(rc.error)}</span>`;
+                                } else if (rc.status === 'sent') {
+                                    const now = new Date();
+                                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                                    const dateStr = `Sent on ${now.getDate()} ${months[now.getMonth()]}, ${now.getFullYear()}`;
+                                    logMsg = `<span style="color:var(--text-muted); font-size:11px;">${dateStr}</span>`;
+                                }
+                                logCell.innerHTML = logMsg;
+                            }
+                        }
 
                         if (rc.status === 'sent') {
                             currentSent++;

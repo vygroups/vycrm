@@ -274,6 +274,7 @@ try {
             }
 
             $commConfigId = !empty($input['communication_config_id']) ? (int)$input['communication_config_id'] : null;
+            $targetOption = trim($input['target_option'] ?? 'primary');
 
             if ($id > 0) {
                 $existingStmt = $conn->prepare("SELECT status FROM {$prefix}campaigns WHERE id = ?");
@@ -285,12 +286,12 @@ try {
                         throw new RuntimeException('Cannot edit a campaign that has already started or completed.');
                     }
                 }
-                $stmt = $conn->prepare("UPDATE {$prefix}campaigns SET name = ?, type = ?, template_id = ?, scheduled_at = ?, send_delay = ?, status = ?, communication_config_id = ? WHERE id = ?");
-                $stmt->execute([$name, $type, $templateId, $scheduledAt, $sendDelay, $status, $commConfigId, $id]);
+                $stmt = $conn->prepare("UPDATE {$prefix}campaigns SET name = ?, type = ?, template_id = ?, scheduled_at = ?, send_delay = ?, status = ?, communication_config_id = ?, target_option = ? WHERE id = ?");
+                $stmt->execute([$name, $type, $templateId, $scheduledAt, $sendDelay, $status, $commConfigId, $targetOption, $id]);
                 $savedId = $id;
             } else {
-                $stmt = $conn->prepare("INSERT INTO {$prefix}campaigns (name, type, template_id, scheduled_at, send_delay, status, created_by, communication_config_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$name, $type, $templateId, $scheduledAt, $sendDelay, $status, $userId, $commConfigId]);
+                $stmt = $conn->prepare("INSERT INTO {$prefix}campaigns (name, type, template_id, scheduled_at, send_delay, status, created_by, communication_config_id, target_option) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$name, $type, $templateId, $scheduledAt, $sendDelay, $status, $userId, $commConfigId, $targetOption]);
                 $savedId = (int)$conn->lastInsertId();
             }
             commerce_json_response(['success' => true, 'id' => $savedId]);
@@ -345,8 +346,8 @@ try {
             // Bulk insert recipients — store ALL values in extra_data, also populate fixed columns
             $stmt = $conn->prepare("
                 INSERT INTO {$prefix}campaign_recipients 
-                (campaign_id, first_name, last_name, email, phone, company_name, designation, extra_data, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+                (campaign_id, first_name, last_name, email, email2, phone, phone2, company_name, designation, extra_data, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
             ");
 
             $conn->beginTransaction();
@@ -364,7 +365,9 @@ try {
                 $fName = '';
                 $lName = '';
                 $email = '';
+                $email2 = '';
                 $phone = '';
+                $phone2 = '';
                 $company = '';
                 $designation = '';
                 foreach ($r as $k => $v) {
@@ -373,7 +376,9 @@ try {
                         case 'first_name': $fName = trim($v); break;
                         case 'last_name': $lName = trim($v); break;
                         case 'email': $email = trim($v); break;
+                        case 'email2': case 'additional_email': $email2 = trim($v); break;
                         case 'phone': case 'mobile': $phone = trim($v); break;
+                        case 'phone2': case 'additional_phone': $phone2 = trim($v); break;
                         case 'company_name': case 'company': $company = trim($v); break;
                         case 'designation': $designation = trim($v); break;
                     }
@@ -389,7 +394,7 @@ try {
                 if ($email) $existingEmails[strtolower($email)] = true;
                 if ($phone) $existingPhones[$phone] = true;
 
-                $stmt->execute([$campaignId, $fName, $lName, $email, $phone, $company, $designation, $extraDataJson]);
+                $stmt->execute([$campaignId, $fName, $lName, $email, $email2, $phone, $phone2, $company, $designation, $extraDataJson]);
                 $importedCount++;
             }
             $conn->commit();
@@ -492,17 +497,36 @@ try {
 
                     if (!$smtpHost || !$smtpFromEmail) {
                         $errorMsg = 'SMTP settings are incomplete.';
-                    } else if (!$recipient['email']) {
-                        $errorMsg = 'No email address provided for recipient.';
                     } else {
-                        try {
-                            $sendSuccess = dm_send_smtp_email(
-                                $smtpHost, $smtpPort, $smtpUser, $smtpPass,
-                                $smtpFromEmail, $smtpFromName,
-                                $recipient['email'], $subject, $body, $smtpEnc
-                            );
-                        } catch (Throwable $e) {
-                            $errorMsg = $e->getMessage();
+                        $targetOption = $campaign['target_option'] ?? 'primary';
+                        $emailsToSend = [];
+                        if ($targetOption === 'primary' || $targetOption === 'both') {
+                            if (!empty($recipient['email'])) $emailsToSend[] = trim($recipient['email']);
+                        }
+                        if ($targetOption === 'additional' || $targetOption === 'both') {
+                            if (!empty($recipient['email2'])) $emailsToSend[] = trim($recipient['email2']);
+                        }
+
+                        if (empty($emailsToSend)) {
+                            $errorMsg = 'No email address found for the selected option.';
+                        } else {
+                            $sendSuccess = true;
+                            foreach ($emailsToSend as $toEmail) {
+                                try {
+                                    $ok = dm_send_smtp_email(
+                                        $smtpHost, $smtpPort, $smtpUser, $smtpPass,
+                                        $smtpFromEmail, $smtpFromName,
+                                        $toEmail, $subject, $body, $smtpEnc
+                                    );
+                                    if (!$ok) {
+                                        $sendSuccess = false;
+                                        $errorMsg = 'Failed to send to ' . $toEmail;
+                                    }
+                                } catch (Throwable $e) {
+                                    $sendSuccess = false;
+                                    $errorMsg = $e->getMessage();
+                                }
+                            }
                         }
                     }
                 }
@@ -532,13 +556,32 @@ try {
 
                     if (!$waUrl || !$waToken) {
                         $errorMsg = 'WhatsApp credentials are incomplete.';
-                    } else if (!$recipient['phone']) {
-                        $errorMsg = 'No phone number provided for recipient.';
                     } else {
-                        try {
-                            $sendSuccess = dm_send_whatsapp_message($waUrl, $waToken, $recipient['phone'], $body);
-                        } catch (Throwable $e) {
-                            $errorMsg = $e->getMessage();
+                        $targetOption = $campaign['target_option'] ?? 'primary';
+                        $phonesToSend = [];
+                        if ($targetOption === 'primary' || $targetOption === 'both') {
+                            if (!empty($recipient['phone'])) $phonesToSend[] = trim($recipient['phone']);
+                        }
+                        if ($targetOption === 'additional' || $targetOption === 'both') {
+                            if (!empty($recipient['phone2'])) $phonesToSend[] = trim($recipient['phone2']);
+                        }
+
+                        if (empty($phonesToSend)) {
+                            $errorMsg = 'No phone number found for the selected option.';
+                        } else {
+                            $sendSuccess = true;
+                            foreach ($phonesToSend as $toPhone) {
+                                try {
+                                    $ok = dm_send_whatsapp_message($waUrl, $waToken, $toPhone, $body);
+                                    if (!$ok) {
+                                        $sendSuccess = false;
+                                        $errorMsg = 'Failed to send to ' . $toPhone;
+                                    }
+                                } catch (Throwable $e) {
+                                    $sendSuccess = false;
+                                    $errorMsg = $e->getMessage();
+                                }
+                            }
                         }
                     }
                 }
@@ -549,13 +592,33 @@ try {
             $upStmt = $conn->prepare("UPDATE {$prefix}campaign_recipients SET status = ?, sent_at = NOW(), error_message = ? WHERE id = ?");
             $upStmt->execute([$newStatus, $errorMsg, $recipient['id']]);
 
+            $sentContacts = [];
+            if ($campaign['type'] === 'email') {
+                $targetOption = $campaign['target_option'] ?? 'primary';
+                if ($targetOption === 'primary' || $targetOption === 'both') {
+                    if (!empty($recipient['email'])) $sentContacts[] = trim($recipient['email']);
+                }
+                if ($targetOption === 'additional' || $targetOption === 'both') {
+                    if (!empty($recipient['email2'])) $sentContacts[] = trim($recipient['email2']);
+                }
+            } else {
+                $targetOption = $campaign['target_option'] ?? 'primary';
+                if ($targetOption === 'primary' || $targetOption === 'both') {
+                    if (!empty($recipient['phone'])) $sentContacts[] = trim($recipient['phone']);
+                }
+                if ($targetOption === 'additional' || $targetOption === 'both') {
+                    if (!empty($recipient['phone2'])) $sentContacts[] = trim($recipient['phone2']);
+                }
+            }
+            $contactStr = implode(', ', $sentContacts);
+
             commerce_json_response([
                 'success' => true,
                 'finished' => false,
                 'recipient' => [
                     'id' => $recipient['id'],
                     'name' => trim($recipient['first_name'] . ' ' . $recipient['last_name']),
-                    'contact' => $campaign['type'] === 'email' ? $recipient['email'] : $recipient['phone'],
+                    'contact' => $contactStr,
                     'status' => $newStatus,
                     'error' => $errorMsg
                 ]

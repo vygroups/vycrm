@@ -148,17 +148,36 @@ try {
 
                             if (!$smtpHost || !$smtpFromEmail) {
                                 $errorMsg = 'SMTP settings are incomplete.';
-                            } else if (!$recipient['email']) {
-                                $errorMsg = 'No email address provided for recipient.';
                             } else {
-                                try {
-                                    $sendSuccess = dm_send_smtp_email(
-                                        $smtpHost, $smtpPort, $smtpUser, $smtpPass,
-                                        $smtpFromEmail, $smtpFromName,
-                                        $recipient['email'], $subject, $body, $smtpEnc
-                                    );
-                                } catch (Throwable $e) {
-                                    $errorMsg = $e->getMessage();
+                                $targetOption = $campaign['target_option'] ?? 'primary';
+                                $emailsToSend = [];
+                                if ($targetOption === 'primary' || $targetOption === 'both') {
+                                    if (!empty($recipient['email'])) $emailsToSend[] = trim($recipient['email']);
+                                }
+                                if ($targetOption === 'additional' || $targetOption === 'both') {
+                                    if (!empty($recipient['email2'])) $emailsToSend[] = trim($recipient['email2']);
+                                }
+
+                                if (empty($emailsToSend)) {
+                                    $errorMsg = 'No email address found for the selected option.';
+                                } else {
+                                    $sendSuccess = true;
+                                    foreach ($emailsToSend as $toEmail) {
+                                        try {
+                                            $ok = dm_send_smtp_email(
+                                                $smtpHost, $smtpPort, $smtpUser, $smtpPass,
+                                                $smtpFromEmail, $smtpFromName,
+                                                $toEmail, $subject, $body, $smtpEnc
+                                            );
+                                            if (!$ok) {
+                                                $sendSuccess = false;
+                                                $errorMsg = 'Failed to send to ' . $toEmail;
+                                            }
+                                        } catch (Throwable $e) {
+                                            $sendSuccess = false;
+                                            $errorMsg = $e->getMessage();
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -188,13 +207,32 @@ try {
 
                             if (!$waUrl || !$waToken) {
                                 $errorMsg = 'WhatsApp credentials are incomplete.';
-                            } else if (!$recipient['phone']) {
-                                $errorMsg = 'No phone number provided for recipient.';
                             } else {
-                                try {
-                                    $sendSuccess = dm_send_whatsapp_message($waUrl, $waToken, $recipient['phone'], $body);
-                                } catch (Throwable $e) {
-                                    $errorMsg = $e->getMessage();
+                                $targetOption = $campaign['target_option'] ?? 'primary';
+                                $phonesToSend = [];
+                                if ($targetOption === 'primary' || $targetOption === 'both') {
+                                    if (!empty($recipient['phone'])) $phonesToSend[] = trim($recipient['phone']);
+                                }
+                                if ($targetOption === 'additional' || $targetOption === 'both') {
+                                    if (!empty($recipient['phone2'])) $phonesToSend[] = trim($recipient['phone2']);
+                                }
+
+                                if (empty($phonesToSend)) {
+                                    $errorMsg = 'No phone number found for the selected option.';
+                                } else {
+                                    $sendSuccess = true;
+                                    foreach ($phonesToSend as $toPhone) {
+                                        try {
+                                            $ok = dm_send_whatsapp_message($waUrl, $waToken, $toPhone, $body);
+                                            if (!$ok) {
+                                                $sendSuccess = false;
+                                                $errorMsg = 'Failed to send to ' . $toPhone;
+                                            }
+                                        } catch (Throwable $e) {
+                                            $sendSuccess = false;
+                                            $errorMsg = $e->getMessage();
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -205,7 +243,27 @@ try {
                     $upStmt = $conn->prepare("UPDATE {$tenantPrefix}campaign_recipients SET status = ?, sent_at = NOW(), error_message = ? WHERE id = ?");
                     $upStmt->execute([$newStatus, $errorMsg, $recipient['id']]);
 
-                    $recipientLog = '      Recipient #' . $recipient['id'] . ' (' . ($recipient['email'] ?? '') . '/' . ($recipient['phone'] ?? '') . '): ' . $newStatus . ($errorMsg ? ' (Error: ' . $errorMsg . ')' : '');
+                    $sentContacts = [];
+                    if ($campaignType === 'email') {
+                        $targetOption = $campaign['target_option'] ?? 'primary';
+                        if ($targetOption === 'primary' || $targetOption === 'both') {
+                            if (!empty($recipient['email'])) $sentContacts[] = trim($recipient['email']);
+                        }
+                        if ($targetOption === 'additional' || $targetOption === 'both') {
+                            if (!empty($recipient['email2'])) $sentContacts[] = trim($recipient['email2']);
+                        }
+                    } else {
+                        $targetOption = $campaign['target_option'] ?? 'primary';
+                        if ($targetOption === 'primary' || $targetOption === 'both') {
+                            if (!empty($recipient['phone'])) $sentContacts[] = trim($recipient['phone']);
+                        }
+                        if ($targetOption === 'additional' || $targetOption === 'both') {
+                            if (!empty($recipient['phone2'])) $sentContacts[] = trim($recipient['phone2']);
+                        }
+                    }
+                    $contactStr = implode(', ', $sentContacts);
+
+                    $recipientLog = '      Recipient #' . $recipient['id'] . ' (' . $contactStr . '): ' . $newStatus . ($errorMsg ? ' (Error: ' . $errorMsg . ')' : '');
                     cron_log($recipientLog, $logFile);
 
                     // Respect delay between messages

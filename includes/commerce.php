@@ -603,6 +603,27 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    // Add campaign target option and additional phone/email fields
+    try { $conn->exec("ALTER TABLE {$prefix}campaigns ADD COLUMN target_option VARCHAR(50) DEFAULT 'primary' AFTER send_delay"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}campaign_recipients ADD COLUMN email2 VARCHAR(150) DEFAULT NULL AFTER email"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}campaign_recipients ADD COLUMN phone2 VARCHAR(30) DEFAULT NULL AFTER phone"); } catch (Throwable $e) {}
+
+    // Auto-insert default Additional Email and Additional Phone custom fields if they don't exist
+    try {
+        $checkStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}campaign_fields WHERE field_key = ?");
+        
+        $checkStmt->execute(['email2']);
+        if ($checkStmt->fetchColumn() == 0) {
+            $conn->prepare("INSERT INTO {$prefix}campaign_fields (field_key, label, field_type, placeholder, sort_order) VALUES (?, ?, ?, ?, ?)")
+                 ->execute(['email2', 'Additional Email', 'email', 'e.g. secondary@example.com', 4]);
+        }
+        
+        $checkStmt->execute(['phone2']);
+        if ($checkStmt->fetchColumn() == 0) {
+            $conn->prepare("INSERT INTO {$prefix}campaign_fields (field_key, label, field_type, placeholder, sort_order) VALUES (?, ?, ?, ?, ?)")
+                 ->execute(['phone2', 'Additional Phone', 'phone', 'e.g. +91 99999 99999', 6]);
+        }
+    } catch (Throwable $e) {}
 }
 
 

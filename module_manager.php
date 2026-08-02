@@ -641,7 +641,9 @@ try {
                         'first_name' => 'First Name *',
                         'last_name' => 'Last Name',
                         'email' => 'Email *',
+                        'email2' => 'Additional Email',
                         'phone' => 'Phone',
+                        'phone2' => 'Additional Phone',
                         'company' => 'Company Name',
                         'designation' => 'Designation'
                     ];
@@ -2857,7 +2859,9 @@ try {
                 first_name: document.getElementById('map_field_first_name').value,
                 last_name: document.getElementById('map_field_last_name').value,
                 email: document.getElementById('map_field_email').value,
+                email2: document.getElementById('map_field_email2').value,
                 phone: document.getElementById('map_field_phone').value,
+                phone2: document.getElementById('map_field_phone2').value,
                 company: document.getElementById('map_field_company').value,
                 designation: document.getElementById('map_field_designation').value
             };
