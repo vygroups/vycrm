@@ -708,6 +708,89 @@ try {
                 throw $e;
             }
 
+        case 'bulk_edit_records':
+            $moduleId = (int)($input['module_id'] ?? $_POST['module_id'] ?? 0);
+            $fieldId = (int)($input['field_id'] ?? $_POST['field_id'] ?? 0);
+            $operation = trim($input['operation'] ?? $_POST['operation'] ?? 'set_value');
+            $value = trim((string)($input['value'] ?? $_POST['value'] ?? ''));
+            $recordIds = isset($input['record_ids']) ? (array)$input['record_ids'] : [];
+            $allSelected = !empty($input['all_selected']) || !empty($_POST['all_selected']);
+            $search = trim($input['search'] ?? $_POST['search'] ?? '');
+
+            if (!$moduleId) throw new RuntimeException('Module ID required');
+            if (!$fieldId) throw new RuntimeException('Field ID required');
+
+            // Resolve target record IDs if all_selected is true
+            if ($allSelected) {
+                $fRules = $input['filter_rules'] ?? null;
+                $fId = (int)($input['filter_id'] ?? 0);
+                if (!$fRules && $fId) {
+                    $sfStmt = $conn->prepare("SELECT filter_rules FROM {$prefix}module_saved_filters WHERE id = ? AND user_id = ?");
+                    $sfStmt->execute([$fId, $userId]);
+                    $rulesJson = $sfStmt->fetchColumn();
+                    if ($rulesJson) $fRules = json_decode($rulesJson, true);
+                }
+                $allRecs = dm_fetch_records($conn, $prefix, $moduleId, $search, 100000, 0, $fRules);
+                $recordIds = array_column($allRecs['records'] ?? [], 'id');
+            }
+
+            if (empty($recordIds)) {
+                throw new RuntimeException('No records selected for bulk edit.');
+            }
+
+            $recordIds = array_values(array_unique(array_map('intval', $recordIds)));
+            $chunks = array_chunk($recordIds, 500);
+
+            $conn->beginTransaction();
+            try {
+                $affectedCount = 0;
+                
+                foreach ($chunks as $chunk) {
+                    $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+                    
+                    if ($operation === 'clear_value') {
+                        $delParams = array_merge([(int)$fieldId], $chunk);
+                        $delStmt = $conn->prepare("DELETE FROM {$prefix}module_record_values WHERE field_id = ? AND record_id IN ({$placeholders})");
+                        $delStmt->execute($delParams);
+                        $affectedCount += count($chunk);
+                    } else if ($operation === 'remove_specific_text') {
+                        if ($value === '') {
+                            throw new RuntimeException('Value to remove cannot be empty.');
+                        }
+                        $updParams = array_merge([$value, (int)$fieldId], $chunk);
+                        $updStmt = $conn->prepare("UPDATE {$prefix}module_record_values SET value = REPLACE(value, ?, '') WHERE field_id = ? AND record_id IN ({$placeholders})");
+                        $updStmt->execute($updParams);
+                        
+                        $cleanParams = array_merge([(int)$fieldId], $chunk);
+                        $conn->prepare("DELETE FROM {$prefix}module_record_values WHERE field_id = ? AND record_id IN ({$placeholders}) AND TRIM(value) = ''")->execute($cleanParams);
+                        $affectedCount += count($chunk);
+                    } else {
+                        // set_value
+                        $upsertStmt = $conn->prepare("
+                            INSERT INTO {$prefix}module_record_values (record_id, field_id, value)
+                            VALUES (?, ?, ?)
+                            ON DUPLICATE KEY UPDATE value = VALUES(value)
+                        ");
+                        foreach ($chunk as $rId) {
+                            $upsertStmt->execute([(int)$rId, (int)$fieldId, $value]);
+                        }
+                        $affectedCount += count($chunk);
+                    }
+
+                    // Touch updated_at for chunk records
+                    $conn->prepare("UPDATE {$prefix}module_records SET updated_at = NOW(), updated_by = ? WHERE id IN ({$placeholders})")->execute(array_merge([$userId], $chunk));
+                }
+
+                $conn->commit();
+                commerce_json_response(['success' => true, 'updated_count' => $affectedCount]);
+            } catch (Throwable $e) {
+                if ($conn->inTransaction()) {
+                    $conn->rollBack();
+                }
+                throw $e;
+            }
+            break;
+
         case 'duplicate_record':
             $id = (int)($input['id'] ?? 0);
             $moduleId = (int)($input['module_id'] ?? 0);

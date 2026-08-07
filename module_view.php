@@ -293,6 +293,9 @@ if (!$hasUpdatedAt) {
                     <div style="display:flex;gap:10px;align-items:center;">
                         <span class="text-muted text-sm"><?= $total ?> record<?= $total !== 1 ? 's' : '' ?></span>
                         
+                        <button id="btnBulkEdit" class="mm-btn mm-btn-sm mm-btn-primary" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 12px; border-radius: 8px; font-weight: 600;" onclick="openBulkEditModal()">
+                            <i class="fa-solid fa-pen-to-square"></i> Bulk Edit (<span class="selectedCount">0</span>)
+                        </button>
                         <button id="btnBulkDelete" class="mm-btn mm-btn-sm mm-btn-danger" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 10px; border-radius: 8px; font-weight: 600;" onclick="bulkDeleteRecords()">
                             <i class="fa-solid fa-trash"></i> Delete Selected (<span class="selectedCount">0</span>)
                         </button>
@@ -600,6 +603,7 @@ function toggleSelectAll(selectAllCheckbox) {
 function updateBulkDeleteButton() {
     const checkboxes = document.querySelectorAll('.record-select:checked');
     const selectedCount = checkboxes.length;
+    const btnBulkEdit = document.getElementById('btnBulkEdit');
     const btnBulkDelete = document.getElementById('btnBulkDelete');
     const btnBulkExport = document.getElementById('btnBulkExport');
     const selectedSpans = document.querySelectorAll('.selectedCount');
@@ -611,10 +615,12 @@ function updateBulkDeleteButton() {
     const effectiveCount = isAllPagesSelected ? totalRecords : selectedCount;
 
     if (effectiveCount > 0) {
+        if (btnBulkEdit) btnBulkEdit.style.display = 'inline-flex';
         if (btnBulkDelete) btnBulkDelete.style.display = 'inline-flex';
         if (btnBulkExport) btnBulkExport.style.display = 'inline-flex';
         selectedSpans.forEach(span => span.textContent = effectiveCount);
     } else {
+        if (btnBulkEdit) btnBulkEdit.style.display = 'none';
         if (btnBulkDelete) btnBulkDelete.style.display = 'none';
         if (btnBulkExport) btnBulkExport.style.display = 'none';
     }
@@ -2821,5 +2827,264 @@ async function handleImportSubmit(event) {
     </div>
 </div>
 <?php endif; ?>
+<!-- Bulk Edit Modal -->
+<div class="mm-modal-overlay" id="bulkEditModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; align-items:center; justify-content:center;">
+    <div class="crm-card" style="width:520px; max-width:92%; background:var(--surface); border-radius:16px; padding:24px; box-shadow:var(--shadow-xl); border:1px solid var(--border);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+            <h3 style="margin:0; font-size:18px; font-weight:700; color:var(--text-main);"><i class="fa-solid fa-pen-to-square" style="color:var(--primary); margin-right:8px;"></i> Bulk Edit Records</h3>
+            <button class="mm-icon-btn" onclick="closeBulkEditModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;">
+            Update field values for <strong id="bulkEditRecordCount" style="color:var(--primary);">0</strong> selected record(s).
+        </p>
+
+        <div style="display:flex; flex-direction:column; gap:14px;">
+            <!-- Field Selection -->
+            <div>
+                <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text); margin-bottom:6px; display:block;">Select Field to Edit *</label>
+                <select id="bulkEditFieldSelect" class="form-control" onchange="onBulkEditFieldSelectChange(this)" style="width:100%; box-sizing:border-box;">
+                    <option value="">-- Choose Field --</option>
+                </select>
+            </div>
+
+            <!-- Action / Operation Selection -->
+            <div>
+                <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text); margin-bottom:6px; display:block;">Action / Operation *</label>
+                <select id="bulkEditOperationSelect" class="form-control" onchange="onBulkEditOperationChange(this)" style="width:100%; box-sizing:border-box;">
+                    <option value="set_value">Set New Value (Replace)</option>
+                    <option value="clear_value">Clear Field / Remove Value (Set Empty)</option>
+                    <option value="remove_specific_text">Remove Specific Value / Text from Records</option>
+                </select>
+            </div>
+
+            <!-- Dynamic Input Container -->
+            <div id="bulkEditValueWrapper">
+                <label class="form-label" style="font-weight:600; font-size:13px; color:var(--text); margin-bottom:6px; display:block;" id="bulkEditValueLabel">New Value</label>
+                <div id="bulkEditValueInputContainer">
+                    <input type="text" id="bulkEditValueInput" class="form-control" placeholder="Select a field first..." disabled style="width:100%; box-sizing:border-box;">
+                </div>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:24px; padding-top:16px; border-top:1px solid var(--border);">
+            <button class="mm-btn mm-btn-outline" onclick="closeBulkEditModal()">Cancel</button>
+            <button id="btnSubmitBulkEdit" class="mm-btn mm-btn-primary" onclick="submitBulkEdit()" style="display:inline-flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-check"></i> Apply Bulk Edit
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let bulkEditSelectedField = null;
+
+function openBulkEditModal() {
+    const selectedCheckboxes = document.querySelectorAll('.record-select:checked');
+    const selectedCount = selectedCheckboxes.length;
+    const totalRecords = typeof window.totalModuleRecords !== 'undefined' ? window.totalModuleRecords : <?= (int)$total ?>;
+    const effectiveCount = isAllPagesSelected ? totalRecords : selectedCount;
+
+    if (effectiveCount === 0) {
+        vyToast('Please select at least one record to edit.', 'warning');
+        return;
+    }
+
+    document.getElementById('bulkEditRecordCount').textContent = effectiveCount.toLocaleString();
+
+    const selectEl = document.getElementById('bulkEditFieldSelect');
+    selectEl.innerHTML = '<option value="">-- Choose Field --</option>';
+    
+    if (typeof ALL_MODULE_FIELDS !== 'undefined') {
+        ALL_MODULE_FIELDS.forEach(f => {
+            if (!['sys_created_by', 'sys_created_at', 'sys_updated_by', 'sys_updated_at', 'created_by', 'created_at', 'updated_by', 'updated_at'].includes(f.field_type) && !['created_by', 'created_at', 'updated_by', 'updated_at'].includes(f.id)) {
+                const opt = document.createElement('option');
+                opt.value = f.id;
+                opt.textContent = f.label;
+                selectEl.appendChild(opt);
+            }
+        });
+    }
+
+    document.getElementById('bulkEditOperationSelect').value = 'set_value';
+    document.getElementById('bulkEditValueWrapper').style.display = 'block';
+    document.getElementById('bulkEditValueLabel').textContent = 'New Value';
+    document.getElementById('bulkEditValueInputContainer').innerHTML = '<input type="text" id="bulkEditValueInput" class="form-control" placeholder="Select a field first..." disabled style="width:100%; box-sizing:border-box;">';
+
+    document.getElementById('bulkEditModal').style.display = 'flex';
+}
+
+function closeBulkEditModal() {
+    document.getElementById('bulkEditModal').style.display = 'none';
+}
+
+async function onBulkEditFieldSelectChange(selectEl) {
+    const fieldId = selectEl.value;
+    const inputContainer = document.getElementById('bulkEditValueInputContainer');
+    
+    if (!fieldId) {
+        inputContainer.innerHTML = '<input type="text" id="bulkEditValueInput" class="form-control" placeholder="Select a field first..." disabled style="width:100%; box-sizing:border-box;">';
+        bulkEditSelectedField = null;
+        return;
+    }
+
+    const field = ALL_MODULE_FIELDS.find(f => f.id == fieldId);
+    bulkEditSelectedField = field;
+    
+    if (!field) return;
+
+    const fType = field.field_type;
+    const labelLower = (field.label || '').toLowerCase().trim();
+
+    const isUserField = fType === 'user' || fType === 'assigned_to' || ['assignee', 'assigned to'].includes(labelLower);
+    const isDateField = fType === 'date';
+    const isDatetimeField = fType === 'datetime' || fType === 'datetime-local';
+    const isTimeField = fType === 'time';
+    const isOptionField = fType === 'select' || fType === 'dropdown' || fType === 'multi_picker' || fType === 'radio_group';
+
+    if (isOptionField) {
+        const opts = field.options || [];
+        let parsedOpts = [];
+        if (typeof opts === 'string') {
+            try { parsedOpts = JSON.parse(opts); } catch(e) {}
+        } else if (Array.isArray(opts)) {
+            parsedOpts = opts;
+        }
+        const optHtml = parsedOpts.map(o => {
+            const optVal = (o && typeof o === 'object') ? (o.value || o.option_value || '') : o;
+            const optLbl = (o && typeof o === 'object') ? (o.label || o.option_label || optVal) : o;
+            return `<option value="${escapeHtml(optVal)}">${escapeHtml(optLbl)}</option>`;
+        }).join('');
+
+        inputContainer.innerHTML = `
+            <select id="bulkEditValueInput" class="form-control" style="width:100%; box-sizing:border-box;">
+                <option value="">-- Choose Option --</option>
+                ${optHtml}
+            </select>
+        `;
+    } else if (fType === 'checkbox') {
+        inputContainer.innerHTML = `
+            <select id="bulkEditValueInput" class="form-control" style="width:100%; box-sizing:border-box;">
+                <option value="1">Yes (Checked)</option>
+                <option value="0">No (Unchecked)</option>
+            </select>
+        `;
+    } else if (isUserField) {
+        const userOpts = (typeof COMPANY_USERS !== 'undefined' ? COMPANY_USERS : []).map(u => `<option value="${u.id}">${escapeHtml(u.name || u.username)}</option>`).join('');
+        inputContainer.innerHTML = `
+            <select id="bulkEditValueInput" class="form-control" style="width:100%; box-sizing:border-box;">
+                <option value="">-- Choose User --</option>
+                ${userOpts}
+            </select>
+        `;
+    } else if (isDateField) {
+        inputContainer.innerHTML = `<input type="date" id="bulkEditValueInput" class="form-control dm-date-picker" placeholder="YYYY-MM-DD" style="width:100%; box-sizing:border-box;">`;
+        if (window.flatpickr) {
+            flatpickr(inputContainer.querySelector('.dm-date-picker'), { dateFormat: 'Y-m-d', altInput: true, altFormat: 'd M, Y' });
+        }
+    } else if (isDatetimeField) {
+        inputContainer.innerHTML = `<input type="datetime-local" id="bulkEditValueInput" class="form-control dm-datetime-picker" style="width:100%; box-sizing:border-box;">`;
+        if (window.flatpickr) {
+            flatpickr(inputContainer.querySelector('.dm-datetime-picker'), { enableTime: true, dateFormat: 'Y-m-d H:i:S', altInput: true, altFormat: 'd M, Y h:i K' });
+        }
+    } else if (isTimeField) {
+        inputContainer.innerHTML = `<input type="time" id="bulkEditValueInput" class="form-control" style="width:100%; box-sizing:border-box;">`;
+    } else if (fType === 'number' || fType === 'decimal' || fType === 'currency') {
+        inputContainer.innerHTML = `<input type="number" step="any" id="bulkEditValueInput" class="form-control" placeholder="Enter number..." style="width:100%; box-sizing:border-box;">`;
+    } else if (fType === 'api_call_picker') {
+        const linkedModId = field.config ? field.config.linked_module_id : 0;
+        if (linkedModId) {
+            try {
+                const res = await fetch(`/api/modules.php?action=lookup_records&target_module_id=${linkedModId}`);
+                const rData = await res.json();
+                if (rData.success && rData.records) {
+                    const recOpts = rData.records.map(rec => `<option value="${rec.id}">${escapeHtml(rec.display_value)} (ID: ${rec.id})</option>`).join('');
+                    inputContainer.innerHTML = `
+                        <select id="bulkEditValueInput" class="form-control" style="width:100%; box-sizing:border-box;">
+                            <option value="">-- Select Linked Record --</option>
+                            ${recOpts}
+                        </select>
+                    `;
+                    return;
+                }
+            } catch(e) {}
+        }
+        inputContainer.innerHTML = `<input type="text" id="bulkEditValueInput" class="form-control" placeholder="Enter value..." style="width:100%; box-sizing:border-box;">`;
+    } else {
+        inputContainer.innerHTML = `<input type="text" id="bulkEditValueInput" class="form-control" placeholder="Enter value..." style="width:100%; box-sizing:border-box;">`;
+    }
+}
+
+function onBulkEditOperationChange(selectEl) {
+    const op = selectEl.value;
+    const wrapper = document.getElementById('bulkEditValueWrapper');
+    const label = document.getElementById('bulkEditValueLabel');
+    
+    if (op === 'clear_value') {
+        wrapper.style.display = 'none';
+    } else {
+        wrapper.style.display = 'block';
+        if (op === 'remove_specific_text') {
+            label.textContent = 'Value / Text to Remove *';
+        } else {
+            label.textContent = 'New Value *';
+        }
+    }
+}
+
+async function submitBulkEdit() {
+    const fieldId = document.getElementById('bulkEditFieldSelect').value;
+    const operation = document.getElementById('bulkEditOperationSelect').value;
+    const valInput = document.getElementById('bulkEditValueInput');
+    const val = valInput ? valInput.value : '';
+
+    if (!fieldId) {
+        vyToast('Please select a field to edit.', 'warning');
+        return;
+    }
+
+    if (operation !== 'clear_value' && val === '' && operation === 'remove_specific_text') {
+        vyToast('Please enter the text/value to remove.', 'warning');
+        return;
+    }
+
+    const selectedCheckboxes = document.querySelectorAll('.record-select:checked');
+    const recordIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+    const btnSubmit = document.getElementById('btnSubmitBulkEdit');
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Updating...';
+
+    try {
+        const res = await fetch('/api/modules.php?action=bulk_edit_records', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                module_id: MODULE_ID,
+                field_id: fieldId,
+                operation: operation,
+                value: val,
+                record_ids: recordIds,
+                all_selected: isAllPagesSelected,
+                search: document.getElementById('recordSearchInput') ? document.getElementById('recordSearchInput').value : ''
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            closeBulkEditModal();
+            vyToast(`Successfully updated ${data.updated_count} record(s)!`, 'success');
+            setTimeout(() => { location.reload(); }, 600);
+        } else {
+            vyToast(data.error || 'Failed to update records.', 'error');
+        }
+    } catch (e) {
+        console.error('Bulk edit error:', e);
+        vyToast(e.message || 'An error occurred during bulk edit.', 'error');
+    } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<i class="fa-solid fa-check"></i> Apply Bulk Edit';
+    }
+}
+</script>
 </body>
 </html>
