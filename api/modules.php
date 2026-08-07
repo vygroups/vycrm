@@ -394,6 +394,10 @@ try {
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 ");
                 foreach ($rules as $r) {
+                    $configObj = isset($r['config']) ? (array)$r['config'] : [];
+                    if (isset($r['action_value']) && !isset($configObj['action_value'])) {
+                        $configObj['action_value'] = $r['action_value'];
+                    }
                     $stmt->execute([
                         $fieldId,
                         $r['rule_type'] ?? 'conditional',
@@ -401,7 +405,7 @@ try {
                         $r['operator'] ?? 'equals',
                         $r['value'] ?? null,
                         $r['action'] ?? 'show',
-                        isset($r['config']) ? json_encode($r['config']) : null,
+                        !empty($configObj) ? json_encode($configObj) : null,
                     ]);
                 }
             }

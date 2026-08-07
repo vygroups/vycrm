@@ -5,6 +5,9 @@
  * Imports records from CSV or Excel (.xls, .xlsx) upload.
  */
 
+@set_time_limit(600);
+@ini_set('memory_limit', '512M');
+
 session_start();
 header('Content-Type: application/json');
 
@@ -38,75 +41,81 @@ if (empty($_FILES['import_file']) || $_FILES['import_file']['error'] !== UPLOAD_
 $fileTmpPath = $_FILES['import_file']['tmp_name'];
 $fileName = $_FILES['import_file']['name'];
 
-// Fetch all dynamic fields of the module (with config for linked_module_id)
-$fStmt = $conn->prepare("
-    SELECT id, field_key, label, field_type, config
-    FROM {$prefix}module_fields 
-    WHERE module_id = ? 
-    ORDER BY sort_order ASC
-");
-$fStmt->execute([$moduleId]);
-$fields = $fStmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Pre-build: for each api_call_picker field, find its title display field ID in the linked module
-$pickerDisplayField = []; // field_id => [linked_module_id, display_field_id]
-foreach ($fields as $f) {
-    if ($f['field_type'] === 'api_call_picker') {
-        $cfg = json_decode($f['config'] ?: '{}', true);
-        $linkedModId = (int)($cfg['linked_module_id'] ?? 0);
-        if ($linkedModId) {
-            // Find title/display field of the linked module
-            $dfStmt = $conn->prepare("SELECT id, field_type, config FROM {$prefix}module_fields WHERE module_id = ? ORDER BY sort_order ASC");
-            $dfStmt->execute([$linkedModId]);
-            $linkedFields = $dfStmt->fetchAll(PDO::FETCH_ASSOC);
-            $displayFieldId = null; $fallbackFieldId = null;
-            foreach ($linkedFields as $lf) {
-                $lfc = json_decode($lf['config'] ?: '{}', true);
-                if (!empty($lfc['is_title'])) { $displayFieldId = $lf['id']; break; }
-                if (!$fallbackFieldId && in_array($lf['field_type'], ['text','name','email'])) { $fallbackFieldId = $lf['id']; }
+$fields = [];
+$pickerDisplayField = [];
+foreach ($module['blocks'] as $block) {
+    foreach ($block['fields'] as $f) {
+        $fields[] = $f;
+        if ($f['field_type'] === 'api_call_picker' && !empty($f['config']['linked_module_id'])) {
+            $linkedModId = (int)$f['config']['linked_module_id'];
+            $displayFId = (int)($f['config']['display_field_id'] ?? 0);
+            if (!$displayFId) {
+                $dfStmt = $conn->prepare("SELECT id FROM {$prefix}module_fields WHERE module_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1");
+                $dfStmt->execute([$linkedModId]);
+                $displayFId = (int)$dfStmt->fetchColumn();
             }
             $pickerDisplayField[$f['id']] = [
                 'linked_module_id' => $linkedModId,
-                'display_field_id' => $displayFieldId ?: $fallbackFieldId
+                'display_field_id' => $displayFId,
             ];
         }
     }
 }
-// Cache: linked_module_id + name => record_id (avoids repeated queries per row)
+
+if (empty($fields)) {
+    commerce_json_response(['success' => false, 'error' => 'No fields defined for this module']);
+}
+
 $pickerResolveCache = [];
 
 try {
     $rows = get_rows_from_file($fileTmpPath, $fileName);
 } catch (Throwable $e) {
-    commerce_json_response(['success' => false, 'error' => 'Failed to parse file: ' . $e->getMessage()]);
+    commerce_json_response(['success' => false, 'error' => 'File parse error: ' . $e->getMessage()]);
 }
 
 if (empty($rows)) {
-    commerce_json_response(['success' => false, 'error' => 'No records found in the uploaded file.']);
+    commerce_json_response(['success' => false, 'error' => 'File is empty or contains no readable rows']);
 }
 
-// First row is headers
+// Extract headers (first row)
 $headers = array_shift($rows);
+if (empty($headers)) {
+    commerce_json_response(['success' => false, 'error' => 'File headers missing']);
+}
 
 // Clean UTF-8 BOM if present on the first header
 if (substr($headers[0], 0, 3) == "\xEF\xBB\xBF") {
     $headers[0] = substr($headers[0], 3);
 }
 
-// Map header names to field IDs and types (match with field title/label only)
+// Map header names to field IDs and types
 $headerMap = [];
 $fieldTypes = [];
 foreach ($headers as $index => $headerName) {
     $normalizedHeader = normalize_import_header_name($headerName);
     if ($normalizedHeader === '') continue;
 
+    $matchedKey = null;
+    // Pass 1: Exact label match
     foreach ($fields as $f) {
         $normalizedLabel = normalize_import_header_name($f['label'] ?? '');
-
         if ($normalizedHeader === $normalizedLabel) {
             $headerMap[$index] = $f['id'];
             $fieldTypes[$f['id']] = $f['field_type'];
+            $matchedKey = $f['id'];
             break;
+        }
+    }
+    // Pass 2: Field key match
+    if (!$matchedKey) {
+        foreach ($fields as $f) {
+            $normalizedKey = normalize_import_header_name($f['field_key'] ?? '');
+            if ($normalizedHeader === $normalizedKey) {
+                $headerMap[$index] = $f['id'];
+                $fieldTypes[$f['id']] = $f['field_type'];
+                break;
+            }
         }
     }
 }
@@ -114,40 +123,47 @@ foreach ($headers as $index => $headerName) {
 if (empty($headerMap)) {
     commerce_json_response([
         'success' => false,
-        'error' => 'No columns matched the module field labels. Please download the template to check headers.'
+        'error' => 'No columns matched the module field labels or field keys. Please download the template to check headers.'
     ]);
 }
 
 
+// Fetch unique field IDs for this module
+$uniqueFieldsStmt = $conn->prepare("SELECT id FROM {$prefix}module_fields WHERE module_id = ? AND is_unique = 1");
+$uniqueFieldsStmt->execute([$moduleId]);
+$uniqueFieldIds = $uniqueFieldsStmt->fetchAll(PDO::FETCH_COLUMN);
+
+$importedUniqueCache = []; // Cache to track unique values within the current import batch
+
 $conn->beginTransaction();
 try {
     $recordsImported = 0;
+    $recordsUpdated = 0;
+    
+    $upsertStmt = $conn->prepare("
+        INSERT INTO {$prefix}module_record_values (record_id, field_id, value) 
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE value = VALUES(value)
+    ");
+
     foreach ($rows as $row) {
         // Check if row is empty
         $isEmpty = true;
         foreach ($row as $cell) {
-            if (trim($cell) !== '') {
+            if (trim((string)$cell) !== '') {
                 $isEmpty = false;
                 break;
             }
         }
         if ($isEmpty) continue;
 
-        // Create record
-        $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by) VALUES (?, ?)")->execute([$moduleId, $userId]);
-        $recordId = (int)$conn->lastInsertId();
-
-        // Insert values
-        $upsertStmt = $conn->prepare("
-            INSERT INTO {$prefix}module_record_values (record_id, field_id, value) 
-            VALUES (?, ?, ?)
-            ON DUPLICATE KEY UPDATE value = VALUES(value)
-        ");
+        // Clean values for all mapped fields in this row first
+        $rowFieldValues = [];
         foreach ($row as $index => $val) {
             if (isset($headerMap[$index])) {
                 $fieldId = $headerMap[$index];
                 $fieldType = $fieldTypes[$fieldId];
-                $valClean = trim($val);
+                $valClean = trim((string)$val);
 
                 if ($fieldType === 'checkbox') {
                     $valClean = in_array(strtolower($valClean), ['yes', '1', 'true', 'checked', 'on']) ? '1' : '0';
@@ -176,14 +192,74 @@ try {
                     }
                 }
 
-                $upsertStmt->execute([$recordId, $fieldId, $valClean]);
+                $rowFieldValues[$fieldId] = $valClean;
             }
         }
 
-        $recordsImported++;
+        // Check if a record matching any unique field already exists in DB or current import batch
+        $existingRecordId = null;
+        if (!empty($uniqueFieldIds)) {
+            foreach ($uniqueFieldIds as $ufid) {
+                if (isset($rowFieldValues[$ufid]) && $rowFieldValues[$ufid] !== '') {
+                    $checkVal = strtolower(trim($rowFieldValues[$ufid]));
+                    
+                    // Check batch cache
+                    if (isset($importedUniqueCache[$ufid][$checkVal])) {
+                        $existingRecordId = $importedUniqueCache[$ufid][$checkVal];
+                        break;
+                    }
+
+                    // Check database
+                    $findStmt = $conn->prepare("
+                        SELECT mrv.record_id 
+                        FROM {$prefix}module_record_values mrv
+                        JOIN {$prefix}module_records mr ON mr.id = mrv.record_id
+                        WHERE mr.module_id = ? AND mrv.field_id = ? AND LOWER(TRIM(mrv.value)) = ?
+                        LIMIT 1
+                    ");
+                    $findStmt->execute([$moduleId, $ufid, $checkVal]);
+                    $foundId = $findStmt->fetchColumn();
+                    if ($foundId) {
+                        $existingRecordId = (int)$foundId;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($existingRecordId) {
+            $recordId = $existingRecordId;
+            $conn->prepare("UPDATE {$prefix}module_records SET updated_at = NOW(), updated_by = ? WHERE id = ?")->execute([$userId, $recordId]);
+            $recordsUpdated++;
+        } else {
+            $conn->prepare("INSERT INTO {$prefix}module_records (module_id, created_by) VALUES (?, ?)")->execute([$moduleId, $userId]);
+            $recordId = (int)$conn->lastInsertId();
+            $recordsImported++;
+        }
+
+        // Cache unique values for this record
+        if (!empty($uniqueFieldIds)) {
+            foreach ($uniqueFieldIds as $ufid) {
+                if (isset($rowFieldValues[$ufid]) && $rowFieldValues[$ufid] !== '') {
+                    $checkVal = strtolower(trim($rowFieldValues[$ufid]));
+                    $importedUniqueCache[$ufid][$checkVal] = $recordId;
+                }
+            }
+        }
+
+        // Execute value upserts
+        foreach ($rowFieldValues as $fieldId => $valClean) {
+            $upsertStmt->execute([$recordId, $fieldId, $valClean]);
+        }
     }
     $conn->commit();
-    commerce_json_response(['success' => true, 'message' => "Successfully imported $recordsImported records!"]);
+    $totalProcessed = $recordsImported + $recordsUpdated;
+    $msg = "Successfully imported $totalProcessed records";
+    if ($recordsUpdated > 0) {
+        $msg .= " ($recordsImported new records created, $recordsUpdated duplicate records updated)";
+    }
+    $msg .= "!";
+    commerce_json_response(['success' => true, 'message' => $msg]);
 } catch (Throwable $e) {
     $conn->rollBack();
     commerce_json_response(['success' => false, 'error' => 'Database import error: ' . $e->getMessage()]);

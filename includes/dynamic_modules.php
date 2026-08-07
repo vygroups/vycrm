@@ -161,6 +161,9 @@ function dm_fetch_module_full(PDO $conn, string $p, int $moduleId): ?array
         $inClause = implode(',', array_map('intval', $fieldIds));
         $rStmt = $conn->query("SELECT * FROM {$p}module_field_rules WHERE field_id IN ($inClause)");
         foreach ($rStmt->fetchAll(PDO::FETCH_ASSOC) as $rule) {
+            if (!empty($rule['config']) && is_string($rule['config'])) {
+                $rule['config'] = json_decode($rule['config'], true);
+            }
             $rules[(int) $rule['field_id']][] = $rule;
         }
     }

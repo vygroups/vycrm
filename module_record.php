@@ -987,26 +987,124 @@ document.querySelectorAll('.dm-state-field').forEach(sel => {
 });
 
 // Conditional / Dependency Rules Engine
-function applyRules() {
+function getEventFieldId(evt) {
+    if (!evt || !evt.target) return null;
+    let el = evt.target;
+    while (el && el !== document.body) {
+        if (el.dataset && el.dataset.fieldId) {
+            return el.dataset.fieldId;
+        }
+        if (el.getAttribute && el.getAttribute('data-field-id')) {
+            return el.getAttribute('data-field-id');
+        }
+        el = el.parentElement;
+    }
+    return null;
+}
+
+function calculateRelativeDate(actionVal, sourceVal = '') {
+    actionVal = (actionVal || '-14_days_today').toString().trim();
+    let baseDate = new Date();
+    if (actionVal.includes('source') && sourceVal) {
+        const parsedSource = new Date(sourceVal);
+        if (!isNaN(parsedSource.getTime())) {
+            baseDate = parsedSource;
+        }
+    }
+    
+    let daysOffset = -14;
+    if (actionVal.startsWith('-14')) daysOffset = -14;
+    else if (actionVal.startsWith('+14')) daysOffset = 14;
+    else if (actionVal.startsWith('-7')) daysOffset = -7;
+    else if (actionVal.startsWith('+7')) daysOffset = 7;
+    else if (actionVal.startsWith('+30')) daysOffset = 30;
+    else if (actionVal.startsWith('0')) daysOffset = 0;
+    else if (!isNaN(parseInt(actionVal))) daysOffset = parseInt(actionVal);
+    
+    baseDate.setDate(baseDate.getDate() + daysOffset);
+    
+    const yr = baseDate.getFullYear();
+    const mo = String(baseDate.getMonth() + 1).padStart(2, '0');
+    const da = String(baseDate.getDate()).padStart(2, '0');
+    return `${yr}-${mo}-${da}`;
+}
+
+function setTargetFieldValue(targetFieldId, newValue) {
+    const wrap = document.getElementById('field-wrap-' + targetFieldId);
+    if (!wrap) return;
+    
+    const input = wrap.querySelector('.dm-field, .dm-date-picker, .dm-datetime-picker, .dm-time-picker, .dm-multi-picker, .dm-name-field, input[type="date"], input[type="text"], select');
+    
+    let flatpickrInst = input ? input._flatpickr : null;
+    if (!flatpickrInst) {
+        const fpInput = wrap.querySelector('input');
+        if (fpInput && fpInput._flatpickr) {
+            flatpickrInst = fpInput._flatpickr;
+        }
+    }
+
+    if (flatpickrInst) {
+        flatpickrInst.setDate(newValue, true);
+    } else if (input) {
+        input.value = newValue;
+        if (input.tomselect) {
+            input.tomselect.setValue(newValue);
+        }
+    }
+
+    if (input) {
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+}
+
+function applyRules(evt) {
+    const triggeredSourceFieldId = getEventFieldId(evt);
+
     Object.entries(FIELD_RULES).forEach(([targetFieldId, rules]) => {
         const wrap = document.getElementById('field-wrap-' + targetFieldId);
         if (!wrap) return;
-        const input = wrap.querySelector('.dm-field, .dm-multi-picker, .dm-name-field');
+        const input = wrap.querySelector('.dm-field, .dm-multi-picker, .dm-name-field, input[type="date"], select, input[type="text"]');
         let shouldShow = true, shouldRequire = null;
 
         rules.forEach(rule => {
-            const sourceVal = getFieldValue(rule.source_field_id);
+            const rawSourceVal = getFieldValue(rule.source_field_id);
+            const sourceVal = rawSourceVal !== undefined && rawSourceVal !== null ? rawSourceVal.toString().trim() : '';
             let match = false;
-            switch (rule.operator) {
-                case 'equals': match = sourceVal === rule.value; break;
-                case 'not_equals': match = sourceVal !== rule.value; break;
-                case 'contains': match = sourceVal.includes(rule.value || ''); break;
-                case 'not_empty': match = sourceVal !== ''; break;
+
+            const op = rule.operator || 'equals';
+            const ruleVal = (rule.value || '').toString().trim();
+
+            switch (op) {
+                case 'equals': match = (sourceVal === ruleVal); break;
+                case 'not_equals': match = (sourceVal !== ruleVal); break;
+                case 'contains': match = sourceVal.toLowerCase().includes(ruleVal.toLowerCase()); break;
+                case 'not_empty': match = (sourceVal !== ''); break;
+                case 'is_empty': match = (sourceVal === ''); break;
+                case 'greater_than': match = (parseFloat(sourceVal) > parseFloat(ruleVal)); break;
+                case 'less_than': match = (parseFloat(sourceVal) < parseFloat(ruleVal)); break;
+                case 'on_change': match = (triggeredSourceFieldId && triggeredSourceFieldId == rule.source_field_id); break;
             }
+
+            const cfg = rule.config ? (typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config) : {};
+            const actionVal = cfg.action_value || rule.action_value || '';
+
             if (rule.action === 'show') { if (!match) shouldShow = false; }
             else if (rule.action === 'hide') { if (match) shouldShow = false; }
-            else if (rule.action === 'require') { shouldRequire = match; }
+            else if (rule.action === 'require') { if (match) shouldRequire = true; }
             else if (rule.action === 'optional') { if (match) shouldRequire = false; }
+            else if (rule.action === 'set_value' && match) {
+                setTargetFieldValue(targetFieldId, actionVal);
+            }
+            else if (rule.action === 'copy_value' && match) {
+                setTargetFieldValue(targetFieldId, sourceVal);
+            }
+            else if (rule.action === 'set_relative_date' && match) {
+                const calculatedDate = calculateRelativeDate(actionVal, sourceVal);
+                if (calculatedDate) {
+                    setTargetFieldValue(targetFieldId, calculatedDate);
+                }
+            }
         });
 
         wrap.style.display = shouldShow ? '' : 'none';
@@ -1034,7 +1132,7 @@ if (IS_VIEW_ONLY) {
 }
 
 // Listen for changes on all fields to trigger rules
-document.querySelectorAll('.dm-field, .dm-name-field').forEach(el => {
+document.querySelectorAll('.dm-field, .dm-name-field, .dm-api-hidden, select, input').forEach(el => {
     el.addEventListener('change', applyRules);
     el.addEventListener('input', applyRules);
 });
@@ -1073,7 +1171,11 @@ document.querySelectorAll('.dm-tom-select').forEach(el => {
         tsOptions.create = false;
     }
 
-    new TomSelect(el, tsOptions);
+    let ts = new TomSelect(el, tsOptions);
+    ts.on('change', function(val) {
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        applyRules({ target: el });
+    });
 });
 
 // Update image preview on file selection
@@ -1533,7 +1635,9 @@ function selectRecordFromPicker(id, displayValue) {
     const hiddenInput = document.querySelector(`.dm-api-hidden[data-field-id="${currentPickerFieldId}"]`);
     if (hiddenInput) {
         hiddenInput.value = id;
-        hiddenInput.dispatchEvent(new Event('change'));
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+        applyRules({ target: hiddenInput });
     }
     
     const displaySpan = document.getElementById(`api-display-${currentPickerFieldId}`);
@@ -1568,7 +1672,9 @@ function clearApiPicker(fieldId) {
     const hiddenInput = document.querySelector(`.dm-api-hidden[data-field-id="${fieldId}"]`);
     if (hiddenInput) {
         hiddenInput.value = '';
-        hiddenInput.dispatchEvent(new Event('change'));
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+        hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+        applyRules({ target: hiddenInput });
     }
     
     const displaySpan = document.getElementById(`api-display-${fieldId}`);

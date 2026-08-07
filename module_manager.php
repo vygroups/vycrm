@@ -1578,19 +1578,93 @@ try {
         function addRuleRow(rule = {}) {
             const div = document.createElement('div');
             div.className = 'mm-rule-row';
+            div.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;';
             let fieldOpts = rulesModuleFields.map(f => `<option value="${f.id}" ${rule.source_field_id == f.id ? 'selected' : ''}>${f.label}</option>`).join('');
+            
+            const cfg = rule.config ? (typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config) : {};
+            const actionVal = rule.action_value || cfg.action_value || '';
+
             div.innerHTML = `
-        <select class="form-control rule-type"><option value="conditional" ${rule.rule_type === 'conditional' ? 'selected' : ''}>Conditional</option><option value="dependency" ${rule.rule_type === 'dependency' ? 'selected' : ''}>Dependency</option></select>
-        <select class="form-control rule-source" onchange="onRuleSourceChange(this)">${fieldOpts}</select>
-        <select class="form-control rule-op"><option value="equals" ${rule.operator === 'equals' ? 'selected' : ''}>Equals</option><option value="not_equals" ${rule.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option><option value="contains" ${rule.operator === 'contains' ? 'selected' : ''}>Contains</option><option value="not_empty" ${rule.operator === 'not_empty' ? 'selected' : ''}>Not Empty</option></select>
-        <div class="rule-value-container" style="flex: 1; min-width: 100px; display: flex;"></div>
-        <select class="form-control rule-action"><option value="show" ${rule.action === 'show' ? 'selected' : ''}>Show</option><option value="hide" ${rule.action === 'hide' ? 'selected' : ''}>Hide</option><option value="require" ${rule.action === 'require' ? 'selected' : ''}>Make Required</option><option value="optional" ${rule.action === 'optional' ? 'selected' : ''}>Make Optional</option></select>
-        <button class="mm-icon-btn mm-icon-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
+                <select class="form-control rule-type" style="width:110px;"><option value="conditional" ${rule.rule_type === 'conditional' ? 'selected' : ''}>Conditional</option><option value="dependency" ${rule.rule_type === 'dependency' ? 'selected' : ''}>Dependency</option></select>
+                <select class="form-control rule-source" onchange="onRuleSourceChange(this)" style="width:150px;">${fieldOpts}</select>
+                <select class="form-control rule-op" onchange="onRuleOpChange(this)" style="width:140px;">
+                    <option value="equals" ${rule.operator === 'equals' ? 'selected' : ''}>Equals</option>
+                    <option value="not_equals" ${rule.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option>
+                    <option value="contains" ${rule.operator === 'contains' ? 'selected' : ''}>Contains</option>
+                    <option value="not_empty" ${rule.operator === 'not_empty' ? 'selected' : ''}>Not Empty</option>
+                    <option value="is_empty" ${rule.operator === 'is_empty' ? 'selected' : ''}>Is Empty</option>
+                    <option value="greater_than" ${rule.operator === 'greater_than' ? 'selected' : ''}>Greater Than</option>
+                    <option value="less_than" ${rule.operator === 'less_than' ? 'selected' : ''}>Less Than</option>
+                    <option value="on_change" ${rule.operator === 'on_change' ? 'selected' : ''}>Value Changes (On Change)</option>
+                </select>
+                <div class="rule-value-container" style="flex: 1; min-width: 120px; display: flex;"></div>
+                <select class="form-control rule-action" onchange="onRuleActionChange(this)" style="width:170px;">
+                    <option value="show" ${rule.action === 'show' ? 'selected' : ''}>Show</option>
+                    <option value="hide" ${rule.action === 'hide' ? 'selected' : ''}>Hide</option>
+                    <option value="require" ${rule.action === 'require' ? 'selected' : ''}>Make Required</option>
+                    <option value="optional" ${rule.action === 'optional' ? 'selected' : ''}>Make Optional</option>
+                    <option value="set_value" ${rule.action === 'set_value' ? 'selected' : ''}>Set Field Value</option>
+                    <option value="set_relative_date" ${rule.action === 'set_relative_date' ? 'selected' : ''}>Set Date (Relative Offset)</option>
+                    <option value="copy_value" ${rule.action === 'copy_value' ? 'selected' : ''}>Copy Source Value</option>
+                </select>
+                <div class="rule-action-value-container" style="flex: 1; min-width: 130px; display: flex;"></div>
+                <button class="mm-icon-btn mm-icon-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
             document.getElementById('rulesList').appendChild(div);
             
-            // Set up initial dynamic value input
             const sourceSelect = div.querySelector('.rule-source');
             onRuleSourceChange(sourceSelect, rule.value || '');
+            const opSelect = div.querySelector('.rule-op');
+            onRuleOpChange(opSelect);
+            const actionSelect = div.querySelector('.rule-action');
+            onRuleActionChange(actionSelect, actionVal);
+        }
+
+        function onRuleOpChange(opSelect) {
+            const row = opSelect.closest('.mm-rule-row');
+            if (!row) return;
+            const valContainer = row.querySelector('.rule-value-container');
+            if (!valContainer) return;
+            
+            const op = opSelect.value;
+            if (op === 'not_empty' || op === 'is_empty' || op === 'on_change') {
+                valContainer.style.display = 'none';
+            } else {
+                valContainer.style.display = 'flex';
+            }
+        }
+
+        function onRuleActionChange(actionSelect, currentActionValue = '') {
+            const row = actionSelect.closest('.mm-rule-row');
+            if (!row) return;
+            const actionValContainer = row.querySelector('.rule-action-value-container');
+            if (!actionValContainer) return;
+            
+            const action = actionSelect.value;
+            if (action === 'set_value') {
+                actionValContainer.style.display = 'flex';
+                actionValContainer.innerHTML = `<input type="text" class="form-control rule-action-value" placeholder="Set value..." value="${escapeHtml(currentActionValue)}" style="width:100%;">`;
+            } else if (action === 'set_relative_date') {
+                actionValContainer.style.display = 'flex';
+                const opts = [
+                    { v: '-14_days_today', l: '14 Days Before Current Date (-14 Days)' },
+                    { v: '-7_days_today', l: '7 Days Before Current Date (-7 Days)' },
+                    { v: '0_days_today', l: 'Current Date / Today' },
+                    { v: '+7_days_today', l: '7 Days After Current Date (+7 Days)' },
+                    { v: '+14_days_today', l: '14 Days After Current Date (+14 Days)' },
+                    { v: '+30_days_today', l: '30 Days After Current Date (+30 Days)' },
+                    { v: '-14_days_source', l: '14 Days Before Source Date' },
+                    { v: '+14_days_source', l: '14 Days After Source Date' },
+                ];
+                const optHtml = opts.map(o => `<option value="${o.v}" ${currentActionValue == o.v ? 'selected' : ''}>${o.l}</option>`).join('');
+                actionValContainer.innerHTML = `
+                    <select class="form-control rule-action-value" style="width:100%;">
+                        ${optHtml}
+                    </select>
+                `;
+            } else {
+                actionValContainer.style.display = 'none';
+                actionValContainer.innerHTML = '';
+            }
         }
 
         async function createDynamicInputField(field, value = '', isRule = false) {
@@ -1753,13 +1827,23 @@ try {
         function saveRules() {
             const fieldId = +document.getElementById('rulesFieldId').value;
             const rows = document.querySelectorAll('#rulesList .mm-rule-row');
-            const rules = [...rows].map(r => ({
-                rule_type: r.querySelector('.rule-type').value,
-                source_field_id: +r.querySelector('.rule-source').value,
-                operator: r.querySelector('.rule-op').value,
-                value: r.querySelector('.rule-value').value,
-                action: r.querySelector('.rule-action').value,
-            }));
+            const rules = [...rows].map(r => {
+                const action = r.querySelector('.rule-action').value;
+                const actionValEl = r.querySelector('.rule-action-value');
+                const actionValue = actionValEl ? actionValEl.value : '';
+                const ruleValEl = r.querySelector('.rule-value');
+                const ruleValue = ruleValEl ? ruleValEl.value : '';
+                
+                return {
+                    rule_type: r.querySelector('.rule-type').value,
+                    source_field_id: +r.querySelector('.rule-source').value,
+                    operator: r.querySelector('.rule-op').value,
+                    value: ruleValue,
+                    action: action,
+                    action_value: actionValue,
+                    config: { action_value: actionValue }
+                };
+            });
             api('save_field_rules', { field_id: fieldId, rules }).then(r => { if (r.success) { closeModal('rulesModal'); vyToast('Rules saved successfully!', 'success'); } else vyToast(r.error, 'error'); });
         }
 
