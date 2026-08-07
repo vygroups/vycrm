@@ -1566,7 +1566,7 @@ try {
             api('get', { id: moduleId }).then(r => {
                 if (!r.success) return;
                 rulesModuleFields = [];
-                (r.module.blocks || []).forEach(b => (b.fields || []).forEach(f => { if (f.id !== fieldId) rulesModuleFields.push(f); }));
+                (r.module.blocks || []).forEach(b => (b.fields || []).forEach(f => { rulesModuleFields.push(f); }));
                 // Fetch existing rules
                 const targetField = [];
                 (r.module.blocks || []).forEach(b => (b.fields || []).forEach(f => { if (f.id === fieldId && f.rules) targetField.push(...f.rules); }));
@@ -1585,8 +1585,7 @@ try {
             const actionVal = rule.action_value || cfg.action_value || '';
 
             div.innerHTML = `
-                <select class="form-control rule-type" style="width:110px;"><option value="conditional" ${rule.rule_type === 'conditional' ? 'selected' : ''}>Conditional</option><option value="dependency" ${rule.rule_type === 'dependency' ? 'selected' : ''}>Dependency</option></select>
-                <select class="form-control rule-source" onchange="onRuleSourceChange(this)" style="width:150px;">${fieldOpts}</select>
+                <select class="form-control rule-source" onchange="onRuleSourceChange(this)" style="width:160px;">${fieldOpts}</select>
                 <select class="form-control rule-op" onchange="onRuleOpChange(this)" style="width:140px;">
                     <option value="equals" ${rule.operator === 'equals' ? 'selected' : ''}>Equals</option>
                     <option value="not_equals" ${rule.operator === 'not_equals' ? 'selected' : ''}>Not Equals</option>
@@ -1598,7 +1597,7 @@ try {
                     <option value="on_change" ${rule.operator === 'on_change' ? 'selected' : ''}>Value Changes (On Change)</option>
                 </select>
                 <div class="rule-value-container" style="flex: 1; min-width: 120px; display: flex;"></div>
-                <select class="form-control rule-action" onchange="onRuleActionChange(this)" style="width:170px;">
+                <select class="form-control rule-action" onchange="onRuleActionChange(this)" style="width:180px;">
                     <option value="show" ${rule.action === 'show' ? 'selected' : ''}>Show</option>
                     <option value="hide" ${rule.action === 'hide' ? 'selected' : ''}>Hide</option>
                     <option value="require" ${rule.action === 'require' ? 'selected' : ''}>Make Required</option>
@@ -1606,8 +1605,9 @@ try {
                     <option value="set_value" ${rule.action === 'set_value' ? 'selected' : ''}>Set Field Value</option>
                     <option value="set_relative_date" ${rule.action === 'set_relative_date' ? 'selected' : ''}>Set Date (Relative Offset)</option>
                     <option value="copy_value" ${rule.action === 'copy_value' ? 'selected' : ''}>Copy Source Value</option>
+                    <option value="update_other_module" ${rule.action === 'update_other_module' ? 'selected' : ''}>Update Other Module Field</option>
                 </select>
-                <div class="rule-action-value-container" style="flex: 1; min-width: 130px; display: flex;"></div>
+                <div class="rule-action-value-container" style="flex: 2; min-width: 220px; display: flex; gap: 6px; flex-wrap: wrap;"></div>
                 <button class="mm-icon-btn mm-icon-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
             document.getElementById('rulesList').appendChild(div);
             
@@ -1616,7 +1616,7 @@ try {
             const opSelect = div.querySelector('.rule-op');
             onRuleOpChange(opSelect);
             const actionSelect = div.querySelector('.rule-action');
-            onRuleActionChange(actionSelect, actionVal);
+            onRuleActionChange(actionSelect, actionVal, cfg);
         }
 
         function onRuleOpChange(opSelect) {
@@ -1633,7 +1633,31 @@ try {
             }
         }
 
-        function onRuleActionChange(actionSelect, currentActionValue = '') {
+        async function onRuleTargetModuleChange(modSelect, targetFieldId = 0) {
+            const row = modSelect.closest('.mm-rule-row');
+            if (!row) return;
+            const fieldSelect = row.querySelector('.rule-target-field');
+            if (!fieldSelect) return;
+            
+            const targetModId = modSelect.value;
+            if (!targetModId) {
+                fieldSelect.innerHTML = '<option value="">-- Target Field --</option>';
+                return;
+            }
+            
+            try {
+                const r = await api('get', { id: targetModId });
+                if (r.success && r.module) {
+                    let fields = [];
+                    (r.module.blocks || []).forEach(b => (b.fields || []).forEach(f => fields.push(f)));
+                    fieldSelect.innerHTML = fields.map(f => `<option value="${f.id}" ${targetFieldId == f.id ? 'selected' : ''}>${escapeHtml(f.label)}</option>`).join('');
+                }
+            } catch(e) {
+                console.error(e);
+            }
+        }
+
+        async function onRuleActionChange(actionSelect, currentActionValue = '', cfg = {}) {
             const row = actionSelect.closest('.mm-rule-row');
             if (!row) return;
             const actionValContainer = row.querySelector('.rule-action-value-container');
@@ -1661,6 +1685,40 @@ try {
                         ${optHtml}
                     </select>
                 `;
+            } else if (action === 'update_other_module') {
+                actionValContainer.style.display = 'flex';
+                
+                // Fetch list of modules if needed
+                let modOpts = '<option value="">-- Target Module --</option>';
+                try {
+                    const mListRes = await api('list');
+                    if (mListRes.success && mListRes.modules) {
+                        modOpts += mListRes.modules.map(m => `<option value="${m.id}" ${cfg.target_module_id == m.id ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
+                    }
+                } catch(e) {}
+
+                let currentModuleFieldOpts = rulesModuleFields.map(f => `<option value="field_${f.id}" ${(cfg.value_mode === ('field_' + f.id) || (cfg.value_mode === 'copy_value' && cfg.source_copy_field_id == f.id)) ? 'selected' : ''}>Copy Value From: ${escapeHtml(f.label)}</option>`).join('');
+
+                actionValContainer.innerHTML = `
+                    <select class="form-control rule-target-module" onchange="onRuleTargetModuleChange(this)" style="width:130px;">
+                        ${modOpts}
+                    </select>
+                    <select class="form-control rule-target-field" style="width:130px;">
+                        <option value="">-- Target Field --</option>
+                    </select>
+                    <select class="form-control rule-target-mode" style="width:200px;">
+                        <option value="today" ${cfg.value_mode === 'today' ? 'selected' : ''}>Set Today's Date</option>
+                        <option value="custom" ${cfg.value_mode === 'custom' ? 'selected' : ''}>Set Custom Static Value</option>
+                        <optgroup label="Copy Value From Current Record">
+                            ${currentModuleFieldOpts}
+                        </optgroup>
+                    </select>
+                `;
+                
+                const modSelect = actionValContainer.querySelector('.rule-target-module');
+                if (modSelect && modSelect.value) {
+                    onRuleTargetModuleChange(modSelect, cfg.target_field_id || 0);
+                }
             } else {
                 actionValContainer.style.display = 'none';
                 actionValContainer.innerHTML = '';
@@ -1833,15 +1891,219 @@ try {
                 const actionValue = actionValEl ? actionValEl.value : '';
                 const ruleValEl = r.querySelector('.rule-value');
                 const ruleValue = ruleValEl ? ruleValEl.value : '';
+                const ruleTypeEl = r.querySelector('.rule-type');
+                
+                const targetModEl = r.querySelector('.rule-target-module');
+                const targetFldEl = r.querySelector('.rule-target-field');
+                const targetModeEl = r.querySelector('.rule-target-mode');
+                
+                const configObj = {
+                    action_value: actionValue,
+                    target_module_id: targetModEl ? (parseInt(targetModEl.value) || 0) : 0,
+                    target_field_id: targetFldEl ? (parseInt(targetFldEl.value) || 0) : 0,
+                    value_mode: targetModeEl ? targetModeEl.value : 'copy_value'
+                };
                 
                 return {
-                    rule_type: r.querySelector('.rule-type').value,
+                    rule_type: ruleTypeEl ? ruleTypeEl.value : 'conditional',
                     source_field_id: +r.querySelector('.rule-source').value,
                     operator: r.querySelector('.rule-op').value,
                     value: ruleValue,
                     action: action,
                     action_value: actionValue,
-                    config: { action_value: actionValue }
+                    config: configObj
+                };
+            });
+            api('save_field_rules', { field_id: fieldId, rules }).then(r => { if (r.success) { closeModal('rulesModal'); vyToast('Rules saved successfully!', 'success'); } else vyToast(r.error, 'error'); });
+        }
+
+        async function createDynamicInputField(field, value = '', isRule = false) {
+            const fType = field.field_type;
+            const labelLower = (field.label || '').toLowerCase().trim();
+            const idAttr = isRule ? '' : 'id="workflowTriggerValue"';
+            const classAttr = isRule ? 'class="form-control rule-value"' : 'class="form-control"';
+            const styleAttr = 'style="width:100%;"';
+            
+            const isUserField = fType === 'user' || 
+                                fType === 'assigned_to' || 
+                                fType === 'sys_created_by' || 
+                                fType === 'sys_updated_by' || 
+                                ['assignee', 'assigned to', 'created by', 'updated by'].includes(labelLower);
+
+            const isDateField = fType === 'date';
+            const isDatetimeField = fType === 'datetime' || fType === 'datetime-local' || fType === 'sys_created_at' || fType === 'sys_updated_at';
+            const isTimeField = fType === 'time';
+            
+            const isOptionField = fType === 'select' || fType === 'dropdown' || fType === 'multi_picker' || fType === 'radio_group';
+            
+            if (isOptionField) {
+                const opts = field.options || [];
+                let parsedOpts = [];
+                if (typeof opts === 'string') {
+                    try { parsedOpts = JSON.parse(opts); } catch(e) {}
+                } else if (Array.isArray(opts)) {
+                    parsedOpts = opts;
+                }
+                const optHtml = parsedOpts.map(o => {
+                    const optVal = (o && typeof o === 'object') ? (o.value || o.option_value || '') : o;
+                    const optLbl = (o && typeof o === 'object') ? (o.label || o.option_label || optVal) : o;
+                    return `<option value="${escapeHtml(optVal)}" ${value == optVal ? 'selected' : ''}>${escapeHtml(optLbl)}</option>`;
+                }).join('');
+                
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose option --</option>
+                        ${optHtml}
+                    </select>
+                `;
+            } else if (fType === 'checkbox') {
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="1" ${value == '1' ? 'selected' : ''}>Yes</option>
+                        <option value="0" ${value == '0' ? 'selected' : ''}>No</option>
+                    </select>
+                `;
+            } else if (isUserField) {
+                const userOpts = ALL_USERS.map(u => `<option value="${u.id}" ${value == u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose User --</option>
+                        ${userOpts}
+                    </select>
+                `;
+            } else if (isDateField) {
+                return `<input type="date" ${idAttr} ${classAttr} ${styleAttr} value="${escapeHtml(value)}">`;
+            } else if (isDatetimeField) {
+                let val = value || '';
+                if (val.includes(' ')) {
+                    val = val.replace(' ', 'T');
+                }
+                return `<input type="datetime-local" ${idAttr} ${classAttr} ${styleAttr} value="${escapeHtml(val)}">`;
+            } else if (isTimeField) {
+                return `<input type="time" ${idAttr} ${classAttr} ${styleAttr} value="${escapeHtml(value)}">`;
+            } else if (fType === 'country') {
+                const countryOpts = Object.entries(ALL_COUNTRIES || {}).map(([code, name]) => 
+                    `<option value="${escapeHtml(code)}" ${value == code ? 'selected' : ''}>${escapeHtml(name)}</option>`
+                ).join('');
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose Country --</option>
+                        ${countryOpts}
+                    </select>
+                `;
+            } else if (fType === 'state') {
+                let stateHtml = '';
+                for (const [countryCode, statesObj] of Object.entries(ALL_STATES || {})) {
+                    const countryName = ALL_COUNTRIES[countryCode] || countryCode;
+                    stateHtml += `<optgroup label="${escapeHtml(countryName)}">`;
+                    for (const [stateCode, stateName] of Object.entries(statesObj || {})) {
+                        stateHtml += `<option value="${escapeHtml(stateCode)}" ${value == stateCode ? 'selected' : ''}>${escapeHtml(stateName)}</option>`;
+                    }
+                    stateHtml += `</optgroup>`;
+                }
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose State --</option>
+                        ${stateHtml}
+                    </select>
+                `;
+            } else if (fType === 'district') {
+                let districtHtml = '';
+                for (const [stateCode, districtsObj] of Object.entries(ALL_DISTRICTS || {})) {
+                    let stateName = stateCode;
+                    for (const [cCode, statesObj] of Object.entries(ALL_STATES || {})) {
+                        if (statesObj[stateCode]) {
+                            stateName = statesObj[stateCode];
+                            break;
+                        }
+                    }
+                    districtHtml += `<optgroup label="${escapeHtml(stateName)}">`;
+                    for (const [distCode, distName] of Object.entries(districtsObj || {})) {
+                        districtHtml += `<option value="${escapeHtml(distCode)}" ${value == distCode ? 'selected' : ''}>${escapeHtml(distName)}</option>`;
+                    }
+                    districtHtml += `</optgroup>`;
+                }
+                return `
+                    <select ${idAttr} ${classAttr} ${styleAttr}>
+                        <option value="">-- Choose District --</option>
+                        ${districtHtml}
+                    </select>
+                `;
+            } else if (fType === 'api_call_picker') {
+                const linkedModId = field.config ? field.config.linked_module_id : 0;
+                if (linkedModId) {
+                    try {
+                        const res = await fetch(`${API}?action=lookup_records&target_module_id=${linkedModId}`);
+                        const rData = await res.json();
+                        if (rData.success && rData.records) {
+                            const recOpts = rData.records.map(rec => `<option value="${rec.id}" ${value == rec.id ? 'selected' : ''}>${escapeHtml(rec.display_value)} (ID: ${rec.id})</option>`).join('');
+                            return `
+                                <select ${idAttr} ${classAttr} ${styleAttr}>
+                                    <option value="">-- Choose Record --</option>
+                                    ${recOpts}
+                                </select>
+                            `;
+                        }
+                    } catch(e) {}
+                }
+                return `<input type="text" ${idAttr} ${classAttr} ${styleAttr} placeholder="Trigger value (ID)" value="${escapeHtml(value)}">`;
+            } else if (fType === 'number' || fType === 'decimal' || fType === 'currency') {
+                return `<input type="number" step="any" ${idAttr} ${classAttr} ${styleAttr} placeholder="Value" value="${escapeHtml(value)}">`;
+            } else {
+                return `<input type="text" ${idAttr} ${classAttr} ${styleAttr} placeholder="Value" value="${escapeHtml(value)}">`;
+            }
+        }
+
+        async function onRuleSourceChange(selectEl, currentValue = '') {
+            const row = selectEl.closest('.mm-rule-row');
+            if (!row) return;
+            const valContainer = row.querySelector('.rule-value-container');
+            if (!valContainer) return;
+            
+            const fieldId = selectEl.value;
+            if (!fieldId) {
+                valContainer.innerHTML = `<input type="text" class="form-control rule-value" placeholder="Value" value="${escapeHtml(currentValue)}" style="width:100%;">`;
+                return;
+            }
+            
+            const field = rulesModuleFields.find(f => f.id == fieldId);
+            if (!field) {
+                valContainer.innerHTML = `<input type="text" class="form-control rule-value" placeholder="Value" value="${escapeHtml(currentValue)}" style="width:100%;">`;
+                return;
+            }
+            
+            valContainer.innerHTML = await createDynamicInputField(field, currentValue, true);
+        }
+        function saveRules() {
+            const fieldId = +document.getElementById('rulesFieldId').value;
+            const rows = document.querySelectorAll('#rulesList .mm-rule-row');
+            const rules = [...rows].map(r => {
+                const action = r.querySelector('.rule-action').value;
+                const actionValEl = r.querySelector('.rule-action-value');
+                const actionValue = actionValEl ? actionValEl.value : '';
+                const ruleValEl = r.querySelector('.rule-value');
+                const ruleValue = ruleValEl ? ruleValEl.value : '';
+                const ruleTypeEl = r.querySelector('.rule-type');
+                
+                const targetModEl = r.querySelector('.rule-target-module');
+                const targetFldEl = r.querySelector('.rule-target-field');
+                const targetModeEl = r.querySelector('.rule-target-mode');
+                
+                const configObj = {
+                    action_value: actionValue,
+                    target_module_id: targetModEl ? (parseInt(targetModEl.value) || 0) : 0,
+                    target_field_id: targetFldEl ? (parseInt(targetFldEl.value) || 0) : 0,
+                    value_mode: targetModeEl ? targetModeEl.value : 'copy_value'
+                };
+                
+                return {
+                    rule_type: ruleTypeEl ? ruleTypeEl.value : 'conditional',
+                    source_field_id: +r.querySelector('.rule-source').value,
+                    operator: r.querySelector('.rule-op').value,
+                    value: ruleValue,
+                    action: action,
+                    action_value: actionValue,
+                    config: configObj
                 };
             });
             api('save_field_rules', { field_id: fieldId, rules }).then(r => { if (r.success) { closeModal('rulesModal'); vyToast('Rules saved successfully!', 'success'); } else vyToast(r.error, 'error'); });

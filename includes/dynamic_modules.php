@@ -1500,3 +1500,194 @@ function dm_can_delete_record($conn, $p, $module, $recordOwnerId, $userId, $user
     $allowedIds = dm_get_visible_user_ids($conn, $p, $userId, $userRoleId, $rule);
     return in_array((int)$recordOwnerId, $allowedIds, true);
 }
+
+/**
+ * Automatically syncs date/field values from a record (e.g. Clients) to its linked parent record (e.g. Companies)
+ */
+function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int $recordId, array $values): void
+{
+    // Fetch all current record values from DB to guarantee we have all field values (including tagged company and dates)
+    $dbValStmt = $conn->prepare("SELECT field_id, value FROM {$p}module_record_values WHERE record_id = ?");
+    $dbValStmt->execute([$recordId]);
+    $fullValues = $dbValStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    
+    foreach ($values as $fid => $v) {
+        $fullValues[(int)$fid] = $v;
+    }
+    $values = $fullValues;
+
+    // Fetch all fields for current module
+    $currentFields = dm_fetch_module_fields($conn, $p, $moduleId);
+    
+    // Find all date/datetime fields in current module
+    $currentDateFields = [];
+    foreach ($currentFields as $f) {
+        if (in_array($f['field_type'], ['date', 'datetime', 'time'])) {
+            $currentDateFields[] = $f;
+        }
+    }
+    if (empty($currentDateFields)) return;
+
+    // Find linked parent module pickers or company text fields
+    foreach ($currentFields as $f) {
+        $fId = (int)$f['id'];
+        $fType = $f['field_type'];
+        $cfg = is_array($f['config']) ? $f['config'] : (json_decode($f['config'] ?: '{}', true) ?: []);
+        
+        $linkedModuleId = 0;
+        $parentRecordId = 0;
+        $companyNameStr = '';
+
+        if ($fType === 'api_call_picker' && !empty($cfg['linked_module_id'])) {
+            $linkedModuleId = (int)$cfg['linked_module_id'];
+            $val = trim((string)($values[$fId] ?? ''));
+            if (ctype_digit($val)) {
+                $parentRecordId = (int)$val;
+            } else if ($val !== '') {
+                $companyNameStr = $val;
+            }
+        } else if (in_array(strtolower(trim($f['label'] ?? '')), ['company', 'company name', 'companies'])) {
+            // Text or dropdown company field
+            $val = trim((string)($values[$fId] ?? ''));
+            if ($val !== '') {
+                $companyNameStr = $val;
+                // Find Companies module ID
+                $cModStmt = $conn->prepare("SELECT id FROM {$p}modules WHERE LOWER(name) IN ('companies', 'company') LIMIT 1");
+                $cModStmt->execute();
+                $linkedModuleId = (int)$cModStmt->fetchColumn();
+            }
+        }
+
+        if (!$linkedModuleId) continue;
+
+        // If parentRecordId not numeric, resolve by matching company name in parent module
+        if (!$parentRecordId && $companyNameStr !== '') {
+            $findParentStmt = $conn->prepare("
+                SELECT mrv.record_id
+                FROM {$p}module_record_values mrv
+                JOIN {$p}module_records mr ON mr.id = mrv.record_id
+                JOIN {$p}module_fields mf ON mf.id = mrv.field_id
+                WHERE mr.module_id = ? 
+                  AND LOWER(TRIM(mrv.value)) = LOWER(TRIM(?))
+                  AND LOWER(mf.label) LIKE '%company%'
+                LIMIT 1
+            ");
+            $findParentStmt->execute([$linkedModuleId, $companyNameStr]);
+            $parentRecordId = (int)$findParentStmt->fetchColumn();
+            
+            if (!$parentRecordId) {
+                // Try matching title field in parent module
+                $findTitleStmt = $conn->prepare("
+                    SELECT mrv.record_id
+                    FROM {$p}module_record_values mrv
+                    JOIN {$p}module_records mr ON mr.id = mrv.record_id
+                    WHERE mr.module_id = ? AND LOWER(TRIM(mrv.value)) = LOWER(TRIM(?))
+                    LIMIT 1
+                ");
+                $findTitleStmt->execute([$linkedModuleId, $companyNameStr]);
+                $parentRecordId = (int)$findTitleStmt->fetchColumn();
+            }
+        }
+
+        if (!$parentRecordId) continue;
+
+        // Fetch fields of parent module to find matching date field
+        $parentFields = dm_fetch_module_fields($conn, $p, $linkedModuleId);
+        $parentDateFields = [];
+        foreach ($parentFields as $pf) {
+            if (in_array($pf['field_type'], ['date', 'datetime', 'time'])) {
+                $parentDateFields[] = $pf;
+            }
+        }
+        if (empty($parentDateFields)) continue;
+
+        // Check explicit Field Rules configured on fields in this module for update_other_module
+        foreach ($currentFields as $cf) {
+            $rawRules = $cf['rules'] ?? '[]';
+            $cfRules = is_array($rawRules) ? $rawRules : (json_decode($rawRules ?: '[]', true) ?: []);
+            if (!is_array($cfRules)) continue;
+            foreach ($cfRules as $r) {
+                if (!is_array($r)) continue;
+                if (($r['action'] ?? '') === 'update_other_module' || !empty($r['config']['target_module_id'])) {
+                    $tModId = (int)($r['config']['target_module_id'] ?? 0);
+                    $tFldId = (int)($r['config']['target_field_id'] ?? 0);
+                    $valMode = $r['config']['value_mode'] ?? 'copy_value';
+                    
+                    if ($tModId && $tFldId && $linkedModuleId == $tModId) {
+                        $newVal = '';
+                        if ($valMode === 'today') {
+                            $newVal = date('Y-m-d');
+                        } else if (strpos($valMode, 'field_') === 0) {
+                            $copyFid = (int)str_replace('field_', '', $valMode);
+                            $newVal = trim((string)($values[$copyFid] ?? ''));
+                        } else if ($valMode === 'copy_value') {
+                            $srcFid = (int)($r['source_field_id'] ?? $cf['id']);
+                            $newVal = trim((string)($values[$srcFid] ?? ''));
+                        } else {
+                            $newVal = trim((string)($r['action_value'] ?? $r['config']['action_value'] ?? ''));
+                        }
+
+                        if ($newVal !== '') {
+                            $conn->prepare("
+                                INSERT INTO {$p}module_record_values (record_id, field_id, value)
+                                VALUES (?, ?, ?)
+                                ON DUPLICATE KEY UPDATE value = VALUES(value)
+                            ")->execute([$parentRecordId, $tFldId, $newVal]);
+                            
+                            $conn->prepare("UPDATE {$p}module_records SET updated_at = NOW() WHERE id = ?")->execute([$parentRecordId]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // For each date field in current record, find target date field in parent record (default fallback)
+        foreach ($currentDateFields as $cdf) {
+            $cDateVal = trim((string)($values[(int)$cdf['id']] ?? ''));
+            if ($cDateVal === '') continue;
+
+            $cdfLabelNorm = preg_replace('/[^a-z0-9]/', '', strtolower($cdf['label'] ?? ''));
+
+            // Match parent date field by label, or fallback to matching interaction/contact or first date field
+            $targetParentDateField = null;
+            foreach ($parentDateFields as $pdf) {
+                $pdfLabelNorm = preg_replace('/[^a-z0-9]/', '', strtolower($pdf['label'] ?? ''));
+                if ($cdfLabelNorm !== '' && $cdfLabelNorm === $pdfLabelNorm) {
+                    $targetParentDateField = $pdf;
+                    break;
+                }
+            }
+            if (!$targetParentDateField && !empty($parentDateFields)) {
+                foreach ($parentDateFields as $pdf) {
+                    $pdfNorm = strtolower($pdf['label']);
+                    if (strpos($cdfLabelNorm, 'interaction') !== false && strpos($pdfNorm, 'interaction') !== false) {
+                        $targetParentDateField = $pdf;
+                        break;
+                    }
+                    if (strpos($cdfLabelNorm, 'contact') !== false && strpos($pdfNorm, 'contact') !== false) {
+                        $targetParentDateField = $pdf;
+                        break;
+                    }
+                }
+                if (!$targetParentDateField) {
+                    $targetParentDateField = $parentDateFields[0]; // fallback
+                }
+            }
+
+            if ($targetParentDateField) {
+                $pdfId = (int)$targetParentDateField['id'];
+                
+                // Update parent record date value
+                $updParentValueStmt = $conn->prepare("
+                    INSERT INTO {$p}module_record_values (record_id, field_id, value)
+                    VALUES (?, ?, ?)
+                    ON DUPLICATE KEY UPDATE value = VALUES(value)
+                ");
+                $updParentValueStmt->execute([$parentRecordId, $pdfId, $cDateVal]);
+
+                // Touch parent record updated_at
+                $conn->prepare("UPDATE {$p}module_records SET updated_at = NOW() WHERE id = ?")->execute([$parentRecordId]);
+            }
+        }
+    }
+}

@@ -1,4 +1,5 @@
 <?php
+ob_start();
 /**
  * api/modules.php
  * 
@@ -647,6 +648,13 @@ try {
                     dm_trigger_workflows($conn, $prefix, $moduleId, $recordId, $oldValues, $values);
                 } catch (Throwable $wfEx) {
                     error_log("Workflow automation failed for record $recordId: " . $wfEx->getMessage());
+                }
+
+                // Sync date/fields to linked parent module (e.g. Clients -> Companies)
+                try {
+                    dm_sync_linked_parent_records($conn, $prefix, $moduleId, $recordId, $values);
+                } catch (Throwable $syncEx) {
+                    error_log("Cross-module date sync failed for record $recordId: " . $syncEx->getMessage());
                 }
 
                 commerce_json_response(['success' => true, 'record_id' => $recordId]);
