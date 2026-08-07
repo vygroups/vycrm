@@ -151,6 +151,8 @@ try {
 
                 if ($fieldType === 'checkbox') {
                     $valClean = in_array(strtolower($valClean), ['yes', '1', 'true', 'checked', 'on']) ? '1' : '0';
+                } elseif (in_array($fieldType, ['date', 'datetime', 'time'])) {
+                    $valClean = normalize_import_date_value($valClean, $fieldType);
                 } elseif ($fieldType === 'api_call_picker' && $valClean !== '' && !ctype_digit($valClean)) {
                     // Non-numeric: try to resolve the text name to a real record ID
                     $pInfo = $pickerDisplayField[$fieldId] ?? null;
@@ -189,8 +191,56 @@ try {
 
 
 /**
- * Helper to dynamically load rows based on file format.
+ * Helper to normalize date/time values from Excel (including Excel serial numbers like 46204 or strings like 22-Aug-24).
  */
+function normalize_import_date_value(string $val, string $fieldType = 'date'): string {
+    $val = trim($val);
+    if ($val === '') return '';
+
+    // Case 1: Excel Serial Date Number (numeric, e.g. 45526, 46204)
+    if (is_numeric($val) && (float)$val > 1000 && (float)$val < 2958465) {
+        $excelSerial = (float)$val;
+        $unixTimestamp = round(($excelSerial - 25569) * 86400);
+        if ($fieldType === 'datetime') {
+            return date('Y-m-d H:i:s', $unixTimestamp);
+        } elseif ($fieldType === 'time') {
+            return date('H:i:s', $unixTimestamp);
+        } else {
+            return date('Y-m-d', $unixTimestamp);
+        }
+    }
+
+    // Case 2: String date (e.g. 22-Aug-24, 22-Aug-2024, 22/08/2024, 22.08.2024, 2024-08-22)
+    $cleanDate = $val;
+    if (preg_match('/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})$/', $cleanDate, $m)) {
+        $d1 = (int)$m[1];
+        $d2 = (int)$m[2];
+        $yr = (int)$m[3];
+        if ($yr < 100) $yr += ($yr > 50 ? 1900 : 2000);
+        
+        if ($d1 > 12 && $d2 <= 12) {
+            // d1 is Day, d2 is Month
+            $cleanDate = sprintf('%04d-%02d-%02d', $yr, $d2, $d1);
+        } elseif ($d2 > 12 && $d1 <= 12) {
+            // d1 is Month, d2 is Day
+            $cleanDate = sprintf('%04d-%02d-%02d', $yr, $d1, $d2);
+        }
+    }
+
+    $ts = strtotime($cleanDate);
+    if ($ts !== false && $ts > 0) {
+        if ($fieldType === 'datetime') {
+            return date('Y-m-d H:i:s', $ts);
+        } elseif ($fieldType === 'time') {
+            return date('H:i:s', $ts);
+        } else {
+            return date('Y-m-d', $ts);
+        }
+    }
+
+    return $val;
+}
+
 function normalize_import_header_name(string $value): string {
     $value = trim($value);
     $value = strtolower($value);
