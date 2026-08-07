@@ -100,6 +100,19 @@ if ($filterRulesInput) {
 $data = dm_fetch_records($conn, $prefix, $moduleId, $search, 100000, 0, $filterRules, $sortBy, $sortOrder);
 $records = $data['records'];
 
+// Optional record_ids filter for exporting selected records only
+$recordIdsInput = $_GET['record_ids'] ?? null;
+if (!empty($recordIdsInput)) {
+    $targetIds = array_map('intval', explode(',', $recordIdsInput));
+    $targetIds = array_filter($targetIds);
+    if (!empty($targetIds)) {
+        $idSet = array_flip($targetIds);
+        $records = array_values(array_filter($records, function($r) use ($idSet) {
+            return isset($idSet[(int)$r['id']]);
+        }));
+    }
+}
+
 // Prepare users list for mapping
 $usersStmt = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users");
 $usersList = [];

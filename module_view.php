@@ -294,7 +294,10 @@ if (!$hasUpdatedAt) {
                         <span class="text-muted text-sm"><?= $total ?> record<?= $total !== 1 ? 's' : '' ?></span>
                         
                         <button id="btnBulkDelete" class="mm-btn mm-btn-sm mm-btn-danger" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 10px; border-radius: 8px; font-weight: 600;" onclick="bulkDeleteRecords()">
-                            <i class="fa-solid fa-trash"></i> Delete Selected (<span id="selectedCount">0</span>)
+                            <i class="fa-solid fa-trash"></i> Delete Selected (<span class="selectedCount">0</span>)
+                        </button>
+                        <button id="btnBulkExport" class="mm-btn mm-btn-sm mm-btn-outline" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 10px; border-radius: 8px; font-weight: 600; color: var(--primary); border-color: var(--primary);" onclick="bulkExportSelected()">
+                            <i class="fa-solid fa-file-export"></i> Export Selected (<span class="selectedCount">0</span>)
                         </button>
                         <div style="display:inline-flex; align-items:center; gap:5px;">
                             <button id="btnFiltersToggle" class="mm-btn mm-btn-sm mm-btn-outline" onclick="toggleFilterPanel()" style="display:inline-flex;align-items:center;gap:6px; <?= (($activeFilterRules || $activeFilterId) ? 'background:rgba(123,94,240,0.1); border-color:var(--primary); color:var(--primary); font-weight:700;' : '') ?>">
@@ -413,6 +416,12 @@ if (!$hasUpdatedAt) {
                 </div>
 
                 <div class="table-panel">
+                    <div id="selectAllBanner" style="display: none; background: rgba(123,94,240,0.08); border-bottom: 1px solid rgba(123,94,240,0.2); padding: 10px 16px; font-size: 13px; color: var(--text-dark); text-align: center; font-weight: 500;">
+                        <span id="selectAllBannerText">All 0 records on this page are selected.</span>
+                        <button type="button" id="btnSelectAllPages" onclick="selectAllAcrossPages()" style="background: none; border: none; color: var(--primary); font-weight: 700; cursor: pointer; text-decoration: underline; margin-left: 6px; font-size: 13px;">
+                            Select all 0 records across all pages
+                        </button>
+                    </div>
                     <div class="table-responsive">
                         <table class="crm-table">
                             <thead>
@@ -572,7 +581,12 @@ function deleteRecord(id) {
     }).catch(e => vyToast('Error: ' + e.message, 'error'));
 }
 
+let isAllPagesSelected = false;
+
 function toggleSelectAll(selectAllCheckbox) {
+    if (!selectAllCheckbox.checked) {
+        isAllPagesSelected = false;
+    }
     const checkboxes = document.querySelectorAll('.record-select');
     checkboxes.forEach(cb => {
         const row = cb.closest('tr');
@@ -587,19 +601,22 @@ function updateBulkDeleteButton() {
     const checkboxes = document.querySelectorAll('.record-select:checked');
     const selectedCount = checkboxes.length;
     const btnBulkDelete = document.getElementById('btnBulkDelete');
-    const selectedCountSpan = document.getElementById('selectedCount');
+    const btnBulkExport = document.getElementById('btnBulkExport');
+    const selectedSpans = document.querySelectorAll('.selectedCount');
+    const selectAllBanner = document.getElementById('selectAllBanner');
+    const selectAllBannerText = document.getElementById('selectAllBannerText');
+    const btnSelectAllPages = document.getElementById('btnSelectAllPages');
     
-    if (selectedCount > 0) {
-        if (btnBulkDelete) {
-            btnBulkDelete.style.display = 'inline-flex';
-        }
-        if (selectedCountSpan) {
-            selectedCountSpan.textContent = selectedCount;
-        }
+    const totalRecords = typeof window.totalModuleRecords !== 'undefined' ? window.totalModuleRecords : <?= (int)$total ?>;
+    const effectiveCount = isAllPagesSelected ? totalRecords : selectedCount;
+
+    if (effectiveCount > 0) {
+        if (btnBulkDelete) btnBulkDelete.style.display = 'inline-flex';
+        if (btnBulkExport) btnBulkExport.style.display = 'inline-flex';
+        selectedSpans.forEach(span => span.textContent = effectiveCount);
     } else {
-        if (btnBulkDelete) {
-            btnBulkDelete.style.display = 'none';
-        }
+        if (btnBulkDelete) btnBulkDelete.style.display = 'none';
+        if (btnBulkExport) btnBulkExport.style.display = 'none';
     }
     
     const allCheckboxes = document.querySelectorAll('.record-select');
@@ -610,29 +627,113 @@ function updateBulkDeleteButton() {
     const allChecked = allVisible.length > 0 && allVisible.every(cb => cb.checked);
     const selectAllCheckbox = document.getElementById('selectAllRecords');
     if (selectAllCheckbox) {
-        selectAllCheckbox.checked = allChecked;
-        selectAllCheckbox.indeterminate = !allChecked && allVisible.some(cb => cb.checked);
+        selectAllCheckbox.checked = allChecked || isAllPagesSelected;
+        selectAllCheckbox.indeterminate = !allChecked && !isAllPagesSelected && allVisible.some(cb => cb.checked);
     }
+
+    // Toggle "Select all records across all pages" banner
+    if (selectAllBanner && (allChecked || isAllPagesSelected) && totalRecords > allVisible.length) {
+        selectAllBanner.style.display = 'block';
+        if (isAllPagesSelected) {
+            if (selectAllBannerText) selectAllBannerText.textContent = `All ${totalRecords} records across all pages are selected.`;
+            if (btnSelectAllPages) {
+                btnSelectAllPages.textContent = 'Clear selection';
+                btnSelectAllPages.onclick = clearAllSelections;
+            }
+        } else {
+            if (selectAllBannerText) selectAllBannerText.textContent = `All ${allVisible.length} records on this page are selected.`;
+            if (btnSelectAllPages) {
+                btnSelectAllPages.textContent = `Select all ${totalRecords} records across all pages`;
+                btnSelectAllPages.onclick = selectAllAcrossPages;
+            }
+        }
+    } else if (selectAllBanner) {
+        selectAllBanner.style.display = 'none';
+    }
+}
+
+function selectAllAcrossPages() {
+    isAllPagesSelected = true;
+    const checkboxes = document.querySelectorAll('.record-select');
+    checkboxes.forEach(cb => cb.checked = true);
+    const selectAllCheckbox = document.getElementById('selectAllRecords');
+    if (selectAllCheckbox) selectAllCheckbox.checked = true;
+    updateBulkDeleteButton();
+}
+
+function clearAllSelections() {
+    isAllPagesSelected = false;
+    const checkboxes = document.querySelectorAll('.record-select');
+    checkboxes.forEach(cb => cb.checked = false);
+    const selectAllCheckbox = document.getElementById('selectAllRecords');
+    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+    updateBulkDeleteButton();
+}
+
+function bulkExportSelected() {
+    const checkboxes = document.querySelectorAll('.record-select:checked');
+    const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    
+    if (!isAllPagesSelected && ids.length === 0) return;
+    
+    const params = new URLSearchParams();
+    params.append('module_id', MODULE_ID);
+    params.append('format', 'csv');
+    
+    if (!isAllPagesSelected && ids.length > 0) {
+        params.append('record_ids', ids.join(','));
+    } else {
+        const searchInput = document.getElementById('recordSearchInput');
+        if (searchInput && searchInput.value.trim()) {
+            params.append('search', searchInput.value.trim());
+        }
+        if (activeFilterRules && activeFilterRules.length > 0) {
+            params.append('filter_rules', JSON.stringify(activeFilterRules));
+        } else if (activeFilterId) {
+            params.append('filter_id', activeFilterId);
+        }
+    }
+    
+    window.location.href = `/api/module_export.php?${params.toString()}`;
 }
 
 function bulkDeleteRecords() {
     const checkboxes = document.querySelectorAll('.record-select:checked');
     const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
     
-    if (ids.length === 0) return;
+    if (!isAllPagesSelected && ids.length === 0) return;
     
-    if (!confirm(`Are you sure you want to delete the ${ids.length} selected record(s)?`)) return;
+    const totalRecords = typeof window.totalModuleRecords !== 'undefined' ? window.totalModuleRecords : <?= (int)$total ?>;
+    const countToDelete = isAllPagesSelected ? totalRecords : ids.length;
+    
+    if (!confirm(`Are you sure you want to delete the ${countToDelete} selected record(s)?`)) return;
     
     // Show deleting loader
     const progressModal = document.getElementById('deleteProgressModal');
     if (progressModal) progressModal.style.display = 'flex';
+    
+    const payload = { action: 'delete_record', module_id: MODULE_ID };
+    if (!isAllPagesSelected && ids.length > 0) {
+        payload.ids = ids;
+    } else {
+        // If all pages selected, fetch all matching IDs or pass filter
+        const searchInput = document.getElementById('recordSearchInput');
+        const searchVal = searchInput ? searchInput.value.trim() : null;
+        payload.search = searchVal || null;
+        payload.all_pages = true;
+        if (activeFilterRules && activeFilterRules.length > 0) {
+            payload.filter_rules = activeFilterRules;
+        } else if (activeFilterId) {
+            payload.filter_id = activeFilterId;
+        }
+    }
     
     // Wait slightly to make the transition look smooth and premium
     setTimeout(() => {
         fetch('/api/modules.php', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({action: 'delete_record', ids})
+            body: JSON.stringify(payload)
         })
         .then(r => r.json())
         .then(r => {
@@ -1783,6 +1884,12 @@ async function fetchAndRenderRecords(filterRules = null, filterId = 0, page = 1)
             updateHeaderSortIcons();
             
             const total = r.data.total;
+            window.totalModuleRecords = total;
+            isAllPagesSelected = false;
+            const selectAllCheckbox = document.getElementById('selectAllRecords');
+            if (selectAllCheckbox) selectAllCheckbox.checked = false;
+            updateBulkDeleteButton();
+
             const countLabel = document.querySelector('.mv-toolbar .text-muted.text-sm');
             if (countLabel) {
                 countLabel.textContent = `${total} record${total !== 1 ? 's' : ''}`;
@@ -2419,6 +2526,17 @@ async function handleImportSubmit(event) {
     const fileInput = document.getElementById('importFile');
     if (!fileInput || !fileInput.files.length) return;
     
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+    const importProgressModal = document.getElementById('importProgressModal');
+    
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i> Importing...';
+    }
+    if (importProgressModal) {
+        importProgressModal.style.display = 'flex';
+    }
+    
     const formData = new FormData();
     formData.append('import_file', fileInput.files[0]);
     formData.append('module_id', MODULE_ID);
@@ -2430,6 +2548,8 @@ async function handleImportSubmit(event) {
         });
         const result = await response.json();
         
+        if (importProgressModal) importProgressModal.style.display = 'none';
+        
         if (result.success) {
             vyToast(result.message || 'Import successful!', 'success');
             closeImportModal();
@@ -2439,7 +2559,13 @@ async function handleImportSubmit(event) {
             vyToast(result.error || 'Import failed.', 'error');
         }
     } catch (e) {
+        if (importProgressModal) importProgressModal.style.display = 'none';
         vyToast('Import request failed: ' + e.message, 'error');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Upload and Import';
+        }
     }
 }
 </script>
@@ -2472,6 +2598,16 @@ async function handleImportSubmit(event) {
                 </div>
             </form>
         </div>
+    </div>
+</div>
+<!-- Import Progress Modal Loader -->
+<div class="mm-modal-overlay" id="importProgressModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:10000; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+    <div class="crm-card" style="width:100%; max-width:400px; padding:30px; border-radius:20px; background:var(--surface); box-shadow:var(--shadow-lg); text-align:center;">
+        <div style="margin-bottom: 20px;">
+            <i class="fa-solid fa-circle-notch fa-spin" style="font-size:48px; color:var(--primary);"></i>
+        </div>
+        <h3 style="margin:0 0 8px; font-size:18px; font-weight:700; color:var(--text-main);">Importing Records</h3>
+        <p style="margin:0; font-size:14px; color:var(--text-muted); line-height:1.5;">Please wait, parsing and importing records from file...</p>
     </div>
 </div>
 <!-- Bulk Delete Progress Modal -->

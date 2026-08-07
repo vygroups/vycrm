@@ -656,6 +656,20 @@ try {
             if (empty($ids) && isset($input['id'])) {
                 $ids = [(int)$input['id']];
             }
+            if (empty($ids) && !empty($input['all_pages']) && !empty($input['module_id'])) {
+                $mId = (int)$input['module_id'];
+                $sSearch = $input['search'] ?? null;
+                $fRules = $input['filter_rules'] ?? null;
+                $fId = (int)($input['filter_id'] ?? 0);
+                if (!$fRules && $fId) {
+                    $sfStmt = $conn->prepare("SELECT filter_rules FROM {$prefix}module_saved_filters WHERE id = ? AND user_id = ?");
+                    $sfStmt->execute([$fId, $userId]);
+                    $rulesJson = $sfStmt->fetchColumn();
+                    if ($rulesJson) $fRules = json_decode($rulesJson, true);
+                }
+                $allRecs = dm_fetch_records($conn, $prefix, $mId, $sSearch, 100000, 0, $fRules);
+                $ids = array_column($allRecs['records'], 'id');
+            }
             if (empty($ids)) throw new RuntimeException('Record ID(s) required');
 
             $conn->beginTransaction();

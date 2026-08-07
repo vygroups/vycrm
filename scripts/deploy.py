@@ -27,7 +27,7 @@ def custom_makepasv(self):
 ftplib.FTP.makepasv = custom_makepasv
 
 # FTP Credentials
-HOST = "vycrm.vygroups.com"
+HOST = "ftp.vycrm.vygroups.com"
 USER = "u495954467.vycrm"
 PASS = "Tn02aps2391*"
 PORT = 21

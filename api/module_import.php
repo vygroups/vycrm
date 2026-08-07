@@ -93,23 +93,17 @@ if (substr($headers[0], 0, 3) == "\xEF\xBB\xBF") {
     $headers[0] = substr($headers[0], 3);
 }
 
-// Map header names to field IDs and types
+// Map header names to field IDs and types (match with field title/label only)
 $headerMap = [];
 $fieldTypes = [];
 foreach ($headers as $index => $headerName) {
-    $headerName = trim($headerName);
     $normalizedHeader = normalize_import_header_name($headerName);
+    if ($normalizedHeader === '') continue;
 
     foreach ($fields as $f) {
-        $label = trim($f['label'] ?? '');
-        $fieldKey = trim($f['field_key'] ?? '');
-        $normalizedLabel = normalize_import_header_name($label);
-        $normalizedFieldKey = normalize_import_header_name($fieldKey);
+        $normalizedLabel = normalize_import_header_name($f['label'] ?? '');
 
-        if (
-            $normalizedHeader !== '' &&
-            ($normalizedHeader === $normalizedLabel || $normalizedHeader === $normalizedFieldKey)
-        ) {
+        if ($normalizedHeader === $normalizedLabel) {
             $headerMap[$index] = $f['id'];
             $fieldTypes[$f['id']] = $f['field_type'];
             break;

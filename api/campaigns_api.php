@@ -661,9 +661,13 @@ try {
             
             $headerMap = [];
             foreach ($headers as $index => $headerName) {
-                $headerName = trim(strtolower($headerName));
+                $normHeader = preg_replace('/[^a-z0-9]/', '', strtolower(trim($headerName)));
+                if ($normHeader === '') continue;
+
                 foreach ($fields as $f) {
-                    if (trim(strtolower($f['label'])) === $headerName || trim(strtolower($f['field_key'])) === $headerName) {
+                    $normLabel = preg_replace('/[^a-z0-9]/', '', strtolower(trim($f['label'] ?? '')));
+
+                    if ($normHeader === $normLabel) {
                         $headerMap[$index] = $f['field_key'];
                         break;
                     }
