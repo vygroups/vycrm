@@ -89,6 +89,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ext = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
         $allowed = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'];
         if (in_array($ext, $allowed)) {
+            // Delete previous logo file if it exists
+            if (!empty($profile['logo_path']) && file_exists(UPLOAD_BASE_DIR . $profile['logo_path'])) {
+                @unlink(UPLOAD_BASE_DIR . $profile['logo_path']);
+            }
             $logicalDest = upload_company_file_path($slug, 'logo', $ext, 'branding');
             $physicalDest = UPLOAD_BASE_DIR . $logicalDest;
             if (move_uploaded_file($_FILES['logo']['tmp_name'], $physicalDest)) {
@@ -111,6 +115,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ext = strtolower(pathinfo($_FILES['signature']['name'], PATHINFO_EXTENSION));
         $allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
         if (in_array($ext, $allowed)) {
+            // Delete previous signature file if it exists
+            if (!empty($profile['signature_path']) && file_exists(UPLOAD_BASE_DIR . $profile['signature_path'])) {
+                @unlink(UPLOAD_BASE_DIR . $profile['signature_path']);
+            }
             $logicalDest = upload_company_file_path($slug, 'signature', $ext, 'branding');
             $physicalDest = UPLOAD_BASE_DIR . $logicalDest;
             if (move_uploaded_file($_FILES['signature']['tmp_name'], $physicalDest)) {

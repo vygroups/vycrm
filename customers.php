@@ -10,6 +10,7 @@ $prefix = $context['prefix'];
 commerce_ensure_tables($conn, $prefix);
 
 $customers = commerce_fetch_customers($conn, $prefix);
+$custFieldsConfig = commerce_get_customer_fields_config($conn, $prefix);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -98,7 +99,7 @@ $customers = commerce_fetch_customers($conn, $prefix);
                                     <th>Customer</th>
                                     <th>Contact</th>
                                     <th>Address</th>
-                                    <th>GST</th>
+                                    <th>GSTIN / PAN</th>
                                     <th>Created</th>
                                     <th>Actions</th>
                                 </tr>
@@ -106,7 +107,7 @@ $customers = commerce_fetch_customers($conn, $prefix);
                             <tbody id="customerTableBody">
                                 <?php if (empty($customers)): ?>
                                     <tr>
-                                        <td colspan="5" class="table-empty">No customers yet. Add your first customer to get started.</td>
+                                        <td colspan="6" class="table-empty">No customers yet. Add your first customer to get started.</td>
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($customers as $customer): ?>
@@ -124,7 +125,12 @@ $customers = commerce_fetch_customers($conn, $prefix);
                                                     <?= htmlspecialchars((string)($customer['billing_address'] ?? '-')) ?>
                                                 </div>
                                             </td>
-                                            <td><?= htmlspecialchars((string)($customer['gst_number'] ?? '-')) ?></td>
+                                            <td>
+                                                <div><?= htmlspecialchars((string)($customer['gst_number'] ?? '-')) ?></div>
+                                                <?php if (!empty($customer['pan_number'])): ?>
+                                                    <div class="text-muted text-sm">PAN: <?= htmlspecialchars((string)$customer['pan_number']) ?></div>
+                                                <?php endif; ?>
+                                            </td>
                                             <td><?= date('Y-m-d', strtotime($customer['created_at'])) ?></td>
                                             <td>
                                                 <div class="row-actions">
@@ -162,6 +168,10 @@ $customers = commerce_fetch_customers($conn, $prefix);
                         <input class="form-control" name="gst_number" id="editCustGst">
                     </div>
                     <div class="form-group">
+                        <label class="form-label">PAN Number</label>
+                        <input class="form-control" name="pan_number" id="editCustPan">
+                    </div>
+                    <div class="form-group">
                         <label class="form-label">Phone</label>
                         <input class="form-control" name="phone" id="editCustPhone">
                     </div>
@@ -170,6 +180,21 @@ $customers = commerce_fetch_customers($conn, $prefix);
                         <input class="form-control" type="email" name="email" id="editCustEmail">
                     </div>
                 </div>
+                <?php if (!empty($custFieldsConfig)): ?>
+                    <div style="margin-top:16px;font-weight:700;font-size:13px;color:var(--text-main);margin-bottom:8px;">Additional Information</div>
+                    <div class="modal-grid">
+                        <?php foreach ($custFieldsConfig as $cf): 
+                            $fieldKey = htmlspecialchars($cf['key']);
+                            $fieldLabel = htmlspecialchars($cf['label']);
+                            $fieldType = $cf['type'] ?? 'text';
+                        ?>
+                        <div class="form-group">
+                            <label class="form-label"><?= $fieldLabel ?></label>
+                            <input class="form-control" name="cf_<?= $fieldKey ?>" id="editCustCf_<?= $fieldKey ?>">
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
                 <div class="form-group" style="margin-top:12px;">
                     <label class="form-label">Billing Address</label>
                     <textarea class="form-control" name="billing_address" id="editCustAddr" rows="3"></textarea>
@@ -218,9 +243,20 @@ $customers = commerce_fetch_customers($conn, $prefix);
                 document.getElementById('editCustName').value = c.name || '';
                 document.getElementById('editCustCode').value = c.customer_code || '';
                 document.getElementById('editCustGst').value = c.gst_number || '';
+                document.getElementById('editCustPan').value = c.pan_number || '';
                 document.getElementById('editCustPhone').value = c.phone || '';
                 document.getElementById('editCustEmail').value = c.email || '';
                 document.getElementById('editCustAddr').value = c.billing_address || '';
+
+                let cfObj = {};
+                if (c.custom_fields) {
+                    try { cfObj = typeof c.custom_fields === 'string' ? JSON.parse(c.custom_fields) : c.custom_fields; } catch(e){}
+                }
+                document.querySelectorAll('[id^="editCustCf_"]').forEach(inp => {
+                    const k = inp.id.replace('editCustCf_', '');
+                    inp.value = cfObj[k] || '';
+                });
+
                 document.getElementById('editCustomerModal').classList.add('is-open');
             } catch (e) { alert('Unable to load customer'); }
         }
@@ -231,8 +267,14 @@ $customers = commerce_fetch_customers($conn, $prefix);
         document.getElementById('editCustomerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const fd = new FormData(e.target);
-            const data = { action: 'update' };
-            fd.forEach((v, k) => data[k] = v);
+            const data = { action: 'update', custom_fields: {} };
+            fd.forEach((v, k) => {
+                if (k.startsWith('cf_')) {
+                    data.custom_fields[k.replace('cf_', '')] = v;
+                } else {
+                    data[k] = v;
+                }
+            });
             const btn = e.target.querySelector('button[type="submit"]');
             btn.disabled = true;
             try {

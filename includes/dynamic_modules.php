@@ -59,6 +59,7 @@ function dm_ensure_tables(PDO $conn, string $p): void
     try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_create TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
     try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_quickcreate TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
     try { @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_quick_create TINYINT(1) DEFAULT 0 AFTER is_list_visible"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_mobile_list_visible TINYINT(1) DEFAULT 0 AFTER is_quick_create"); } catch (Throwable $e) {}
 }
 
 /* ──────────────────────────── HELPER FUNCTIONS ──────────────────────────── */
@@ -197,9 +198,9 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
 {
     // Get list-visible fields
     $fStmt = $conn->prepare("
-        SELECT id, field_key, label, field_type 
+        SELECT id, field_key, label, field_type, is_list_visible, is_mobile_list_visible, sort_order, config 
         FROM {$p}module_fields 
-        WHERE module_id = ? AND is_list_visible = 1 
+        WHERE module_id = ? AND (is_list_visible = 1 OR is_mobile_list_visible = 1) 
         ORDER BY sort_order ASC
     ");
     $fStmt->execute([$moduleId]);

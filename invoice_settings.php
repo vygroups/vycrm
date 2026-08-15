@@ -51,8 +51,30 @@ $ifscCode = htmlspecialchars($biz['ifsc_code'] ?? 'SBIN0007440');
 $terms = htmlspecialchars($biz['terms'] ?? 'Thanks for doing business with us!');
 $sigPath = !empty($biz['signature_path']) ? UPLOAD_BASE_URL . urlencode(ltrim($biz['signature_path'], '/')) : '';
 
+// Fetch dynamic module and universal billing configs
+$custFieldsConfig = commerce_get_customer_fields_config($conn, $prefix);
+$invoiceColumnsConfig = commerce_get_invoice_columns_config($conn, $prefix);
+
 // Handle POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['action_type']) && $_POST['action_type'] === 'save_cust_fields') {
+        $raw = json_decode($_POST['customer_fields_json'] ?? '[]', true);
+        if (is_array($raw)) {
+            commerce_save_customer_fields_config($conn, $prefix, $raw);
+        }
+        header("Location: invoice_settings.php?saved=1");
+        exit;
+    }
+
+    if (isset($_POST['action_type']) && $_POST['action_type'] === 'save_pricing_cols') {
+        $raw = json_decode($_POST['invoice_columns_json'] ?? '[]', true);
+        if (is_array($raw)) {
+            commerce_save_invoice_columns_config($conn, $prefix, $raw);
+        }
+        header("Location: invoice_settings.php?saved=1");
+        exit;
+    }
+
     $data = [
         'printer_type' => $_POST['printer_type'] ?? 'regular',
         'layout_theme' => $_POST['layout_theme'] ?? 'classic',
@@ -935,6 +957,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="settings-nav-item" data-section="fields" onclick="switchSection('fields', this)">
                     <i class="fa-solid fa-sliders"></i> Field Configuration
                 </div>
+                <div class="settings-nav-item" data-section="custfields" onclick="switchSection('custfields', this)">
+                    <i class="fa-solid fa-users-gear"></i> Customer Fields
+                </div>
+                <div class="settings-nav-item" data-section="pricingcols" onclick="switchSection('pricingcols', this)">
+                    <i class="fa-solid fa-calculator"></i> Pricing Columns
+                </div>
                 <div class="settings-nav-item" data-section="table" onclick="switchSection('table', this)">
                     <i class="fa-solid fa-table-columns"></i> Table Columns
                 </div>
@@ -1199,6 +1227,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </label>
                         </div>
                     </div>
+                </div>
+
+                <!-- DYNAMIC CUSTOMER FIELDS BUILDER -->
+                <div class="settings-section" id="section-custfields">
+                    <div class="section-heading">Dynamic Customer Fields Builder</div>
+                    <div class="section-desc">Add custom fields for customer profiles tailored to your industry (e.g. Card No, Roll No, Branch, License No).</div>
+
+                    <form method="POST" id="custFieldsForm" onsubmit="prepareCustFieldsSubmit()">
+                        <input type="hidden" name="action_type" value="save_cust_fields">
+                        <input type="hidden" name="customer_fields_json" id="custFieldsJsonInput">
+
+                        <div class="field-section">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                                <div class="field-section-title" style="margin:0;"><i class="fa-solid fa-users"></i> Registered Customer Fields</div>
+                                <button type="button" class="btn-primary" style="width:auto;padding:8px 14px;font-size:13px;" onclick="addCustFieldRow()">
+                                    <i class="fa-solid fa-plus"></i> Add Customer Field
+                                </button>
+                            </div>
+
+                            <div id="custFieldsList"></div>
+
+                            <div style="margin-top:20px;text-align:right;">
+                                <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Save Customer Fields</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- PRICING & ITEM COLUMNS CONFIGURATOR -->
+                <div class="settings-section" id="section-pricingcols">
+                    <div class="section-heading">Pricing & Line-Item Columns</div>
+                    <div class="section-desc">Customize item table columns and pricing structure (Rate, Charged Amt, Received Amt, Charges, GST %, etc.).</div>
+
+                    <form method="POST" id="pricingColsForm" onsubmit="preparePricingColsSubmit()">
+                        <input type="hidden" name="action_type" value="save_pricing_cols">
+                        <input type="hidden" name="invoice_columns_json" id="pricingColsJsonInput">
+
+                        <div class="field-section">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                                <div class="field-section-title" style="margin:0;"><i class="fa-solid fa-table-list"></i> Table Columns Configuration</div>
+                                <button type="button" class="btn-primary" style="width:auto;padding:8px 14px;font-size:13px;" onclick="addPricingColRow()">
+                                    <i class="fa-solid fa-plus"></i> Add Custom Column
+                                </button>
+                            </div>
+
+                            <div id="pricingColsList"></div>
+
+                            <div style="margin-top:20px;text-align:right;">
+                                <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Save Pricing Columns</button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -1498,6 +1578,155 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Initial preview state
     updatePreview();
+
+    let custFieldsData = <?= json_encode($custFieldsConfig) ?>;
+    let pricingColsData = <?= json_encode($invoiceColumnsConfig) ?>;
+
+    function renderCustFieldsList() {
+        const wrap = document.getElementById('custFieldsList');
+        if (!wrap) return;
+        if (custFieldsData.length === 0) {
+            wrap.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;border:1px dashed var(--border);border-radius:12px;">No dynamic customer fields added yet. Click "Add Customer Field" to add custom fields like Card Number, Branch, Roll No, etc.</div>';
+            return;
+        }
+        let html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+        custFieldsData.forEach((f, index) => {
+            html += `
+            <div style="display:grid;grid-template-columns: 2fr 2fr 1.5fr 1fr 1fr 40px;gap:10px;align-items:center;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;">
+                <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Field Label</label>
+                    <input type="text" class="form-control" style="padding:6px 10px;font-size:13px;" value="${escapeHtml(f.label || '')}" onchange="custFieldsData[${index}].label = this.value; if(!custFieldsData[${index}].key || custFieldsData[${index}].key.startsWith('custom_field_')) custFieldsData[${index}].key = slugify(this.value); renderCustFieldsList();">
+                </div>
+                <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Field Key</label>
+                    <input type="text" class="form-control" style="padding:6px 10px;font-size:13px;" value="${escapeHtml(f.key || '')}" readonly>
+                </div>
+                <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Field Type</label>
+                    <select class="form-control" style="padding:6px 10px;font-size:13px;" onchange="custFieldsData[${index}].type = this.value;">
+                        <option value="text" ${f.type === 'text' ? 'selected' : ''}>Text</option>
+                        <option value="number" ${f.type === 'number' ? 'selected' : ''}>Number</option>
+                        <option value="decimal" ${f.type === 'decimal' ? 'selected' : ''}>Decimal / Currency</option>
+                        <option value="date" ${f.type === 'date' ? 'selected' : ''}>Date</option>
+                        <option value="dropdown" ${f.type === 'dropdown' ? 'selected' : ''}>Dropdown</option>
+                    </select>
+                </div>
+                <div style="text-align:center;">
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Required</label>
+                    <input type="checkbox" ${f.required ? 'checked' : ''} onchange="custFieldsData[${index}].required = this.checked ? 1 : 0;">
+                </div>
+                <div style="text-align:center;">
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Print</label>
+                    <input type="checkbox" ${f.print ? 'checked' : ''} onchange="custFieldsData[${index}].print = this.checked ? 1 : 0;">
+                </div>
+                <div>
+                    <button type="button" onclick="removeCustFieldRow(${index})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;" title="Delete Field"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </div>`;
+        });
+        html += '</div>';
+        wrap.innerHTML = html;
+    }
+
+    function addCustFieldRow() {
+        custFieldsData.push({
+            label: 'Custom Field ' + (custFieldsData.length + 1),
+            key: 'custom_field_' + (custFieldsData.length + 1),
+            type: 'text',
+            required: 0,
+            print: 1
+        });
+        renderCustFieldsList();
+    }
+
+    function removeCustFieldRow(index) {
+        custFieldsData.splice(index, 1);
+        renderCustFieldsList();
+    }
+
+    function prepareCustFieldsSubmit() {
+        document.getElementById('custFieldsJsonInput').value = JSON.stringify(custFieldsData);
+    }
+
+    function renderPricingColsList() {
+        const wrap = document.getElementById('pricingColsList');
+        if (!wrap) return;
+        let html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+        pricingColsData.forEach((c, index) => {
+            html += `
+            <div style="display:grid;grid-template-columns: 2fr 2fr 1.5fr 1fr 1fr 1fr 40px;gap:10px;align-items:center;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;">
+                <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Header Label</label>
+                    <input type="text" class="form-control" style="padding:6px 10px;font-size:13px;" value="${escapeHtml(c.label || '')}" onchange="pricingColsData[${index}].label = this.value;">
+                </div>
+                <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Column Key</label>
+                    <input type="text" class="form-control" style="padding:6px 10px;font-size:13px;" value="${escapeHtml(c.key || '')}" ${c.fixed ? 'readonly' : ''}>
+                </div>
+                <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Data Type</label>
+                    <select class="form-control" style="padding:6px 10px;font-size:13px;" ${c.fixed ? 'disabled' : ''} onchange="pricingColsData[${index}].type = this.value;">
+                        <option value="text" ${c.type === 'text' ? 'selected' : ''}>Text</option>
+                        <option value="number" ${c.type === 'number' ? 'selected' : ''}>Number</option>
+                        <option value="decimal" ${c.type === 'decimal' ? 'selected' : ''}>Decimal / Currency</option>
+                        <option value="date" ${c.type === 'date' ? 'selected' : ''}>Date</option>
+                    </select>
+                </div>
+                <div style="text-align:center;">
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Enable</label>
+                    <input type="checkbox" ${c.enabled ? 'checked' : ''} ${c.fixed ? 'disabled' : ''} onchange="pricingColsData[${index}].enabled = this.checked ? 1 : 0;">
+                </div>
+                <div style="text-align:center;">
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Required</label>
+                    <input type="checkbox" ${c.required ? 'checked' : ''} ${c.fixed ? 'disabled' : ''} onchange="pricingColsData[${index}].required = this.checked ? 1 : 0;">
+                </div>
+                <div style="text-align:center;">
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Print</label>
+                    <input type="checkbox" ${c.print ? 'checked' : ''} onchange="pricingColsData[${index}].print = this.checked ? 1 : 0;">
+                </div>
+                <div>
+                    ${c.fixed ? '' : `<button type="button" onclick="removePricingColRow(${index})" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;" title="Delete Column"><i class="fa-solid fa-trash"></i></button>`}
+                </div>
+            </div>`;
+        });
+        html += '</div>';
+        wrap.innerHTML = html;
+    }
+
+    function addPricingColRow() {
+        const idx = pricingColsData.length + 1;
+        pricingColsData.push({
+            key: 'custom_col_' + idx,
+            label: 'Custom Column ' + idx,
+            type: 'decimal',
+            enabled: 1,
+            required: 0,
+            print: 1,
+            fixed: 0
+        });
+        renderPricingColsList();
+    }
+
+    function removePricingColRow(index) {
+        if (pricingColsData[index].fixed) return;
+        pricingColsData.splice(index, 1);
+        renderPricingColsList();
+    }
+
+    function preparePricingColsSubmit() {
+        document.getElementById('pricingColsJsonInput').value = JSON.stringify(pricingColsData);
+    }
+
+    function escapeHtml(str) {
+        return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function slugify(text) {
+        return String(text || '').toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '_').replace(/^_+|_+$/g, '');
+    }
+
+    renderCustFieldsList();
+    renderPricingColsList();
 </script>
 </body>
 </html>

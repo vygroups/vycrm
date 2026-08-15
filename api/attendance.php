@@ -61,6 +61,10 @@ try {
                     'is_on_break' => $is_on_break,
                     'type' => $record['type'] ?? 'shift',
                     'punch_in' => $record['punch_in'],
+                    'punch_out' => $record['punch_out'],
+                    'total_hours' => $record['total_hours'],
+                    'total_break_hours' => $record['total_break_hours'],
+                    'break_history' => json_decode($record['break_history'] ?: '[]', true),
                     'punch_in_ms' => $punch_in_ms,
                     'break_in_ms' => $break_in_ms,
                     'server_time' => time() * 1000

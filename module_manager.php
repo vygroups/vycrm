@@ -237,14 +237,20 @@ try {
                                                         <div>
                                                             <div class="mm-field-label"><?= htmlspecialchars($field['label']) ?></div>
                                                             <div class="mm-field-meta">
-                                                                <span
-                                                                    class="mm-field-type"><?= htmlspecialchars($fieldTypes[$field['field_type']]['label'] ?? $field['field_type']) ?></span>
-                                                                <?php if ($field['is_required']): ?><span
-                                                                        class="mm-badge mm-badge-red">Required</span><?php endif; ?>
-                                                                <?php if ($field['is_searchable']): ?><span
-                                                                        class="mm-badge">Searchable</span><?php endif; ?>
-                                                                <?php if ($field['is_list_visible']): ?><span
-                                                                        class="mm-badge">List</span><?php endif; ?>
+                                                                <span class="mm-field-type"><?= htmlspecialchars($fieldTypes[$field['field_type']]['label'] ?? $field['field_type']) ?></span>
+                                                                 <?php 
+                                                                    $cfgObj = [];
+                                                                    if (!empty($field['config'])) {
+                                                                        $cfgObj = is_string($field['config']) ? json_decode($field['config'], true) : $field['config'];
+                                                                    }
+                                                                 ?>
+                                                                 <?php if (!empty($field['is_required'])): ?><span class="mm-badge mm-badge-red">Required</span><?php endif; ?>
+                                                                 <?php if (!empty($field['is_unique'])): ?><span class="mm-badge mm-badge-red">Unique</span><?php endif; ?>
+                                                                 <?php if (!empty($field['is_searchable'])): ?><span class="mm-badge">Searchable</span><?php endif; ?>
+                                                                 <?php if (!empty($field['is_list_visible'])): ?><span class="mm-badge">Show in List</span><?php endif; ?>
+                                                                 <?php if (!empty($field['is_mobile_list_visible'])): ?><span class="mm-badge">Show in Mobile List</span><?php endif; ?>
+                                                                 <?php if (!empty($field['is_quick_create'])): ?><span class="mm-badge">Quick Create</span><?php endif; ?>
+                                                                 <?php if (!empty($cfgObj['is_title'])): ?><span class="mm-badge" style="background:rgba(37,99,235,0.12); color:#2563EB; font-weight:700;">Title (Record Name)</span><?php endif; ?>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -918,6 +924,7 @@ try {
                     <label><input type="checkbox" id="fieldUnique"> Unique</label>
                     <label><input type="checkbox" id="fieldSearchable"> Searchable</label>
                     <label><input type="checkbox" id="fieldListVisible" checked> Show in List</label>
+                    <label><input type="checkbox" id="fieldMobileListVisible"> Show in Mobile List</label>
                     <label><input type="checkbox" id="fieldQuickCreate"> Quick Create</label>
                     <label><input type="checkbox" id="fieldIsTitle"> Title (Record Name)</label>
                 </div>
@@ -1484,6 +1491,7 @@ try {
             document.getElementById('fieldUnique').checked = editData ? !!editData.is_unique : false;
             document.getElementById('fieldSearchable').checked = editData ? !!editData.is_searchable : false;
             document.getElementById('fieldListVisible').checked = editData ? !!editData.is_list_visible : true;
+            document.getElementById('fieldMobileListVisible').checked = editData ? (editData.is_mobile_list_visible !== undefined ? (editData.is_mobile_list_visible == 1 || editData.is_mobile_list_visible === true) : false) : false;
             document.getElementById('fieldQuickCreate').checked = editData ? !!editData.is_quick_create : false;
             
             let configObj = {};
@@ -1524,6 +1532,7 @@ try {
                 is_unique: +document.getElementById('fieldUnique').checked,
                 is_searchable: +document.getElementById('fieldSearchable').checked,
                 is_list_visible: +document.getElementById('fieldListVisible').checked,
+                is_mobile_list_visible: +document.getElementById('fieldMobileListVisible').checked,
                 is_quick_create: +document.getElementById('fieldQuickCreate').checked,
             };
             if (!data.label) return alert('Label is required');

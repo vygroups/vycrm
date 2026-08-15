@@ -39,15 +39,17 @@ try {
         $email = trim((string) ($input['email'] ?? ''));
         $billingAddress = trim((string) ($input['billing_address'] ?? ''));
         $gstNumber = trim((string) ($input['gst_number'] ?? ''));
+        $panNumber = trim((string) ($input['pan_number'] ?? ''));
         $customerCode = trim((string) ($input['customer_code'] ?? ''));
+        $customFields = isset($input['custom_fields']) ? (is_array($input['custom_fields']) ? json_encode($input['custom_fields']) : (string)$input['custom_fields']) : null;
 
         if ($name === '') {
             commerce_json_response(['success' => false, 'message' => 'Customer name is required'], 422);
         }
 
         $stmt = $conn->prepare("
-            INSERT INTO {$prefix}customers (customer_code, name, phone, email, billing_address, gst_number, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO {$prefix}customers (customer_code, name, phone, email, billing_address, gst_number, pan_number, custom_fields, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $customerCode !== '' ? $customerCode : null,
@@ -56,6 +58,8 @@ try {
             $email !== '' ? $email : null,
             $billingAddress !== '' ? $billingAddress : null,
             $gstNumber !== '' ? $gstNumber : null,
+            $panNumber !== '' ? $panNumber : null,
+            $customFields,
             $context['user_id']
         ]);
 
@@ -88,7 +92,9 @@ try {
         $email = trim((string) ($input['email'] ?? ''));
         $billingAddress = trim((string) ($input['billing_address'] ?? ''));
         $gstNumber = trim((string) ($input['gst_number'] ?? ''));
+        $panNumber = trim((string) ($input['pan_number'] ?? ''));
         $customerCode = trim((string) ($input['customer_code'] ?? ''));
+        $customFields = isset($input['custom_fields']) ? (is_array($input['custom_fields']) ? json_encode($input['custom_fields']) : (string)$input['custom_fields']) : null;
 
         if ($name === '') {
             commerce_json_response(['success' => false, 'message' => 'Customer name is required'], 422);
@@ -97,7 +103,7 @@ try {
         $stmt = $conn->prepare("
             UPDATE {$prefix}customers SET
                 customer_code = ?, name = ?, phone = ?, email = ?,
-                billing_address = ?, gst_number = ?
+                billing_address = ?, gst_number = ?, pan_number = ?, custom_fields = ?
             WHERE id = ?
         ");
         $stmt->execute([
@@ -107,6 +113,8 @@ try {
             $email !== '' ? $email : null,
             $billingAddress !== '' ? $billingAddress : null,
             $gstNumber !== '' ? $gstNumber : null,
+            $panNumber !== '' ? $panNumber : null,
+            $customFields,
             $id
         ]);
 

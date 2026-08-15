@@ -134,6 +134,8 @@ try {
             $taxTotal += $lineTax;
             $grandTotal += $lineTotal;
 
+            $customData = isset($item['custom_data']) ? (is_array($item['custom_data']) ? json_encode($item['custom_data']) : (string)$item['custom_data']) : null;
+
             $normalizedItems[] = [
                 'product_id' => $productId,
                 'item_name' => $itemName,
@@ -149,6 +151,7 @@ try {
                 'line_subtotal' => $lineSubtotal,
                 'line_tax' => $lineTax,
                 'line_total' => $lineTotal,
+                'custom_data' => $customData,
             ];
         }
 
@@ -162,8 +165,8 @@ try {
             $invoiceStmt = $conn->prepare("
                 INSERT INTO {$prefix}invoices (
                     invoice_number, customer_id, customer_name, customer_phone, customer_email, billing_address,
-                    invoice_date, due_date, subtotal, tax_total, grand_total, notes, status, created_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    invoice_date, due_date, subtotal, tax_total, grand_total, notes, custom_fields, status, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $invoiceStmt->execute([
                 $invoiceNumber,
@@ -178,6 +181,7 @@ try {
                 round($taxTotal, 2),
                 round($grandTotal, 2),
                 $notes !== '' ? $notes : null,
+                $finalCustomFields,
                 in_array($status, ['draft', 'sent', 'paid', 'cancelled'], true) ? $status : 'draft',
                 $context['user_id']
             ]);
@@ -187,8 +191,8 @@ try {
                 INSERT INTO {$prefix}invoice_items (
                     invoice_id, product_id, item_name, description, quantity, unit, hsn_code,
                     batch_no, mfg_date, exp_date, unit_price, tax_percent,
-                    line_subtotal, line_tax, line_total
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    line_subtotal, line_tax, line_total, custom_data
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             foreach ($normalizedItems as $item) {
@@ -209,6 +213,7 @@ try {
                     $item['line_subtotal'],
                     $item['line_tax'],
                     $item['line_total'],
+                    $item['custom_data']
                 ]);
 
                 // Update Stock if product_id exists

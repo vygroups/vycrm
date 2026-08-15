@@ -13,6 +13,8 @@ $activeProducts = array_values(array_filter($products, static fn($product) => $p
 $customers = commerce_fetch_customers($conn, $prefix);
 $productCreated = isset($_GET['product_created']) ? 1 : 0;
 $customerCreated = isset($_GET['customer_created']) ? 1 : 0;
+$invoiceColumnsConfig = commerce_get_invoice_columns_config($conn, $prefix);
+$activeColumns = array_values(array_filter($invoiceColumnsConfig, static fn($col) => !empty($col['enabled'])));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -192,23 +194,23 @@ $customerCreated = isset($_GET['customer_created']) ? 1 : 0;
                     <table class="item-table">
                         <thead>
                             <tr>
-                                <th style="width:30%;">Product</th>
-                                <th style="width:15%;">Qty</th>
-                                <th style="width:18%;">Price</th>
-                                <th style="width:14%;">Tax %</th>
-                                <th style="width:15%;">Total</th>
-                                <th style="width:8%;"></th>
+                                <?php foreach ($activeColumns as $col): ?>
+                                    <th><?= htmlspecialchars($col['label']) ?></th>
+                                <?php endforeach; ?>
+                                <th style="width:12%;">Total</th>
+                                <th style="width:50px;"></th>
                             </tr>
                         </thead>
                         <tbody id="itemRows"></tbody>
                     </table>
 
                     <div class="item-actions">
-                        <div class="flex items-center" style="gap:12px;">
+                        <div class="flex items-center" style="gap:12px;flex-wrap:wrap;">
                             <button class="btn-secondary" type="button" id="addRowBtn"><i class="fa-solid fa-plus"></i> Add Line</button>
-                            <a class="btn-secondary" href="product_create.php?return_to=invoice_create.php"><i class="fa-solid fa-arrow-up-right-from-square"></i> Add New Product</a>
+                            <a class="btn-secondary" href="product_create.php?return_to=invoice_create.php"><i class="fa-solid fa-arrow-up-right-from-square"></i> Add Product</a>
+                            <a class="btn-secondary" href="invoice_settings.php" target="_blank" title="Configure visible columns and pricing"><i class="fa-solid fa-sliders"></i> Configure Columns</a>
                         </div>
-                        <div class="text-muted text-sm">Every line can reference a catalog product.</div>
+                        <div class="text-muted text-sm">Line item fields & pricing columns are 100% dynamic. You can customize visible columns in Settings.</div>
                     </div>
 
                     <div class="form-group" style="margin-top:18px;">
@@ -273,43 +275,70 @@ function money(value) {
     return Number(value || 0).toFixed(2);
 }
 
+const activeColumns = <?= json_encode($activeColumns) ?>;
+
 function createProductOptions() {
-    const baseOption = '<option value="">Select product</option>';
+    const baseOption = '<option value="">Select product / item</option>';
     return baseOption + products.map((product) => `<option value="${product.id}">${escapeHtml(product.name)}</option>`).join('');
 }
 
 function createRow(selectedProductId = '') {
     const tbody = document.getElementById('itemRows');
     const row = document.createElement('tr');
-    row.innerHTML = `
-        <td>
-            <select class="form-control js-product">${createProductOptions()}</select>
-            <input class="form-control js-description" type="text" placeholder="Description" style="margin-top:8px;">
-        </td>
-        <td><input class="form-control js-qty" type="number" min="0.01" step="0.01" value="1"></td>
-        <td><input class="form-control js-price" type="number" min="0" step="0.01" value="0"></td>
-        <td><input class="form-control js-tax" type="number" min="0" step="0.01" value="0"></td>
-        <td><input class="form-control js-total" type="text" value="0.00" readonly></td>
-        <td><button class="btn-icon small-action" type="button"><i class="fa-solid fa-trash"></i></button></td>
-    `;
-    // Hidden fields for batch/mfg/exp
-    const batchInput = document.createElement('input'); batchInput.type = 'hidden'; batchInput.className = 'js-batch'; row.appendChild(batchInput);
-    const mfgInput = document.createElement('input'); mfgInput.type = 'hidden'; mfgInput.className = 'js-mfg'; row.appendChild(mfgInput);
-    const expInput = document.createElement('input'); expInput.type = 'hidden'; expInput.className = 'js-exp'; row.appendChild(expInput);
-    const unitInput = document.createElement('input'); unitInput.type = 'hidden'; unitInput.className = 'js-unit'; unitInput.value = 'PCS'; row.appendChild(unitInput);
-    const hsnInput = document.createElement('input'); hsnInput.type = 'hidden'; hsnInput.className = 'js-hsn'; row.appendChild(hsnInput);
+
+    let tdsHtml = '';
+    activeColumns.forEach(col => {
+        if (col.key === 'item_name') {
+            tdsHtml += `<td>
+                <select class="form-control js-product" style="margin-bottom:4px;">${createProductOptions()}</select>
+                <input class="form-control js-item-name" type="text" placeholder="Or Custom Item Name" style="display:none;margin-bottom:4px;">
+                <input class="form-control js-description" type="text" placeholder="Description (Optional)">
+            </td>`;
+        } else if (col.key === 'quantity') {
+            tdsHtml += `<td><input class="form-control js-qty" type="number" min="0.01" step="0.01" value="1"></td>`;
+        } else if (col.key === 'unit') {
+            tdsHtml += `<td><input class="form-control js-unit" type="text" value="PCS" placeholder="Unit"></td>`;
+        } else if (col.key === 'unit_price') {
+            tdsHtml += `<td><input class="form-control js-price" type="number" min="0" step="0.01" value="0"></td>`;
+        } else if (col.key === 'tax_percent') {
+            tdsHtml += `<td><input class="form-control js-tax" type="number" min="0" step="0.01" value="0"></td>`;
+        } else if (col.key === 'hsn_code') {
+            tdsHtml += `<td><input class="form-control js-hsn" type="text" placeholder="HSN/SAC"></td>`;
+        } else {
+            const inputType = col.type === 'number' || col.type === 'decimal' ? 'number' : (col.type === 'date' ? 'date' : 'text');
+            tdsHtml += `<td><input class="form-control js-col-${col.key}" type="${inputType}" step="any" placeholder="${escapeHtml(col.label)}"></td>`;
+        }
+    });
+
+    tdsHtml += `<td><input class="form-control js-total" type="text" value="0.00" readonly></td>`;
+    tdsHtml += `<td><button class="btn-icon small-action" type="button" title="Delete Row"><i class="fa-solid fa-trash"></i></button></td>`;
+
+    row.innerHTML = tdsHtml;
+
+    // Fallback hidden inputs if standard fields are not enabled as columns
+    ['qty', 'price', 'tax', 'unit', 'hsn', 'batch', 'mfg', 'exp'].forEach(k => {
+        if (!row.querySelector('.js-' + k)) {
+            const inp = document.createElement('input'); inp.type = 'hidden'; inp.className = 'js-' + k;
+            inp.value = (k === 'qty' ? '1' : (k === 'unit' ? 'PCS' : '0'));
+            row.appendChild(inp);
+        }
+    });
 
     const productSelect = row.querySelector('.js-product');
-    productSelect.value = selectedProductId;
-    productSelect.addEventListener('change', () => applyProduct(row));
-    row.querySelector('.js-qty').addEventListener('input', () => recalculateRow(row));
-    row.querySelector('.js-price').addEventListener('input', () => recalculateRow(row));
-    row.querySelector('.js-tax').addEventListener('input', () => recalculateRow(row));
+    if (productSelect) {
+        productSelect.value = selectedProductId;
+        productSelect.addEventListener('change', () => applyProduct(row));
+    }
+
+    row.querySelectorAll('input').forEach(inp => {
+        if (!inp.classList.contains('js-total')) {
+            inp.addEventListener('input', () => recalculateRow(row));
+        }
+    });
+
     row.querySelector('.small-action').addEventListener('click', () => {
         row.remove();
-        if (!tbody.children.length) {
-            createRow();
-        }
+        if (!tbody.children.length) createRow();
         recalculateSummary();
     });
 
@@ -322,36 +351,49 @@ function createRow(selectedProductId = '') {
 }
 
 function applyProduct(row) {
-    const productId = Number(row.querySelector('.js-product').value || 0);
+    const productSelect = row.querySelector('.js-product');
+    if (!productSelect) return;
+    const productId = Number(productSelect.value || 0);
     const product = products.find((entry) => entry.id === productId);
+    
+    const descInp = row.querySelector('.js-description');
+    const priceInp = row.querySelector('.js-price');
+    const taxInp = row.querySelector('.js-tax');
+    const unitInp = row.querySelector('.js-unit');
+    const hsnInp = row.querySelector('.js-hsn');
+
     if (!product) {
-        row.querySelector('.js-description').value = '';
-        row.querySelector('.js-price').value = '0';
-        row.querySelector('.js-tax').value = '0';
-        row.querySelector('.js-unit').value = 'PCS';
-        row.querySelector('.js-hsn').value = '';
-        row.querySelector('.js-mfg').value = '';
-        row.querySelector('.js-exp').value = '';
+        if (descInp) descInp.value = '';
+        if (priceInp) priceInp.value = '0';
+        if (taxInp) taxInp.value = '0';
+        if (unitInp) unitInp.value = 'PCS';
+        if (hsnInp) hsnInp.value = '';
         recalculateRow(row);
         return;
     }
-    row.querySelector('.js-description').value = product.description || '';
-    row.querySelector('.js-price').value = product.unit_price;
-    row.querySelector('.js-tax').value = product.tax_percent;
-    row.querySelector('.js-unit').value = product.unit || 'PCS';
-    row.querySelector('.js-hsn').value = product.hsn_code || '';
-    row.querySelector('.js-mfg').value = product.mfg_date || '';
-    row.querySelector('.js-exp').value = product.exp_date || '';
+    if (descInp) descInp.value = product.description || '';
+    if (priceInp) priceInp.value = product.unit_price;
+    if (taxInp) taxInp.value = product.tax_percent;
+    if (unitInp) unitInp.value = product.unit || 'PCS';
+    if (hsnInp) hsnInp.value = product.hsn_code || '';
     recalculateRow(row);
 }
 
 function recalculateRow(row) {
-    const qty = Number(row.querySelector('.js-qty').value || 0);
-    const price = Number(row.querySelector('.js-price').value || 0);
-    const tax = Number(row.querySelector('.js-tax').value || 0);
-    const subtotal = qty * price;
-    const total = subtotal + ((subtotal * tax) / 100);
-    row.querySelector('.js-total').value = money(total);
+    const qty = Number(row.querySelector('.js-qty')?.value || 1);
+    const price = Number(row.querySelector('.js-price')?.value || 0);
+    const charged = Number(row.querySelector('.js-col-charged_amount')?.value || 0);
+    const received = Number(row.querySelector('.js-col-received_amount')?.value || 0);
+    const charges = Number(row.querySelector('.js-col-charges')?.value || 0);
+    const taxPct = Number(row.querySelector('.js-tax')?.value || 0);
+
+    let rowBase = charged > 0 ? charged : (qty * price);
+    let rowSubtotal = rowBase + charges;
+    let rowTax = (rowSubtotal * taxPct) / 100;
+    let rowTotal = rowSubtotal + rowTax;
+
+    const totalEl = row.querySelector('.js-total');
+    if (totalEl) totalEl.value = money(rowTotal);
     recalculateSummary();
 }
 
@@ -360,12 +402,16 @@ function recalculateSummary() {
     let taxTotal = 0;
 
     document.querySelectorAll('#itemRows tr').forEach((row) => {
-        const qty = Number(row.querySelector('.js-qty').value || 0);
-        const price = Number(row.querySelector('.js-price').value || 0);
-        const tax = Number(row.querySelector('.js-tax').value || 0);
-        const rowSubtotal = qty * price;
+        const qty = Number(row.querySelector('.js-qty')?.value || 1);
+        const price = Number(row.querySelector('.js-price')?.value || 0);
+        const charged = Number(row.querySelector('.js-col-charged_amount')?.value || 0);
+        const charges = Number(row.querySelector('.js-col-charges')?.value || 0);
+        const taxPct = Number(row.querySelector('.js-tax')?.value || 0);
+
+        let rowBase = charged > 0 ? charged : (qty * price);
+        let rowSubtotal = rowBase + charges;
         subtotal += rowSubtotal;
-        taxTotal += (rowSubtotal * tax) / 100;
+        taxTotal += (rowSubtotal * taxPct) / 100;
     });
 
     document.getElementById('subtotalValue').textContent = money(subtotal);
@@ -377,20 +423,35 @@ function buildPayload() {
     const form = document.getElementById('invoiceForm');
     const formData = new FormData(form);
     const items = Array.from(document.querySelectorAll('#itemRows tr')).map((row) => {
-        const productId = row.querySelector('.js-product').value;
+        const productSelect = row.querySelector('.js-product');
+        const productId = productSelect ? productSelect.value : null;
         const product = products.find((entry) => entry.id === Number(productId));
+
+        const customData = {};
+        activeColumns.forEach(col => {
+            const inp = row.querySelector('.js-col-' + col.key);
+            if (inp) {
+                customData[col.key] = inp.value;
+            }
+        });
+
+        const customNameInp = row.querySelector('.js-item-name');
+        let itemName = product ? product.name : (customNameInp ? customNameInp.value : '');
+        if (!itemName) itemName = 'Line Item';
+
         return {
             product_id: productId || null,
-            item_name: product ? product.name : '',
-            description: row.querySelector('.js-description').value,
-            quantity: row.querySelector('.js-qty').value,
-            unit_price: row.querySelector('.js-price').value,
-            tax_percent: row.querySelector('.js-tax').value,
-            unit: row.querySelector('.js-unit') ? row.querySelector('.js-unit').value : 'PCS',
-            hsn_code: row.querySelector('.js-hsn') ? row.querySelector('.js-hsn').value : '',
-            batch_no: row.querySelector('.js-batch') ? row.querySelector('.js-batch').value : '',
-            mfg_date: row.querySelector('.js-mfg') ? row.querySelector('.js-mfg').value : '',
-            exp_date: row.querySelector('.js-exp') ? row.querySelector('.js-exp').value : ''
+            item_name: itemName,
+            description: row.querySelector('.js-description')?.value || '',
+            quantity: row.querySelector('.js-qty')?.value || 1,
+            unit_price: row.querySelector('.js-price')?.value || 0,
+            tax_percent: row.querySelector('.js-tax')?.value || 0,
+            unit: row.querySelector('.js-unit')?.value || 'PCS',
+            hsn_code: row.querySelector('.js-hsn')?.value || '',
+            batch_no: row.querySelector('.js-batch')?.value || '',
+            mfg_date: row.querySelector('.js-mfg')?.value || '',
+            exp_date: row.querySelector('.js-exp')?.value || '',
+            custom_data: customData
         };
     });
 

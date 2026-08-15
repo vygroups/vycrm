@@ -11,6 +11,7 @@ commerce_ensure_tables($conn, $prefix);
 
 $returnTo = trim((string) ($_GET['return_to'] ?? ''));
 $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true) ? $returnTo : '';
+$custFieldsConfig = commerce_get_customer_fields_config($conn, $prefix);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -65,20 +66,74 @@ $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true
                                 <input class="form-control" type="text" name="gst_number" placeholder="Optional">
                             </div>
                         </div>
-                        <div class="inline-grid">
+                        <div class="inline-grid" style="margin-top:14px;">
+                            <div class="form-group">
+                                <label class="form-label">PAN Card Number</label>
+                                <input class="form-control" type="text" name="pan_number" placeholder="Optional (e.g. ABCDE1234F)">
+                            </div>
                             <div class="form-group">
                                 <label class="form-label">Phone Number</label>
                                 <input class="form-control" type="text" name="phone">
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">Email Address</label>
-                                <input class="form-control" type="email" name="email">
-                            </div>
+                        </div>
+                        <div class="form-group" style="margin-top:14px;">
+                            <label class="form-label">Email Address</label>
+                            <input class="form-control" type="email" name="email">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Billing Address</label>
                             <textarea class="form-control" name="billing_address" rows="3" placeholder="Full address for invoicing"></textarea>
                         </div>
+                        <?php if (!empty($custFieldsConfig)): ?>
+                            <div style="margin-top:20px;font-weight:700;font-size:14px;color:var(--text-main);margin-bottom:12px;">Additional Information</div>
+                            <div class="inline-grid">
+                                <?php foreach ($custFieldsConfig as $cf): 
+                                    $fieldKey = htmlspecialchars($cf['key']);
+                                    $fieldLabel = htmlspecialchars($cf['label']);
+                                    $fieldType = $cf['type'] ?? 'text';
+                                    $required = !empty($cf['required']) ? 'required' : '';
+                                ?>
+                                <div class="form-group">
+                                    <label class="form-label"><?= $fieldLabel ?></label>
+                                    <?php if ($fieldType === 'textarea' || $fieldType === 'address'): ?>
+                                        <textarea class="form-control" name="cf_<?= $fieldKey ?>" rows="2" <?= $required ?>></textarea>
+                                    <?php elseif ($fieldType === 'number' || $fieldType === 'currency' || $fieldType === 'decimal'): ?>
+                                        <input class="form-control" type="number" step="any" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                    <?php elseif ($fieldType === 'date'): ?>
+                                        <input class="form-control" type="date" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                    <?php elseif ($fieldType === 'datetime'): ?>
+                                        <input class="form-control" type="datetime-local" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                    <?php elseif ($fieldType === 'time'): ?>
+                                        <input class="form-control" type="time" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                    <?php elseif ($fieldType === 'email'): ?>
+                                        <input class="form-control" type="email" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                    <?php elseif ($fieldType === 'phone'): ?>
+                                        <input class="form-control" type="tel" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                    <?php elseif ($fieldType === 'url'): ?>
+                                        <input class="form-control" type="url" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                    <?php elseif ($fieldType === 'checkbox'): ?>
+                                        <div style="display:flex;align-items:center;gap:8px;padding-top:6px;">
+                                            <input type="checkbox" name="cf_<?= $fieldKey ?>" value="1">
+                                            <span>Enable / Yes</span>
+                                        </div>
+                                    <?php elseif ($fieldType === 'dropdown'): ?>
+                                        <select class="form-control" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                            <option value="">-- Select <?= $fieldLabel ?> --</option>
+                                            <?php 
+                                            $opts = !empty($cf['options']) ? (is_array($cf['options']) ? $cf['options'] : explode(',', $cf['options'])) : ['Option 1', 'Option 2'];
+                                            foreach ($opts as $opt): 
+                                                $opt = trim($opt);
+                                            ?>
+                                                <option value="<?= htmlspecialchars($opt) ?>"><?= htmlspecialchars($opt) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    <?php else: ?>
+                                        <input class="form-control" type="text" name="cf_<?= $fieldKey ?>" <?= $required ?>>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
                         <div class="form-actions" style="margin-top:24px;">
                             <button class="btn-primary" type="submit">Save Customer</button>
                             <a href="customers.php" class="btn-secondary">Cancel</a>
@@ -103,8 +158,14 @@ $safeReturnTo = in_array($returnTo, ['invoices.php', 'invoice_create.php'], true
             status.textContent = 'Saving customer...';
 
             const formData = new FormData(e.target);
-            const data = { action: 'create' };
-            formData.forEach((v, k) => data[k] = v);
+            const data = { action: 'create', custom_fields: {} };
+            formData.forEach((v, k) => {
+                if (k.startsWith('cf_')) {
+                    data.custom_fields[k.replace('cf_', '')] = v;
+                } else {
+                    data[k] = v;
+                }
+            });
 
             try {
                 const res = await fetch('/api/customers.php', {

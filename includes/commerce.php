@@ -22,6 +22,7 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             email VARCHAR(150) DEFAULT NULL,
             billing_address TEXT DEFAULT NULL,
             gst_number VARCHAR(50) DEFAULT NULL,
+            pan_number VARCHAR(50) DEFAULT NULL,
             created_by INT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -30,6 +31,13 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             INDEX idx_customers_email (email)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    try {
+        $conn->exec("ALTER TABLE {$prefix}customers ADD COLUMN pan_number VARCHAR(50) DEFAULT NULL AFTER gst_number");
+    } catch (Throwable $e) {}
+    try {
+        $conn->exec("ALTER TABLE {$prefix}customers ADD COLUMN custom_fields JSON DEFAULT NULL AFTER pan_number");
+    } catch (Throwable $e) {}
 
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}products (
@@ -105,6 +113,7 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
 
     try { $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER grand_total"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN payment_status ENUM('unpaid', 'partially_paid', 'paid') NOT NULL DEFAULT 'unpaid' AFTER status"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoices ADD COLUMN custom_fields JSON DEFAULT NULL AFTER notes"); } catch (Throwable $e) {}
 
     $conn->exec("
         CREATE TABLE IF NOT EXISTS {$prefix}invoice_items (
@@ -133,6 +142,7 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
 
     try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN unit VARCHAR(20) DEFAULT NULL AFTER quantity"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN hsn_code VARCHAR(50) DEFAULT NULL AFTER unit"); } catch (Throwable $e) {}
+    try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN custom_data JSON DEFAULT NULL AFTER line_total"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN batch_no VARCHAR(100) DEFAULT NULL AFTER hsn_code"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN mfg_date DATE DEFAULT NULL AFTER batch_no"); } catch (Throwable $e) {}
     try { $conn->exec("ALTER TABLE {$prefix}invoice_items ADD COLUMN exp_date DATE DEFAULT NULL AFTER mfg_date"); } catch (Throwable $e) {}
@@ -652,7 +662,7 @@ function commerce_fetch_customers(PDO $conn, string $prefix, ?string $search = n
 function commerce_fetch_invoice_detail(PDO $conn, string $prefix, int $invoiceId): ?array
 {
     $stmt = $conn->prepare("
-        SELECT i.*, c.customer_code, c.gst_number
+        SELECT i.*, c.customer_code, c.gst_number, c.pan_number, c.custom_fields AS customer_custom_fields
         FROM {$prefix}invoices i
         LEFT JOIN {$prefix}customers c ON c.id = i.customer_id
         WHERE i.id = ?
@@ -829,3 +839,48 @@ function commerce_fetch_invoices(PDO $conn, string $prefix): array
     ");
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+function commerce_get_customer_fields_config(PDO $conn, string $prefix): array
+{
+    require_once __DIR__ . '/dynamic_modules.php';
+    $json = dm_get_system_setting($conn, $prefix, 'customer_custom_fields', null);
+    if ($json) {
+        $data = json_decode($json, true);
+        if (is_array($data)) return $data;
+    }
+    return [];
+}
+
+function commerce_save_customer_fields_config(PDO $conn, string $prefix, array $fields): bool
+{
+    require_once __DIR__ . '/dynamic_modules.php';
+    return dm_set_system_setting($conn, $prefix, 'customer_custom_fields', json_encode(array_values($fields)));
+}
+
+function commerce_get_invoice_columns_config(PDO $conn, string $prefix): array
+{
+    require_once __DIR__ . '/dynamic_modules.php';
+    $json = dm_get_system_setting($conn, $prefix, 'invoice_columns_config', null);
+    if ($json) {
+        $data = json_decode($json, true);
+        if (is_array($data)) return $data;
+    }
+    return [
+        ['key' => 'item_name', 'label' => 'Item Name', 'type' => 'text', 'enabled' => 1, 'required' => 1, 'print' => 1, 'fixed' => 1],
+        ['key' => 'hsn_code', 'label' => 'HSN/SAC', 'type' => 'text', 'enabled' => 1, 'required' => 0, 'print' => 1, 'fixed' => 0],
+        ['key' => 'quantity', 'label' => 'Qty', 'type' => 'number', 'enabled' => 1, 'required' => 1, 'print' => 1, 'fixed' => 1],
+        ['key' => 'unit', 'label' => 'Unit', 'type' => 'text', 'enabled' => 1, 'required' => 0, 'print' => 1, 'fixed' => 0],
+        ['key' => 'unit_price', 'label' => 'Rate (₹)', 'type' => 'decimal', 'enabled' => 1, 'required' => 1, 'print' => 1, 'fixed' => 0],
+        ['key' => 'charged_amount', 'label' => 'Charged Amt (₹)', 'type' => 'decimal', 'enabled' => 1, 'required' => 0, 'print' => 1, 'fixed' => 0],
+        ['key' => 'received_amount', 'label' => 'Received Amt (₹)', 'type' => 'decimal', 'enabled' => 1, 'required' => 0, 'print' => 1, 'fixed' => 0],
+        ['key' => 'charges', 'label' => 'Charges (₹)', 'type' => 'decimal', 'enabled' => 1, 'required' => 0, 'print' => 1, 'fixed' => 0],
+        ['key' => 'tax_percent', 'label' => 'GST %', 'type' => 'decimal', 'enabled' => 1, 'required' => 0, 'print' => 1, 'fixed' => 0],
+    ];
+}
+
+function commerce_save_invoice_columns_config(PDO $conn, string $prefix, array $columns): bool
+{
+    require_once __DIR__ . '/dynamic_modules.php';
+    return dm_set_system_setting($conn, $prefix, 'invoice_columns_config', json_encode(array_values($columns)));
+}
+

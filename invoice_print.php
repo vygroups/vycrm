@@ -384,6 +384,22 @@ $paidAmount = (float) ($invoice['paid_amount'] ?? 0);
         </div>
     </div>
 
+<?php
+$custFieldsConfig = commerce_get_customer_fields_config($conn, $prefix);
+$custFieldsMap = [];
+if (!empty($custFieldsConfig)) {
+    foreach ($custFieldsConfig as $cf) {
+        if (!empty($cf['print'])) {
+            $custFieldsMap[$cf['key']] = $cf['label'];
+        }
+    }
+}
+$custCustomValues = [];
+$rawCustom = $invoice['customer_custom_fields'] ?? $invoice['custom_fields'] ?? null;
+if (!empty($rawCustom)) {
+    $custCustomValues = is_array($rawCustom) ? $rawCustom : json_decode($rawCustom, true);
+}
+?>
     <div class="inv-parties">
         <div>
             <div class="label">Bill To</div>
@@ -391,6 +407,14 @@ $paidAmount = (float) ($invoice['paid_amount'] ?? 0);
             <div class="sub">
                 <?= htmlspecialchars($invoice['billing_address'] ?? '') ?><br>
                 <?php if (!empty($invoice['gst_number'])): ?>GSTIN: <?= htmlspecialchars($invoice['gst_number']) ?><br><?php endif; ?>
+                <?php if (!empty($invoice['pan_number'])): ?>PAN: <?= htmlspecialchars($invoice['pan_number']) ?><br><?php endif; ?>
+                <?php if (is_array($custCustomValues)): ?>
+                    <?php foreach ($custFieldsMap as $ckey => $clabel): ?>
+                        <?php if (!empty($custCustomValues[$ckey])): ?>
+                            <?= htmlspecialchars($clabel) ?>: <?= htmlspecialchars((string)$custCustomValues[$ckey]) ?><br>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                <?php endif; ?>
                 <?php if (!empty($invoice['customer_phone'])): ?>Contact: <?= htmlspecialchars($invoice['customer_phone']) ?><?php endif; ?>
             </div>
         </div>

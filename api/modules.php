@@ -300,8 +300,8 @@ try {
             $stmt = $conn->prepare("
                 INSERT INTO {$prefix}module_fields 
                 (block_id, module_id, field_key, label, field_type, placeholder, default_value, 
-                 is_required, is_unique, is_searchable, is_list_visible, is_quick_create, sort_order, config) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 is_required, is_unique, is_searchable, is_list_visible, is_mobile_list_visible, is_quick_create, sort_order, config) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $blockId, $moduleId, $fieldKey, $label, $fieldType,
@@ -311,6 +311,7 @@ try {
                 (int)($input['is_unique'] ?? 0),
                 (int)($input['is_searchable'] ?? 0),
                 (int)($input['is_list_visible'] ?? 1),
+                (int)($input['is_mobile_list_visible'] ?? 0),
                 (int)($input['is_quick_create'] ?? 0),
                 $maxSort + 1,
                 $config,
@@ -338,7 +339,7 @@ try {
                     $params[] = $input[$col];
                 }
             }
-            foreach (['is_required', 'is_unique', 'is_searchable', 'is_list_visible', 'is_quick_create', 'sort_order'] as $col) {
+            foreach (['is_required', 'is_unique', 'is_searchable', 'is_list_visible', 'is_mobile_list_visible', 'is_quick_create', 'sort_order'] as $col) {
                 if (isset($input[$col])) {
                     $sets[] = "$col = ?";
                     $params[] = (int)$input[$col];
