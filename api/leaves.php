@@ -105,9 +105,9 @@ try {
                     exit;
                 }
                 $inClause = implode(',', array_map('intval', $allowedUserIds));
-                $stmt = $conn->query("SELECT l.*, u.username FROM {$prefix}leaves l JOIN {$prefix}users u ON l.user_id = u.id WHERE l.user_id IN ($inClause) ORDER BY l.created_at DESC");
+                $stmt = $conn->query("SELECT l.*, u.username, u.first_name, u.last_name FROM {$prefix}leaves l JOIN {$prefix}users u ON l.user_id = u.id WHERE l.user_id IN ($inClause) ORDER BY l.created_at DESC");
             } else {
-                $stmt = $conn->query("SELECT l.*, u.username FROM {$prefix}leaves l JOIN {$prefix}users u ON l.user_id = u.id ORDER BY l.created_at DESC");
+                $stmt = $conn->query("SELECT l.*, u.username, u.first_name, u.last_name FROM {$prefix}leaves l JOIN {$prefix}users u ON l.user_id = u.id ORDER BY l.created_at DESC");
             }
             $leaves = $stmt->fetchAll(PDO::FETCH_ASSOC);
             echo json_encode(['success' => true, 'data' => $leaves]);
@@ -120,7 +120,7 @@ try {
                 }
             }
 
-            $stmt = $conn->prepare("SELECT l.*, u.username FROM {$prefix}leaves l JOIN {$prefix}users u ON l.user_id = u.id WHERE l.user_id = ? ORDER BY l.created_at DESC");
+            $stmt = $conn->prepare("SELECT l.*, u.username, u.first_name, u.last_name FROM {$prefix}leaves l JOIN {$prefix}users u ON l.user_id = u.id WHERE l.user_id = ? ORDER BY l.created_at DESC");
             $stmt->execute([$targetUser]);
             $leaves = $stmt->fetchAll(PDO::FETCH_ASSOC);
             echo json_encode(['success' => true, 'data' => $leaves]);

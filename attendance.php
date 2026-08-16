@@ -3,6 +3,33 @@
 require_once 'auth_check.php';
 require_once 'config/database.php';
 require_once 'includes/brand.php';
+require_once 'includes/dynamic_modules.php';
+
+$dbName = $_SESSION['tenant_db'];
+$prefix = $_SESSION['tenant_prefix'];
+$conn = Database::getTenantConn($dbName);
+
+$rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+$isAdmin = !empty($_SESSION['is_admin']);
+$currentUserId = (int) $_SESSION['user_id'];
+$allowedUserIds = dm_get_visible_user_ids($conn, $prefix, $currentUserId, isset($_SESSION['role_id']) ? (int) $_SESSION['role_id'] : null, $rule, $isAdmin);
+
+$showMemberFilter = ($rule !== 'owner' && ($allowedUserIds === null || count($allowedUserIds) > 0));
+$initialSelectedUserId = (string) $currentUserId;
+
+$users = [];
+if ($showMemberFilter) {
+    try {
+        if ($allowedUserIds !== null) {
+            $inClause = implode(',', array_map('intval', $allowedUserIds));
+            $userStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) ORDER BY u.username ASC");
+        } else {
+            $userStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+        }
+        $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -371,51 +398,27 @@ require_once 'includes/brand.php';
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">TO:</span>
                                 <input type="date" id="filterEndDate" class="form-control" value="<?= date('Y-m-d') ?>" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
-                            </div>
-
-                            <?php
-                            require_once 'includes/dynamic_modules.php';
-                            $dbName = $_SESSION['tenant_db'];
-                            $prefix = $_SESSION['tenant_prefix'];
-                            $conn = Database::getTenantConn($dbName);
-
-                            $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
-                            $isAdmin = !empty($_SESSION['is_admin']);
-                            $currentUserId = (int) $_SESSION['user_id'];
-                            $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, $currentUserId, isset($_SESSION['role_id']) ? (int) $_SESSION['role_id'] : null, $rule, $isAdmin);
-
-                            $showMemberFilter = ($rule !== 'owner' && ($allowedUserIds === null || count($allowedUserIds) > 0));
-                            $initialSelectedUserId = $showMemberFilter ? 'all' : (string) $currentUserId;
-                            if ($showMemberFilter):
-                                $users = [];
-                                try {
-                                    if ($allowedUserIds !== null) {
-                                        $inClause = implode(',', array_map('intval', $allowedUserIds));
-                                        $userStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) ORDER BY u.username ASC");
-                                    } else {
-                                        $userStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
-                                    }
-                                    $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
-                                } catch (Exception $e) {
-                                }
-                                ?>
+                                
+                                <?php if ($showMemberFilter): ?>
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <span
                                         style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">MEMBER:</span>
-                                <select class="form-control" id="memberFilter" autocomplete="off" onchange="filterMember(this.value)"
+                                    <select class="form-control" id="memberFilter" autocomplete="off" onchange="filterMember(this.value)"
                                         style="width:180px; padding:4px 10px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; cursor:pointer; height:32px; box-sizing:border-box;">
-                                        <option value="all" selected>All Team Members</option>
+                                        <option value="all">All Team Members</option>
                                         <?php foreach ($users as $u): 
                                             $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
                                             $disp = $fullName !== '' ? $fullName : $u['username'];
                                             if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                                            $selected = ((int)$u['id'] === $currentUserId) ? 'selected' : '';
                                         ?>
-                                            <option value="<?= $u['id'] ?>">
+                                            <option value="<?= $u['id'] ?>" <?= $selected ?>>
                                                 <?= htmlspecialchars($disp) ?></option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
-                            <?php endif; ?>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
 
@@ -620,7 +623,7 @@ require_once 'includes/brand.php';
     <script>
         const PUNCH_KEY = 'vycrm_punch_start';
         const BREAK_KEY = 'vycrm_break_start';
-        let selectedUserId = <?= json_encode($initialSelectedUserId ?? (string) ($_SESSION['user_id'] ?? 'all')) ?>;
+        let selectedUserId = <?= is_numeric($initialSelectedUserId) ? (int)$initialSelectedUserId : json_encode($initialSelectedUserId) ?>;
 
         function escapeHtml(str) {
             if (!str) return '';
@@ -925,10 +928,9 @@ require_once 'includes/brand.php';
                 };
             }
 
-            const memberFilter = document.getElementById('memberFilter');
-            if (memberFilter && memberFilter.querySelector('option[value="all"]')) {
-                memberFilter.value = 'all';
-                selectedUserId = 'all';
+            const mf = document.getElementById('memberFilter');
+            if (mf && mf.value) {
+                selectedUserId = mf.value === 'all' ? 'all' : parseInt(mf.value, 10);
             }
 
             setInterval(tickTimer, 1000);
