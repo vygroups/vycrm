@@ -847,12 +847,32 @@ function dm_get_visible_user_ids(PDO $conn, string $p, int $userId, ?int $roleId
         return $allowedUserIds;
     }
 
+    $collectRelatedRoles = function (int $startRoleId, string $column, string $matchColumn) use ($conn, $p): array {
+        $seen = [];
+        $queue = [$startRoleId];
+
+        while (!empty($queue)) {
+            $currentRoleId = array_shift($queue);
+            $stmt = $conn->prepare("SELECT {$column} FROM {$p}role_hierarchy WHERE {$matchColumn} = ?");
+            $stmt->execute([$currentRoleId]);
+            $relatedRoleIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+            foreach ($relatedRoleIds as $relatedRoleId) {
+                if ($relatedRoleId <= 0 || isset($seen[$relatedRoleId])) {
+                    continue;
+                }
+                $seen[$relatedRoleId] = true;
+                $queue[] = $relatedRoleId;
+            }
+        }
+
+        return array_keys($seen);
+    };
+
     if ($rule === 'role_down' || $rule === 'role_equal_down') {
         $childRoles = [];
         if ($roleId) {
-            $crStmt = $conn->prepare("SELECT child_role_id FROM {$p}role_hierarchy WHERE parent_role_id = ?");
-            $crStmt->execute([$roleId]);
-            $childRoles = $crStmt->fetchAll(PDO::FETCH_COLUMN);
+            $childRoles = $collectRelatedRoles((int) $roleId, 'child_role_id', 'parent_role_id');
         }
 
         $roleFilter = [];
@@ -873,9 +893,7 @@ function dm_get_visible_user_ids(PDO $conn, string $p, int $userId, ?int $roleId
     } elseif ($rule === 'role_up') {
         $parentRoles = [];
         if ($roleId) {
-            $prStmt = $conn->prepare("SELECT parent_role_id FROM {$p}role_hierarchy WHERE child_role_id = ?");
-            $prStmt->execute([$roleId]);
-            $parentRoles = $prStmt->fetchAll(PDO::FETCH_COLUMN);
+            $parentRoles = $collectRelatedRoles((int) $roleId, 'parent_role_id', 'child_role_id');
         }
 
         if (!empty($parentRoles)) {
@@ -888,6 +906,7 @@ function dm_get_visible_user_ids(PDO $conn, string $p, int $userId, ?int $roleId
         }
     }
 
+    return array_values(array_unique(array_map('intval', $allowedUserIds)));
 }
 
 /**

@@ -55,6 +55,26 @@ try {
                     }
                 }
 
+                // Check user visibility scope for Team View picker
+                $userQuery = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
+                $userQuery->execute([$user_id]);
+                $userData = $userQuery->fetch(PDO::FETCH_ASSOC);
+                $my_role_id = $userData ? $userData['role_id'] : null;
+                $isAdmin = $userData ? (int)$userData['is_admin'] : 0;
+                
+                $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+                $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, $rule, (bool)$isAdmin);
+                
+                $visibleUsers = [];
+                if ($isAdmin || $rule === 'all') {
+                    $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+                    $visibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+                } else if ($allowedUserIds !== null && !empty($allowedUserIds)) {
+                    $inClause = implode(',', array_map('intval', $allowedUserIds));
+                    $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) ORDER BY u.username ASC");
+                    $visibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+                }
+
                 echo json_encode([
                     'success' => true,
                     'is_punched_in' => $is_punched_in,
@@ -67,10 +87,37 @@ try {
                     'break_history' => json_decode($record['break_history'] ?: '[]', true),
                     'punch_in_ms' => $punch_in_ms,
                     'break_in_ms' => $break_in_ms,
+                    'visible_users' => $visibleUsers,
+                    'can_view_team' => count($visibleUsers) > 1,
                     'server_time' => time() * 1000
                 ]);
             } else {
-                echo json_encode(['success' => true, 'is_punched_in' => false, 'is_on_break' => false]);
+                $userQuery = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
+                $userQuery->execute([$user_id]);
+                $userData = $userQuery->fetch(PDO::FETCH_ASSOC);
+                $my_role_id = $userData ? $userData['role_id'] : null;
+                $isAdmin = $userData ? (int)$userData['is_admin'] : 0;
+                
+                $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+                $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, $rule, (bool)$isAdmin);
+                
+                $visibleUsers = [];
+                if ($isAdmin || $rule === 'all') {
+                    $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+                    $visibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+                } else if ($allowedUserIds !== null && !empty($allowedUserIds)) {
+                    $inClause = implode(',', array_map('intval', $allowedUserIds));
+                    $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) ORDER BY u.username ASC");
+                    $visibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+                }
+
+                echo json_encode([
+                    'success' => true, 
+                    'is_punched_in' => false, 
+                    'is_on_break' => false,
+                    'visible_users' => $visibleUsers,
+                    'can_view_team' => count($visibleUsers) > 1
+                ]);
             }
             break;
 
@@ -79,7 +126,7 @@ try {
             $stmt = $conn->prepare("SELECT id FROM {$prefix}attendance WHERE user_id = ? AND date = ? LIMIT 1");
             $stmt->execute([$user_id, $today]);
             if ($stmt->fetch()) {
-                echo json_encode(['success' => false, 'message' => 'You have already punched in for today. Each day only one punch is allowed.']);
+                echo json_encode(['success' => false, 'message' => 'You have already punched in for today. Each day only 1 punch in is allowed.']);
                 exit;
             }
 
@@ -132,6 +179,8 @@ try {
 
         case 'history':
             $targetUser = isset($_GET['user_id']) ? $_GET['user_id'] : $user_id;
+            $startDate = $_GET['start_date'] ?? null;
+            $endDate = $_GET['end_date'] ?? null;
 
             // Fetch logged-in user details from db
             $userQuery = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
@@ -139,18 +188,16 @@ try {
             $userData = $userQuery->fetch(PDO::FETCH_ASSOC);
             $my_role_id = $userData ? $userData['role_id'] : null;
             $isAdmin = $userData ? (int)$userData['is_admin'] : 0;
-            
-            if (!$isAdmin && $my_role_id) {
-                $stmt = $conn->prepare("SELECT name FROM {$prefix}roles WHERE id = ?");
-                $stmt->execute([$my_role_id]);
-                $role_name = strtolower($stmt->fetchColumn() ?: '');
-                if (strpos($role_name, 'admin') !== false || strpos($role_name, 'manager') !== false) {
-                    $isAdmin = true;
-                }
-            }
 
             $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
             $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, $rule, $isAdmin);
+
+            $dateClause = "";
+            $dateParams = [];
+            if (!empty($startDate) && !empty($endDate)) {
+                $dateClause = " AND a.date BETWEEN ? AND ?";
+                $dateParams = [$startDate, $endDate];
+            }
 
             if ($targetUser === 'all') {
                 if ($allowedUserIds !== null) {
@@ -159,9 +206,11 @@ try {
                         exit;
                     }
                     $inClause = implode(',', array_map('intval', $allowedUserIds));
-                    $stmt = $conn->query("SELECT a.*, u.username FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id WHERE a.user_id IN ($inClause) ORDER BY a.date DESC LIMIT 100");
+                    $stmt = $conn->prepare("SELECT a.*, u.username, u.first_name, u.last_name FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id WHERE a.user_id IN ($inClause) {$dateClause} ORDER BY a.date DESC LIMIT 100");
+                    $stmt->execute($dateParams);
                 } else {
-                    $stmt = $conn->query("SELECT a.*, u.username FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id ORDER BY a.date DESC LIMIT 100");
+                    $stmt = $conn->prepare("SELECT a.*, u.username, u.first_name, u.last_name FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id WHERE 1=1 {$dateClause} ORDER BY a.date DESC LIMIT 100");
+                    $stmt->execute($dateParams);
                 }
                 echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             } else {
@@ -173,8 +222,9 @@ try {
                     }
                 }
                 
-                $stmt = $conn->prepare("SELECT a.*, u.username FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id WHERE a.user_id = ? ORDER BY a.date DESC LIMIT 30");
-                $stmt->execute([$targetUser]);
+                $params = array_merge([$targetUser], $dateParams);
+                $stmt = $conn->prepare("SELECT a.*, u.username, u.first_name, u.last_name FROM {$prefix}attendance a JOIN {$prefix}users u ON a.user_id = u.id WHERE a.user_id = ? {$dateClause} ORDER BY a.date DESC LIMIT 100");
+                $stmt->execute($params);
                 echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
             }
             break;
@@ -213,7 +263,7 @@ try {
             $stmt = $conn->prepare("
                 SELECT a.*, u.username 
                 FROM {$prefix}attendance a
-                JOIN users u ON u.id = a.user_id
+                JOIN {$prefix}users u ON u.id = a.user_id
                 WHERE " . implode(' AND ', $whereClauses) . "
                 ORDER BY a.date DESC, a.punch_in ASC
             ");

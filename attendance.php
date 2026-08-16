@@ -15,6 +15,94 @@ require_once 'includes/brand.php';
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
+    <script>
+        async function apiPunch(action) {
+            const res = await fetch('/api/attendance.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `action=${action}`
+            });
+            const data = await res.json();
+            if (data.success) {
+                vyToast(data.message);
+                if (typeof fetchStatus === 'function') fetchStatus();
+                if (typeof loadAttendanceHistory === 'function') loadAttendanceHistory();
+            } else {
+                vyToast(data.message, 'error');
+            }
+        }
+
+        function vyToast(msg, type = 'success') {
+            const colors = { success: '#10b981', warning: '#f59e0b', info: '#7b5ef0', error: '#ef4444' };
+            const icons = { success: '✅', warning: '☕', info: '💼', error: '👋' };
+            const c = document.getElementById('vyToastContainer');
+            if (!c) return;
+            const t = document.createElement('div');
+            t.className = 'vy-toast';
+            t.style.borderLeft = '4px solid ' + (colors[type] || colors.success);
+            t.innerHTML = `<span style="font-size:18px;">${icons[type] || '✅'}</span><span>${msg}</span>`;
+            c.appendChild(t);
+            requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
+            setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
+        }
+
+        function openModal(id) {
+            const m = document.getElementById(id);
+            if (m) m.style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            const m = document.getElementById(id);
+            if (m) m.style.display = 'none';
+        }
+
+        function switchTab(evt, id) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            const targetContent = document.getElementById(id);
+            if (targetContent) targetContent.classList.add('active');
+            if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
+            if (id === 'leaves' && typeof loadLeaves === 'function') loadLeaves();
+            if (id === 'permissions' && typeof loadPermissions === 'function') loadPermissions();
+            if (id === 'history' && typeof loadAttendanceHistory === 'function') loadAttendanceHistory();
+        }
+
+        function toggleSidebar() {
+            const s = document.getElementById('sidebar');
+            const i = document.getElementById('toggleIcon');
+            if (!s) return;
+            s.classList.toggle('sidebar-collapsed');
+            if (i) {
+                i.classList.toggle('fa-chevron-left', !s.classList.contains('sidebar-collapsed'));
+                i.classList.toggle('fa-chevron-right', s.classList.contains('sidebar-collapsed'));
+            }
+        }
+
+        function toggleMobileSidebar() {
+            const s = document.getElementById('sidebar');
+            const o = document.getElementById('sidebarOverlay');
+            if (!s) return;
+            s.classList.toggle('mobile-open');
+            if (o) {
+                const isOpen = s.classList.contains('mobile-open');
+                o.style.display = isOpen ? 'block' : 'none';
+                o.style.pointerEvents = isOpen ? 'auto' : 'none';
+            }
+        }
+
+        function toggleProfileDropdown(e) {
+            if (e) e.stopPropagation();
+            const p = document.getElementById('profileDropdown');
+            if (p) p.classList.toggle('show');
+        }
+
+        window.onclick = function (event) {
+            if (!event.target.closest('.profile-pill')) {
+                const dropdowns = document.getElementsByClassName("profile-dropdown");
+                for (let i = 0; i < dropdowns.length; i++) { dropdowns[i].classList.remove('show'); }
+            }
+        };
+    </script>
     <style>
         .action-grid {
             display: grid;
@@ -37,7 +125,10 @@ require_once 'includes/brand.php';
             align-items: center;
             justify-content: center;
             gap: 15px;
-            mai user-select: none;
+            user-select: none;
+            font-family: inherit;
+            width: 100%;
+            outline: none;
         }
 
         .action-btn:hover {
@@ -163,9 +254,11 @@ require_once 'includes/brand.php';
             display: flex;
             flex-direction: column;
             gap: 10px;
+            pointer-events: none;
         }
 
         .vy-toast {
+            pointer-events: auto;
             background: #fff;
             border-radius: 10px;
             padding: 14px 20px;
@@ -187,6 +280,16 @@ require_once 'includes/brand.php';
             opacity: 1;
             transform: translateX(0);
         }
+
+        .attendance-topbar {
+            z-index: 200;
+        }
+
+        .attendance-topbar .topbar-right,
+        .attendance-topbar .profile-pill {
+            position: relative;
+            z-index: 201;
+        }
     </style>
 </head>
 
@@ -202,7 +305,7 @@ require_once 'includes/brand.php';
         <?php include 'includes/sidebar.php'; ?>
 
         <main class="main-content">
-            <header class="topbar" style="position:relative;">
+            <header class="topbar attendance-topbar" style="position:relative;">
                 <div class="flex items-center">
                     <button class="btn-icon" onclick="toggleMobileSidebar()" style="margin-right:20px;display:none;"
                         id="mobileToggle"><i class="fa-solid fa-bars"></i></button>
@@ -237,18 +340,18 @@ require_once 'includes/brand.php';
 
             <div class="content-scroll">
                 <div class="action-grid">
-                    <div class="action-btn btn-checkin" id="btnCheckIn" onclick="apiPunch('punch_in')">
+                    <button type="button" class="action-btn btn-checkin" id="btnCheckIn" onclick="apiPunch('punch_in')">
                         <i class="fa-solid fa-right-to-bracket"></i><span>PUNCH IN</span>
-                    </div>
-                    <div class="action-btn btn-breakin" id="btnBreakIn" onclick="apiPunch('break_in')">
+                    </button>
+                    <button type="button" class="action-btn btn-breakin" id="btnBreakIn" onclick="apiPunch('break_in')">
                         <i class="fa-solid fa-mug-hot"></i><span>START BREAK</span>
-                    </div>
-                    <div class="action-btn btn-breakout" id="btnBreakOut" onclick="apiPunch('break_out')">
+                    </button>
+                    <button type="button" class="action-btn btn-breakout" id="btnBreakOut" onclick="apiPunch('break_out')">
                         <i class="fa-solid fa-briefcase"></i><span>END BREAK</span>
-                    </div>
-                    <div class="action-btn btn-checkout" id="btnCheckOut" onclick="apiPunch('punch_out')">
+                    </button>
+                    <button type="button" class="action-btn btn-checkout" id="btnCheckOut" onclick="apiPunch('punch_out')">
                         <i class="fa-solid fa-right-from-bracket"></i><span>PUNCH OUT</span>
-                    </div>
+                    </button>
                 </div>
 
                 <div class="table-panel" style="padding:20px;">
@@ -260,44 +363,60 @@ require_once 'includes/brand.php';
                             <button class="tab-btn" onclick="switchTab(event,'leaves')">LEAVE REQUESTS</button>
                             <button class="tab-btn" onclick="switchTab(event,'permissions')">PERMISSIONS</button>
                         </div>
-                        <?php
-                        require_once 'includes/dynamic_modules.php';
-                        $dbName = $_SESSION['tenant_db'];
-                        $prefix = $_SESSION['tenant_prefix'];
-                        $conn = Database::getTenantConn($dbName);
-
-                        $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
-                        $isAdmin = !empty($_SESSION['is_admin']);
-                        $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int) $_SESSION['user_id'], isset($_SESSION['role_id']) ? (int) $_SESSION['role_id'] : null, $rule, $isAdmin);
-
-                        $showMemberFilter = ($allowedUserIds === null || count($allowedUserIds) > 1);
-                        if ($showMemberFilter):
-                            $users = [];
-                            try {
-                                if ($allowedUserIds !== null) {
-                                    $inClause = implode(',', array_map('intval', $allowedUserIds));
-                                    $userStmt = $conn->query("SELECT id, username FROM {$prefix}users WHERE id IN ($inClause) ORDER BY username ASC");
-                                } else {
-                                    $userStmt = $conn->query("SELECT id, username FROM {$prefix}users ORDER BY username ASC");
-                                }
-                                $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
-                            } catch (Exception $e) {
-                            }
-                            ?>
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <span
-                                    style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">VIEWING
-                                    TEAM MEMBER:</span>
-                                <select class="form-control" id="memberFilter" onchange="filterMember(this.value)"
-                                    style="width:180px; padding:4px 10px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; cursor:pointer; height:32px; box-sizing:border-box;">
-                                    <option value="all">All Team Members</option>
-                                    <?php foreach ($users as $u): ?>
-                                        <option value="<?= $u['id'] ?>" <?= $u['id'] == $_SESSION['user_id'] ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars($u['username']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:12px;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">FROM:</span>
+                                <input type="date" id="filterStartDate" class="form-control" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
                             </div>
-                        <?php endif; ?>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">TO:</span>
+                                <input type="date" id="filterEndDate" class="form-control" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
+                            </div>
+
+                            <?php
+                            require_once 'includes/dynamic_modules.php';
+                            $dbName = $_SESSION['tenant_db'];
+                            $prefix = $_SESSION['tenant_prefix'];
+                            $conn = Database::getTenantConn($dbName);
+
+                            $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+                            $isAdmin = !empty($_SESSION['is_admin']);
+                            $currentUserId = (int) $_SESSION['user_id'];
+                            $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, $currentUserId, isset($_SESSION['role_id']) ? (int) $_SESSION['role_id'] : null, $rule, $isAdmin);
+
+                            $showMemberFilter = ($rule !== 'owner' && ($allowedUserIds === null || count($allowedUserIds) > 0));
+                            $initialSelectedUserId = $showMemberFilter ? 'all' : (string) $currentUserId;
+                            if ($showMemberFilter):
+                                $users = [];
+                                try {
+                                    if ($allowedUserIds !== null) {
+                                        $inClause = implode(',', array_map('intval', $allowedUserIds));
+                                        $userStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) ORDER BY u.username ASC");
+                                    } else {
+                                        $userStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+                                    }
+                                    $users = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+                                } catch (Exception $e) {
+                                }
+                                ?>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span
+                                        style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">MEMBER:</span>
+                                    <select class="form-control" id="memberFilter" onchange="filterMember(this.value)"
+                                        style="width:180px; padding:4px 10px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; cursor:pointer; height:32px; box-sizing:border-box;">
+                                        <option value="all" selected>All Team Members</option>
+                                        <?php foreach ($users as $u): 
+                                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                                            $disp = $fullName !== '' ? $fullName : $u['username'];
+                                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                                        ?>
+                                            <option value="<?= $u['id'] ?>">
+                                                <?= htmlspecialchars($disp) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            <?php endif; ?>
+                        </div>
                     </div>
 
                     <div id="history" class="tab-content active table-responsive">
@@ -499,22 +618,9 @@ require_once 'includes/brand.php';
     </div>
 
     <script>
-        function vyToast(msg, type = 'success') {
-            const colors = { success: '#10b981', warning: '#f59e0b', info: '#7b5ef0', error: '#ef4444' };
-            const icons = { success: '✅', warning: '☕', info: '💼', error: '👋' };
-            const c = document.getElementById('vyToastContainer');
-            const t = document.createElement('div');
-            t.className = 'vy-toast';
-            t.style.borderLeft = '4px solid ' + (colors[type] || colors.success);
-            t.innerHTML = `<span style="font-size:18px;">${icons[type] || '✅'}</span><span>${msg}</span>`;
-            c.appendChild(t);
-            requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
-            setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
-        }
-
         const PUNCH_KEY = 'vycrm_punch_start';
         const BREAK_KEY = 'vycrm_break_start';
-        let selectedUserId = <?= (int) $_SESSION['user_id'] ?>;
+        let selectedUserId = <?= json_encode($initialSelectedUserId ?? (string) ($_SESSION['user_id'] ?? 'all')) ?>;
 
         function escapeHtml(str) {
             if (!str) return '';
@@ -524,6 +630,22 @@ require_once 'includes/brand.php';
                 .replace(/>/g, "&gt;")
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#039;");
+        }
+
+        function formatVyDate(dStr) {
+            if (!dStr) return '-';
+            try {
+                const d = new Date(dStr);
+                return isNaN(d.getTime()) ? dStr : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            } catch (_) { return dStr; }
+        }
+
+        function formatVyTime(tStr) {
+            if (!tStr) return '-';
+            try {
+                const d = new Date(tStr.includes(' ') ? tStr.replace(' ', 'T') : ('1970-01-01T' + tStr));
+                return isNaN(d.getTime()) ? tStr : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            } catch (_) { return tStr; }
         }
 
         function filterMember(uid) {
@@ -576,17 +698,13 @@ require_once 'includes/brand.php';
                 const btnOut = document.getElementById('btnCheckOut');
                 const btnBIn = document.getElementById('btnBreakIn');
                 const btnBOut = document.getElementById('btnBreakOut');
+                if (!btnIn || !btnOut || !btnBIn || !btnBOut) return;
 
                 if (data.is_punched_in) {
                     if (!data.is_on_break) {
-                        btnIn.style.opacity = '0.5'; btnIn.style.pointerEvents = 'none';
-                        btnOut.style.opacity = '1'; btnOut.style.pointerEvents = 'auto';
-                        btnBIn.style.opacity = '1'; btnBIn.style.pointerEvents = 'auto';
-                        btnBOut.style.opacity = '0.5'; btnBOut.style.pointerEvents = 'none';
                         localStorage.removeItem(BREAK_KEY);
                         if (!localStorage.getItem(PUNCH_KEY)) {
                             // Sync with server time by calculating elapsed duration
-                            // This solves the 5.5h offset issue once and for all
                             if (data.punch_in_ms && data.server_time) {
                                 const elapsed = data.server_time - data.punch_in_ms;
                                 localStorage.setItem(PUNCH_KEY, (Date.now() - elapsed).toString());
@@ -595,10 +713,6 @@ require_once 'includes/brand.php';
                             }
                         }
                     } else { // On Break
-                        btnIn.style.opacity = '0.5'; btnIn.style.pointerEvents = 'none';
-                        btnOut.style.opacity = '0.5'; btnOut.style.pointerEvents = 'none';
-                        btnBIn.style.opacity = '0.5'; btnBIn.style.pointerEvents = 'none';
-                        btnBOut.style.opacity = '1'; btnBOut.style.pointerEvents = 'auto';
                         localStorage.removeItem(PUNCH_KEY);
                         if (!localStorage.getItem(BREAK_KEY)) {
                             if (data.break_in_ms && data.server_time) {
@@ -608,10 +722,6 @@ require_once 'includes/brand.php';
                         }
                     }
                 } else {
-                    btnIn.style.opacity = '1'; btnIn.style.pointerEvents = 'auto';
-                    btnOut.style.opacity = '0.5'; btnOut.style.pointerEvents = 'none';
-                    btnBIn.style.opacity = '0.5'; btnBIn.style.pointerEvents = 'none';
-                    btnBOut.style.opacity = '0.5'; btnBOut.style.pointerEvents = 'none';
                     localStorage.removeItem(PUNCH_KEY);
                     localStorage.removeItem(BREAK_KEY);
                 }
@@ -619,24 +729,26 @@ require_once 'includes/brand.php';
             }
         }
 
-        async function apiPunch(action) {
-            const res = await fetch('/api/attendance.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `action=${action}`
-            });
-            const data = await res.json();
-            if (data.success) {
-                vyToast(data.message);
-                fetchStatus();
-                loadAttendanceHistory();
+        function applyFilters() {
+            const activeTabBtn = document.querySelector('.tab-btn.active');
+            if (activeTabBtn) {
+                const onclickText = activeTabBtn.getAttribute('onclick') || '';
+                if (onclickText.includes('history')) loadAttendanceHistory();
+                else if (onclickText.includes('leaves')) loadLeaves();
+                else if (onclickText.includes('permissions')) loadPermissions();
             } else {
-                vyToast(data.message, 'error');
+                loadAttendanceHistory();
             }
         }
 
         async function loadAttendanceHistory() {
-            const res = await fetch('/api/attendance.php?action=history&user_id=' + selectedUserId);
+            const startDate = document.getElementById('filterStartDate')?.value || '';
+            const endDate = document.getElementById('filterEndDate')?.value || '';
+            let url = '/api/attendance.php?action=history&user_id=' + selectedUserId;
+            if (startDate && endDate) {
+                url += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+            }
+            const res = await fetch(url);
             const data = await res.json();
             const tbody = document.getElementById('attendanceHistoryBody');
             const headerRow = document.getElementById('historyHeaderRow');
@@ -658,7 +770,11 @@ require_once 'includes/brand.php';
                         statusBg = 'rgba(245,158,11,.1)';
                     }
                     const statusTag = `<span class="badge" style="background:${statusBg};border:1px solid ${statusColor};color:${statusColor};">${at.status || 'Present'}</span>`;
-                    const userCell = isAll ? `<td class="text-bold">${escapeHtml(at.username || 'Unknown')}</td>` : '';
+                    const fn = (at.first_name || '').trim();
+                    const ln = (at.last_name || '').trim();
+                    const fullName = (fn + ' ' + ln).trim();
+                    const dispName = fullName.length > 0 ? fullName : (at.username || 'Unknown');
+                    const userCell = isAll ? `<td class="text-bold">${escapeHtml(dispName)}</td>` : '';
                     return `
                     <tr>
                         ${userCell}
@@ -774,63 +890,45 @@ require_once 'includes/brand.php';
             }
         }
 
-        // Modals
-        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
-        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-
-        document.getElementById('leaveForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const res = await fetch('/api/leaves.php', { method: 'POST', body: new FormData(e.target) });
-            const data = await res.json();
-            if (data.success) { vyToast(data.message); closeModal('leaveModal'); loadLeaves(); }
-            else vyToast(data.message, 'error');
-        };
-
-        document.getElementById('permissionForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const res = await fetch('/api/permissions.php', { method: 'POST', body: new FormData(e.target) });
-            const data = await res.json();
-            if (data.success) { vyToast(data.message); closeModal('permissionModal'); loadPermissions(); }
-            else vyToast(data.message, 'error');
-        };
-
-        function switchTab(evt, id) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            evt.currentTarget.classList.add('active');
-            if (id === 'leaves') loadLeaves();
-            if (id === 'permissions') loadPermissions();
-            if (id === 'history') loadAttendanceHistory();
-        }
-
-        function toggleSidebar() {
-            const s = document.getElementById('sidebar');
-            const i = document.getElementById('toggleIcon');
-            s.classList.toggle('sidebar-collapsed');
-            i.classList.toggle('fa-chevron-left', !s.classList.contains('sidebar-collapsed'));
-            i.classList.toggle('fa-chevron-right', s.classList.contains('sidebar-collapsed'));
-        }
-
-        function toggleMobileSidebar() {
-            const s = document.getElementById('sidebar');
-            const o = document.getElementById('sidebarOverlay');
-            s.classList.toggle('mobile-open');
-            o.style.display = s.classList.contains('mobile-open') ? 'block' : 'none';
-        }
-
-        function toggleProfileDropdown(e) { e.stopPropagation(); document.getElementById('profileDropdown').classList.toggle('show'); }
-
-        window.onclick = function (event) {
-            if (!event.target.closest('.profile-pill')) {
-                const dropdowns = document.getElementsByClassName("profile-dropdown");
-                for (let i = 0; i < dropdowns.length; i++) { dropdowns[i].classList.remove('show'); }
+        document.addEventListener('DOMContentLoaded', () => {
+            const sidebar = document.getElementById('sidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            if (sidebarOverlay && (!sidebar || !sidebar.classList.contains('mobile-open'))) {
+                sidebarOverlay.style.display = 'none';
+                sidebarOverlay.style.pointerEvents = 'none';
             }
-        }
+            document.querySelectorAll('.modal').forEach(modal => {
+                if (!modal.classList.contains('show')) {
+                    modal.style.display = 'none';
+                }
+            });
 
-        setInterval(tickTimer, 1000);
-        fetchStatus();
-        loadAttendanceHistory();
+            const leaveForm = document.getElementById('leaveForm');
+            if (leaveForm) {
+                leaveForm.onsubmit = async (e) => {
+                    e.preventDefault();
+                    const res = await fetch('/api/leaves.php', { method: 'POST', body: new FormData(e.target) });
+                    const data = await res.json();
+                    if (data.success) { vyToast(data.message); closeModal('leaveModal'); loadLeaves(); }
+                    else vyToast(data.message, 'error');
+                };
+            }
+
+            const permissionForm = document.getElementById('permissionForm');
+            if (permissionForm) {
+                permissionForm.onsubmit = async (e) => {
+                    e.preventDefault();
+                    const res = await fetch('/api/permissions.php', { method: 'POST', body: new FormData(e.target) });
+                    const data = await res.json();
+                    if (data.success) { vyToast(data.message); closeModal('permissionModal'); loadPermissions(); }
+                    else vyToast(data.message, 'error');
+                };
+            }
+
+            setInterval(tickTimer, 1000);
+            fetchStatus();
+            loadAttendanceHistory();
+        });
     </script>
 </body>
 

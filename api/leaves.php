@@ -5,18 +5,17 @@ require_once '../config/database.php';
 
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
-    exit;
-}
+require_once '../includes/api_auth.php';
+require_once '../includes/dynamic_modules.php';
 
-$user_id = $_SESSION['user_id'];
-$dbName = $_SESSION['tenant_db'];
-$prefix = $_SESSION['tenant_prefix'];
-$conn = Database::getTenantConn($dbName);
-
-if (!$conn) {
-    echo json_encode(['success' => false, 'message' => 'Database connection failed']);
+try {
+    $context = api_require_context();
+    $user_id = $context['user_id'];
+    $dbName = $context['db_name'];
+    $prefix = $context['prefix'];
+    $conn = $context['conn'];
+} catch (Throwable $e) {
+    echo json_encode(['success' => false, 'message' => 'Unauthorized: ' . $e->getMessage()]);
     exit;
 }
 
@@ -96,15 +95,6 @@ try {
         $userData = $userQuery->fetch(PDO::FETCH_ASSOC);
         $my_role_id = $userData ? $userData['role_id'] : null;
         $is_admin = $userData ? (int)$userData['is_admin'] : 0;
-
-        if (!$is_admin && $my_role_id) {
-            $stmt = $conn->prepare("SELECT name FROM {$prefix}roles WHERE id = ?");
-            $stmt->execute([$my_role_id]);
-            $role_name = strtolower($stmt->fetchColumn() ?: '');
-            if (strpos($role_name, 'admin') !== false || strpos($role_name, 'manager') !== false) {
-                $is_admin = true;
-            }
-        }
 
         $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, $rule, $is_admin);
 

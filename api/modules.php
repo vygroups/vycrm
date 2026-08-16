@@ -75,18 +75,26 @@ try {
             $modules = dm_fetch_active_modules($conn, $prefix);
             $modulesWithStats = [];
             foreach ($modules as $m) {
-                // Total Count
-                $stmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ?");
-                $stmt->execute([$m['id']]);
-                $total = (int) $stmt->fetchColumn();
+                // Total Count with Role Visibility Filtering
+                $totalRes = dm_fetch_records($conn, $prefix, (int)$m['id'], null, 1, 0);
+                $total = $totalRes['total'];
 
-                // Today Count
-                $todayStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND DATE(created_at) = CURDATE()");
-                $todayStmt->execute([$m['id']]);
-                $today = (int) $todayStmt->fetchColumn();
+                // Today Count with Role Visibility Filtering
+                $todayRules = [
+                    'condition' => 'AND',
+                    'rules' => [
+                        [
+                            'field' => 'created_at',
+                            'operator' => 'between',
+                            'value' => date('Y-m-d 00:00:00') . '|' . date('Y-m-d 23:59:59')
+                        ]
+                    ]
+                ];
+                $todayRes = dm_fetch_records($conn, $prefix, (int)$m['id'], null, 1, 0, $todayRules);
+                $today = $todayRes['total'];
 
                 // Saved Filters
-                $filtersStmt = $conn->prepare("SELECT id, name, filter_rules FROM {$prefix}module_saved_filters WHERE user_id = ? AND module_id = ? ORDER BY name ASC");
+                $filtersStmt = $conn->prepare("SELECT id, name, filter_rules, is_default FROM {$prefix}module_saved_filters WHERE user_id = ? AND module_id = ? ORDER BY name ASC");
                 $filtersStmt->execute([$userId, $m['id']]);
                 $savedFiltersList = $filtersStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -102,6 +110,8 @@ try {
                     $moduleFilters[] = [
                         'id' => (int)$filterRow['id'],
                         'name' => $filterRow['name'],
+                        'filter_rules' => $filterRules,
+                        'is_default' => (int)$filterRow['is_default'],
                         'count' => $filterCount
                     ];
                 }

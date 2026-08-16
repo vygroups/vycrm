@@ -78,13 +78,21 @@ try {
     }
 
     foreach ($dynModules as $dm) {
-        $stmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ?");
-        $stmt->execute([$dm['id']]);
-        $total = (int) $stmt->fetchColumn();
+        $totalRes = dm_fetch_records($conn, $prefix, (int)$dm['id'], null, 1, 0);
+        $total = $totalRes['total'];
         
-        $todayStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND DATE(created_at) = CURDATE()");
-        $todayStmt->execute([$dm['id']]);
-        $today = (int) $todayStmt->fetchColumn();
+        $todayRules = [
+            'condition' => 'AND',
+            'rules' => [
+                [
+                    'field' => 'created_at',
+                    'operator' => 'between',
+                    'value' => date('Y-m-d 00:00:00') . '|' . date('Y-m-d 23:59:59')
+                ]
+            ]
+        ];
+        $todayRes = dm_fetch_records($conn, $prefix, (int)$dm['id'], null, 1, 0, $todayRules);
+        $today = $todayRes['total'];
 
         $weekStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)");
         $weekStmt->execute([$dm['id']]);
