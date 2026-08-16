@@ -370,7 +370,7 @@ require_once 'includes/brand.php';
                             </div>
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">TO:</span>
-                                <input type="date" id="filterEndDate" class="form-control" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
+                                <input type="date" id="filterEndDate" class="form-control" value="<?= date('Y-m-d') ?>" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
                             </div>
 
                             <?php
@@ -402,7 +402,7 @@ require_once 'includes/brand.php';
                                 <div style="display:flex; align-items:center; gap:8px;">
                                     <span
                                         style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">MEMBER:</span>
-                                    <select class="form-control" id="memberFilter" onchange="filterMember(this.value)"
+                                <select class="form-control" id="memberFilter" autocomplete="off" onchange="filterMember(this.value)"
                                         style="width:180px; padding:4px 10px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; cursor:pointer; height:32px; box-sizing:border-box;">
                                         <option value="all" selected>All Team Members</option>
                                         <?php foreach ($users as $u): 
@@ -923,6 +923,12 @@ require_once 'includes/brand.php';
                     if (data.success) { vyToast(data.message); closeModal('permissionModal'); loadPermissions(); }
                     else vyToast(data.message, 'error');
                 };
+            }
+
+            const memberFilter = document.getElementById('memberFilter');
+            if (memberFilter && memberFilter.querySelector('option[value="all"]')) {
+                memberFilter.value = 'all';
+                selectedUserId = 'all';
             }
 
             setInterval(tickTimer, 1000);
