@@ -452,11 +452,16 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             rules TEXT NOT NULL,
             icon VARCHAR(50) NOT NULL DEFAULT 'fa-solid fa-clock',
             color VARCHAR(50) NOT NULL DEFAULT '#7b5ef0',
+            display_type VARCHAR(20) NOT NULL DEFAULT 'count',
             sort_order INT NOT NULL DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    try {
+        $conn->exec("ALTER TABLE {$prefix}dashboard_widgets ADD COLUMN display_type VARCHAR(20) DEFAULT 'count'");
+    } catch (Exception $e) {}
 
     // 11. Workflow Automation Rules
     $conn->exec("

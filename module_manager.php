@@ -785,13 +785,31 @@ try {
                         <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
                             <label class="form-label" style="font-size:12px; font-weight:700;">Condition *</label>
                             <select id="widgetOperator" class="form-control" style="height: 38px; padding-top: 6px; padding-bottom: 6px; line-height: 1.5;" onchange="onWidgetOperatorChange()">
-                                <option value="=">Equals (=)</option>
-                                <option value="LIKE">Contains (LIKE)</option>
-                                <option value="today">Is Today</option>
-                                <option value="days_older">Older than X days</option>
-                                <option value="days_within_future">Within next X days</option>
-                                <option value="empty">Is Empty</option>
-                                <option value="not_empty">Is Not Empty</option>
+                                <optgroup label="Relative Time Windows">
+                                    <option value="days_within_past">Within last X days</option>
+                                    <option value="days_older">Older than X days</option>
+                                    <option value="days_within_future">Within next X days</option>
+                                </optgroup>
+                                <optgroup label="Standard Date Periods">
+                                    <option value="today">Is Today</option>
+                                    <option value="yesterday">Is Yesterday</option>
+                                    <option value="this_week">Is This Week</option>
+                                    <option value="this_month">Is This Month</option>
+                                </optgroup>
+                                <optgroup label="Basic Comparisons">
+                                    <option value="=">Equals (=)</option>
+                                    <option value="!=">Not Equals (!=)</option>
+                                    <option value="LIKE">Contains (LIKE)</option>
+                                    <option value="NOT LIKE">Does Not Contain</option>
+                                    <option value=">">Greater Than (&gt;)</option>
+                                    <option value="<">Less Than (&lt;)</option>
+                                    <option value=">=">Greater Than or Equal (&gt;=)</option>
+                                    <option value="<=">Less Than or Equal (&lt;=)</option>
+                                </optgroup>
+                                <optgroup label="Presence / Empty">
+                                    <option value="empty">Is Empty (Blank)</option>
+                                    <option value="not_empty">Is Not Empty</option>
+                                </optgroup>
                             </select>
                         </div>
                         <div class="form-group" id="widgetValueGroup" style="display:flex; flex-direction:column; gap:4px;">
@@ -800,7 +818,15 @@ try {
                         </div>
                     </div>
 
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:15px;">
+                        <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
+                            <label class="form-label" style="font-size:12px; font-weight:700;">Display Format *</label>
+                            <select id="widgetDisplayType" class="form-control" style="height: 38px; padding-top: 6px; padding-bottom: 6px; line-height: 1.5;">
+                                <option value="count">🔢 Number (Count)</option>
+                                <option value="percentage">📊 Percentage (%)</option>
+                                <option value="both">🔢 + 📊 Both (Count & %)</option>
+                            </select>
+                        </div>
                         <div class="form-group" style="display:flex; flex-direction:column; gap:4px;">
                             <label class="form-label" style="font-size:12px; font-weight:700;">Icon *</label>
                             <select id="widgetIcon" class="form-control" style="height: 38px; padding-top: 6px; padding-bottom: 6px; line-height: 1.5;">
@@ -841,12 +867,13 @@ try {
                             <tr style="background:#fafafa; border-bottom:1px solid var(--border);">
                                 <th style="padding:10px 15px;">Title</th>
                                 <th style="padding:10px 15px;">Module</th>
+                                <th style="padding:10px 15px;">Display Format</th>
                                 <th style="padding:10px 15px;">Condition Description</th>
                                 <th style="padding:10px 15px; text-align:right;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="widgetsListTableBody">
-                            <tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">No dashboard widgets configured. Click "Add New Widget" to create one.</td></tr>
+                            <tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">No dashboard widgets configured. Click "Add New Widget" to create one.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -3274,13 +3301,20 @@ try {
         function renderWidgetsTable() {
             const tbody = document.getElementById('widgetsListTableBody');
             if (activeWidgetsList.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px; color:var(--text-muted);">No dashboard widgets configured. Click "Add New Widget" to create one.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-muted);">No dashboard widgets configured. Click "Add New Widget" to create one.</td></tr>';
                 return;
             }
 
             tbody.innerHTML = activeWidgetsList.map(w => {
                 const iconHtml = `<span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:6px; background:${w.color}15; color:${w.color}; margin-right:8px;"><i class="${w.icon}"></i></span>`;
                 
+                let formatBadge = '<span style="background:#e0e7ff; color:#4338ca; padding:3px 9px; border-radius:10px; font-size:11px; font-weight:700;">🔢 Number</span>';
+                if (w.display_type === 'percentage') {
+                    formatBadge = '<span style="background:#ecfdf5; color:#065f46; padding:3px 9px; border-radius:10px; font-size:11px; font-weight:700;">📊 Percentage (%)</span>';
+                } else if (w.display_type === 'both') {
+                    formatBadge = '<span style="background:#fef3c7; color:#92400e; padding:3px 9px; border-radius:10px; font-size:11px; font-weight:700;">🔢+📊 Both</span>';
+                }
+
                 // Parse condition details
                 let rules = [];
                 try { rules = JSON.parse(w.rules); } catch(ex) {}
@@ -3288,16 +3322,23 @@ try {
                 
                 let condDesc = '';
                 if (rule.operator === 'today') condDesc = `[${w.field_label}] is Today`;
+                else if (rule.operator === 'yesterday') condDesc = `[${w.field_label}] is Yesterday`;
+                else if (rule.operator === 'this_week') condDesc = `[${w.field_label}] is This Week`;
+                else if (rule.operator === 'this_month') condDesc = `[${w.field_label}] is This Month`;
+                else if (rule.operator === 'days_within_past') condDesc = `[${w.field_label}] is within last ${rule.value} days`;
                 else if (rule.operator === 'days_older') condDesc = `[${w.field_label}] is older than ${rule.value} days`;
                 else if (rule.operator === 'days_within_future') condDesc = `[${w.field_label}] is within next ${rule.value} days`;
                 else if (rule.operator === 'empty') condDesc = `[${w.field_label}] is Empty`;
                 else if (rule.operator === 'not_empty') condDesc = `[${w.field_label}] is Not Empty`;
+                else if (rule.operator === 'LIKE') condDesc = `[${w.field_label}] contains "${rule.value}"`;
+                else if (rule.operator === 'NOT LIKE') condDesc = `[${w.field_label}] does not contain "${rule.value}"`;
                 else condDesc = `[${w.field_label}] ${rule.operator} "${rule.value}"`;
 
                 return `
                     <tr style="border-bottom:1px solid var(--border);">
                         <td style="padding:12px 15px; font-weight:700; color:var(--text-main);">${iconHtml}${escapeHtml(w.title)}</td>
                         <td style="padding:12px 15px;">${escapeHtml(w.module_name || 'Unknown')}</td>
+                        <td style="padding:12px 15px;">${formatBadge}</td>
                         <td style="padding:12px 15px; font-size:12px; font-family:monospace; color:#3b82f6;">${escapeHtml(condDesc)}</td>
                         <td style="padding:12px 15px; text-align:right;">
                             <div style="display:inline-flex; gap:6px;">
@@ -3316,8 +3357,9 @@ try {
             document.getElementById('widgetTitle').value = '';
             document.getElementById('widgetModule').value = '';
             document.getElementById('widgetField').innerHTML = '<option value="">-- Select Field --</option>';
-            document.getElementById('widgetOperator').value = '=';
+            document.getElementById('widgetOperator').value = 'days_within_past';
             document.getElementById('widgetValue').value = '';
+            document.getElementById('widgetDisplayType').value = 'count';
             document.getElementById('widgetIcon').value = 'fa-solid fa-clock';
             document.getElementById('widgetColor').value = '#7b5ef0';
             
@@ -3361,10 +3403,20 @@ try {
         function onWidgetOperatorChange() {
             const op = document.getElementById('widgetOperator').value;
             const valGroup = document.getElementById('widgetValueGroup');
-            const showValue = !['today', 'empty', 'not_empty'].includes(op);
+            const valInput = document.getElementById('widgetValue');
+            const noValOps = ['today', 'yesterday', 'this_week', 'this_month', 'empty', 'not_empty'];
+            const showValue = !noValOps.includes(op);
             valGroup.style.display = showValue ? 'flex' : 'none';
             if (!showValue) {
-                document.getElementById('widgetValue').value = '';
+                valInput.value = '';
+            } else {
+                if (['days_within_past', 'days_older', 'days_within_future'].includes(op)) {
+                    valInput.placeholder = 'Number of days (e.g. 7 or 14)...';
+                    valInput.type = 'number';
+                } else {
+                    valInput.placeholder = 'Value...';
+                    valInput.type = 'text';
+                }
             }
         }
 
@@ -3376,6 +3428,7 @@ try {
             document.getElementById('widgetId').value = w.id;
             document.getElementById('widgetTitle').value = w.title;
             document.getElementById('widgetModule').value = w.module_id;
+            document.getElementById('widgetDisplayType').value = w.display_type || 'count';
             document.getElementById('widgetIcon').value = w.icon;
             document.getElementById('widgetColor').value = w.color;
             
@@ -3415,6 +3468,7 @@ try {
             const fieldId = document.getElementById('widgetField').value;
             const operator = document.getElementById('widgetOperator').value;
             const value = document.getElementById('widgetValue').value.trim();
+            const display_type = document.getElementById('widgetDisplayType').value;
             const icon = document.getElementById('widgetIcon').value;
             const color = document.getElementById('widgetColor').value;
 
@@ -3443,6 +3497,7 @@ try {
                         field_id: fieldId,
                         operator,
                         value,
+                        display_type,
                         icon,
                         color
                     })

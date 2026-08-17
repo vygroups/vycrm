@@ -115,7 +115,7 @@ if ($companySlug) {
                 <p style="font-size: 20px; opacity: 0.9; line-height: 1.6; font-weight: 400;">The next generation of customer relationship management. Join <strong>1,000+ companies</strong> building smarter workflows.</p>
                 <div style="margin-top: 40px; display: flex; justify-content: center; gap: 20px;">
                     <div style="text-align: left;">
-                        <div style="font-size: 24px; font-weight: 700;">85%</div>
+                        <div style="font-size: 24px; font-weight: 700;">96%</div>
                         <div style="font-size: 12px; opacity: 0.7; text-transform: uppercase;">Efficiency</div>
                     </div>
                     <div style="width: 1px; background: rgba(255,255,255,0.2);"></div>

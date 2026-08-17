@@ -313,7 +313,7 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
             $val = $rule_item['value'] ?? '';
 
             // Validate operator
-            $allowedOps = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE', 'today', 'days_older', 'days_within_future', 'empty', 'not_empty'];
+            $allowedOps = ['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'NOT LIKE', 'today', 'yesterday', 'this_week', 'this_month', 'days_within_past', 'days_older', 'days_within_future', 'empty', 'not_empty'];
             if (!in_array($op, $allowedOps)) {
                 $op = '=';
             }
@@ -350,6 +350,15 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                     $params[] = '%' . $val . '%';
                 } elseif ($op === 'today') {
                     $baseSql .= " AND DATE($mappedCol) = CURDATE()";
+                } elseif ($op === 'yesterday') {
+                    $baseSql .= " AND DATE($mappedCol) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+                } elseif ($op === 'this_week') {
+                    $baseSql .= " AND YEARWEEK($mappedCol, 1) = YEARWEEK(CURDATE(), 1)";
+                } elseif ($op === 'this_month') {
+                    $baseSql .= " AND MONTH($mappedCol) = MONTH(CURDATE()) AND YEAR($mappedCol) = YEAR(CURDATE())";
+                } elseif ($op === 'days_within_past') {
+                    $baseSql .= " AND DATE($mappedCol) >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND DATE($mappedCol) <= CURDATE()";
+                    $params[] = (int)$val;
                 } elseif ($op === 'days_older') {
                     $baseSql .= " AND DATE($mappedCol) <= DATE_SUB(CURDATE(), INTERVAL ? DAY)";
                     $params[] = (int)$val;
@@ -357,9 +366,9 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                     $baseSql .= " AND DATE($mappedCol) >= CURDATE() AND DATE($mappedCol) <= DATE_ADD(CURDATE(), INTERVAL ? DAY)";
                     $params[] = (int)$val;
                 } elseif ($op === 'empty') {
-                    $baseSql .= " AND $mappedCol IS NULL";
+                    $baseSql .= " AND ($mappedCol IS NULL OR TRIM($mappedCol) = '')";
                 } elseif ($op === 'not_empty') {
-                    $baseSql .= " AND $mappedCol IS NOT NULL";
+                    $baseSql .= " AND ($mappedCol IS NOT NULL AND TRIM($mappedCol) != '')";
                 } else {
                     $baseSql .= " AND $mappedCol $op ?";
                     $params[] = $val;
@@ -438,6 +447,19 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                     } elseif ($op === 'today') {
                         $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) = CURDATE())";
                         $params[] = $fieldId;
+                    } elseif ($op === 'yesterday') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) = DATE_SUB(CURDATE(), INTERVAL 1 DAY))";
+                        $params[] = $fieldId;
+                    } elseif ($op === 'this_week') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND YEARWEEK(value, 1) = YEARWEEK(CURDATE(), 1))";
+                        $params[] = $fieldId;
+                    } elseif ($op === 'this_month') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND MONTH(value) = MONTH(CURDATE()) AND YEAR(value) = YEAR(CURDATE()))";
+                        $params[] = $fieldId;
+                    } elseif ($op === 'days_within_past') {
+                        $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND DATE(value) <= CURDATE())";
+                        $params[] = $fieldId;
+                        $params[] = (int)$val;
                     } elseif ($op === 'days_older') {
                         $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) <= DATE_SUB(CURDATE(), INTERVAL ? DAY))";
                         $params[] = $fieldId;

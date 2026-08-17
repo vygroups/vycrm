@@ -131,7 +131,7 @@ try {
             // Fetch Dashboard Widgets (Common Settings Filters)
             $widgets = [];
             try {
-                $wStmt = $conn->query("SELECT id, module_id, title, rules, color, icon FROM {$prefix}dashboard_widgets ORDER BY sort_order ASC, id ASC");
+                $wStmt = $conn->query("SELECT id, module_id, title, rules, color, icon, COALESCE(display_type, 'count') as display_type FROM {$prefix}dashboard_widgets ORDER BY sort_order ASC, id ASC");
                 $widgetsList = $wStmt->fetchAll(PDO::FETCH_ASSOC);
                 foreach ($widgetsList as $w) {
                     $wRules = json_decode($w['rules'], true);
@@ -141,6 +141,11 @@ try {
                         $wCount = $res['total'];
                     } catch (Exception $ex) {}
                     
+                    $totalModStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ?");
+                    $totalModStmt->execute([(int)$w['module_id']]);
+                    $totalModCount = (int)$totalModStmt->fetchColumn();
+                    $wPercent = ($totalModCount > 0) ? round(($wCount / $totalModCount) * 100, 1) : 0;
+                    
                     $widgets[] = [
                         'id' => (int)$w['id'],
                         'module_id' => (int)$w['module_id'],
@@ -148,7 +153,10 @@ try {
                         'rules' => $w['rules'],
                         'color' => $w['color'] ?: '#6366F1',
                         'icon' => $w['icon'] ?: 'fa-solid fa-bell',
-                        'count' => $wCount
+                        'display_type' => $w['display_type'] ?: 'count',
+                        'count' => $wCount,
+                        'total_module_records' => $totalModCount,
+                        'percentage' => $wPercent
                     ];
                 }
             } catch (Exception $e) {}
@@ -1281,6 +1289,10 @@ try {
             $value = trim($input['value'] ?? '');
             $icon = trim($input['icon'] ?? 'fa-solid fa-bell');
             $color = trim($input['color'] ?? 'var(--primary)');
+            $displayType = trim($input['display_type'] ?? 'count');
+            if (!in_array($displayType, ['count', 'percentage', 'both'])) {
+                $displayType = 'count';
+            }
             
             if (!$title) throw new RuntimeException('Widget Title is required');
             if (!$moduleId) throw new RuntimeException('Target Module is required');
@@ -1297,13 +1309,13 @@ try {
             $rulesJson = json_encode($rules);
             
             if ($wId > 0) {
-                $stmt = $conn->prepare("UPDATE {$prefix}dashboard_widgets SET title = ?, module_id = ?, field_id = ?, operator_type = ?, rules = ?, icon = ?, color = ? WHERE id = ?");
-                $stmt->execute([$title, $moduleId, $fieldId, $operator, $rulesJson, $icon, $color, $wId]);
+                $stmt = $conn->prepare("UPDATE {$prefix}dashboard_widgets SET title = ?, module_id = ?, field_id = ?, operator_type = ?, rules = ?, icon = ?, color = ?, display_type = ? WHERE id = ?");
+                $stmt->execute([$title, $moduleId, $fieldId, $operator, $rulesJson, $icon, $color, $displayType, $wId]);
             } else {
                 $maxStmt = $conn->query("SELECT COALESCE(MAX(sort_order),0)+1 FROM {$prefix}dashboard_widgets");
                 $sort = (int)$maxStmt->fetchColumn();
-                $stmt = $conn->prepare("INSERT INTO {$prefix}dashboard_widgets (title, module_id, field_id, operator_type, rules, icon, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$title, $moduleId, $fieldId, $operator, $rulesJson, $icon, $color, $sort]);
+                $stmt = $conn->prepare("INSERT INTO {$prefix}dashboard_widgets (title, module_id, field_id, operator_type, rules, icon, color, display_type, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$title, $moduleId, $fieldId, $operator, $rulesJson, $icon, $color, $displayType, $sort]);
             }
             commerce_json_response(['success' => true]);
 
