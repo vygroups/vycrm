@@ -60,6 +60,11 @@ function dm_ensure_tables(PDO $conn, string $p): void
     try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_quickcreate TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
     try { @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_quick_create TINYINT(1) DEFAULT 0 AFTER is_list_visible"); } catch (Throwable $e) {}
     try { @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_mobile_list_visible TINYINT(1) DEFAULT 0 AFTER is_quick_create"); } catch (Throwable $e) {}
+    // Auto-migrate users controls
+    try { @$conn->exec("ALTER TABLE {$p}users ADD COLUMN status VARCHAR(20) DEFAULT 'active'"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_enabled TINYINT(1) DEFAULT 0"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_otp VARCHAR(10) DEFAULT NULL"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_expires DATETIME DEFAULT NULL"); } catch (Throwable $e) {}
 }
 
 /* ──────────────────────────── HELPER FUNCTIONS ──────────────────────────── */

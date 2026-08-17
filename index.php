@@ -107,6 +107,33 @@ if ($companySlug) {
 
                     <button type="submit" class="btn-primary" id="loginBtn">Sign In</button>
                 </form>
+
+                <!-- Two-Step Verification Form -->
+                <form id="tfaForm" style="display: none;">
+                    <input type="hidden" name="action" value="verify_2fa">
+                    <input type="hidden" name="company" id="tfaCompany" value="<?= htmlspecialchars($companySlug) ?>">
+                    <input type="hidden" name="user_id" id="tfaUserId" value="">
+                    
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <div style="width: 54px; height: 54px; border-radius: 50%; background: #f3e8ff; color: #7b5ef0; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 12px; box-shadow: 0 4px 15px rgba(123,94,240,0.2);">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <h3 style="font-size: 20px; font-weight: 800; color: #1e1b4b; margin: 0 0 6px;">Two-Step Verification</h3>
+                        <p style="font-size: 13px; color: #64748b; margin: 0; line-height: 1.4;">Enter the 6-digit code sent to<br><b id="tfaMaskedEmail" style="color:#1e1b4b;">your email</b></p>
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <label class="form-label" style="text-align:center; display:block; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">6-Digit Verification Code</label>
+                        <input type="text" class="form-control" name="otp" id="tfaOtpInput" placeholder="••••••" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" required style="text-align: center; font-size: 24px; font-weight: 800; letter-spacing: 6px; padding: 12px; border-radius: 12px; border: 2px solid rgba(123,94,240,0.3); background: #fdfcff;">
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="tfaSubmitBtn" style="margin-bottom: 14px;">Verify & Continue</button>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-top: 6px;">
+                        <button type="button" id="resendTfaBtn" onclick="resend2FA()" style="background:none; border:none; color:#7b5ef0; font-weight:700; cursor:pointer; padding:4px 0;">Resend Code</button>
+                        <button type="button" onclick="cancel2FA()" style="background:none; border:none; color:#64748b; font-weight:600; cursor:pointer; padding:4px 0;"><i class="fa-solid fa-arrow-left"></i> Back to Login</button>
+                    </div>
+                </form>
             </div>
         </div>
         <div class="login-right">
@@ -130,12 +157,12 @@ if ($companySlug) {
 
     <script>
         function vyToast(msg, type = 'error') {
-            const colors = { success:'#10b981', error:'#ef4444' };
+            const colors = { success:'#10b981', error:'#ef4444', info:'#7b5ef0' };
             const c = document.getElementById('vyToastContainer');
             const t = document.createElement('div');
             t.className = 'vy-toast';
             t.style.borderLeft = '4px solid ' + (colors[type] || colors.error);
-            t.innerHTML = `<span>${type == 'success' ? '✅' : '❌'}</span><span>${msg}</span>`;
+            t.innerHTML = `<span>${type == 'success' ? '✅' : (type == 'info' ? 'ℹ️' : '❌')}</span><span>${msg}</span>`;
             c.appendChild(t);
             requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
             setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
@@ -155,6 +182,20 @@ if ($companySlug) {
             })
             .then(res => res.json())
             .then(data => {
+                if (data.requires_2fa) {
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('tfaForm').style.display = 'block';
+                    document.getElementById('tfaUserId').value = data.user_id;
+                    document.getElementById('tfaCompany').value = data.company || <?= json_encode($companySlug) ?>;
+                    document.getElementById('tfaMaskedEmail').textContent = data.email || 'your registered email';
+                    document.querySelector('.login-title').style.display = 'none';
+                    document.querySelector('.login-subtitle').style.display = 'none';
+                    vyToast(data.message, 'info');
+                    document.getElementById('tfaOtpInput').focus();
+                    startResendCountdown(30);
+                    return;
+                }
+
                 if (data.success) {
                     vyToast('Login Successful! Redirecting...', 'success');
                     setTimeout(() => window.location.href = data.redirect, 1000);
@@ -170,6 +211,91 @@ if ($companySlug) {
                 btn.textContent = "Sign In";
             });
         });
+
+        document.getElementById('tfaForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('tfaSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = "Verifying Code...";
+            const formData = new FormData(this);
+
+            fetch('/api/login.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    vyToast('Verification Successful! Redirecting...', 'success');
+                    setTimeout(() => window.location.href = data.redirect || '/dashboard.php', 1000);
+                } else {
+                    vyToast(data.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = "Verify & Continue";
+                }
+            })
+            .catch(err => {
+                vyToast('A network error occurred', 'error');
+                btn.disabled = false;
+                btn.textContent = "Verify & Continue";
+            });
+        });
+
+        let resendTimer = null;
+        function startResendCountdown(seconds) {
+            const btn = document.getElementById('resendTfaBtn');
+            btn.disabled = true;
+            let remaining = seconds;
+            btn.textContent = `Resend in ${remaining}s`;
+            clearInterval(resendTimer);
+            resendTimer = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(resendTimer);
+                    btn.disabled = false;
+                    btn.textContent = "Resend Code";
+                } else {
+                    btn.textContent = `Resend in ${remaining}s`;
+                }
+            }, 1000);
+        }
+
+        async function resend2FA() {
+            const btn = document.getElementById('resendTfaBtn');
+            btn.disabled = true;
+            btn.textContent = "Sending...";
+            try {
+                const formData = new FormData();
+                formData.append('action', 'resend_2fa');
+                formData.append('company', document.getElementById('tfaCompany').value);
+                formData.append('user_id', document.getElementById('tfaUserId').value);
+
+                const res = await fetch('/api/login.php', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.success) {
+                    vyToast(data.message, 'success');
+                    startResendCountdown(45);
+                } else {
+                    vyToast(data.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = "Resend Code";
+                }
+            } catch (err) {
+                vyToast('Network error while resending code', 'error');
+                btn.disabled = false;
+                btn.textContent = "Resend Code";
+            }
+        }
+
+        function cancel2FA() {
+            document.getElementById('tfaForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            document.querySelector('.login-title').style.display = '';
+            document.querySelector('.login-subtitle').style.display = '';
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = false;
+            btn.textContent = "Sign In";
+        }
 
         document.getElementById('togglePassword').addEventListener('click', function () {
             const passwordInput = document.getElementById('loginPassword');
