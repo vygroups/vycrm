@@ -890,17 +890,29 @@ function dm_get_visible_user_ids(PDO $conn, string $p, int $userId, ?int $roleId
             $uStmt = $conn->query("SELECT id FROM {$p}users WHERE role_id IN ($inClause)");
             $allowedUserIds = array_merge($allowedUserIds, $uStmt->fetchAll(PDO::FETCH_COLUMN));
         }
-    } elseif ($rule === 'role_up') {
+    } elseif ($rule === 'role_up' || $rule === 'role_equal_up') {
         $parentRoles = [];
         if ($roleId) {
             $parentRoles = $collectRelatedRoles((int) $roleId, 'parent_role_id', 'child_role_id');
         }
 
+        $roleFilter = [];
+        if ($roleId) {
+            $roleFilter[] = (int) $roleId;
+        }
         if (!empty($parentRoles)) {
-            $inClause = implode(',', array_map('intval', $parentRoles));
-            $uStmt = $conn->query("SELECT id FROM {$p}users WHERE role_id IN ($inClause)");
+            $roleFilter = array_merge($roleFilter, $parentRoles);
+        }
+
+        if (!empty($roleFilter)) {
+            $inClause = implode(',', array_map('intval', $roleFilter));
+            $uStmt = $conn->query("SELECT id FROM {$p}users WHERE role_id IN ($inClause) OR is_admin = 1");
+            $allowedUserIds = array_merge($allowedUserIds, $uStmt->fetchAll(PDO::FETCH_COLUMN));
+        } else {
+            $uStmt = $conn->query("SELECT id FROM {$p}users WHERE is_admin = 1");
             $allowedUserIds = array_merge($allowedUserIds, $uStmt->fetchAll(PDO::FETCH_COLUMN));
         }
+
         if (!in_array($userId, $allowedUserIds)) {
             $allowedUserIds[] = $userId;
         }

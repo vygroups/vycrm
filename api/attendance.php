@@ -39,12 +39,16 @@ try {
             $stmt->execute([$user_id, $today]);
             $record = $stmt->fetch(PDO::FETCH_ASSOC);
             
+            $is_punched_in = false;
+            $is_on_break = false;
+            $punch_in_ms = null;
+            $break_in_ms = null;
+
             if ($record) {
                 $is_punched_in = ($record['punch_in'] && !$record['punch_out']);
                 $punch_in_ms = $record['punch_in'] ? (strtotime($record['punch_in']) * 1000) : null;
                 $is_on_break = ($record['status'] === 'Break');
 
-                $break_in_ms = null;
                 if ($is_on_break) {
                     $history = json_decode($record['break_history'] ?: '[]', true);
                     if (count($history) > 0) {
@@ -54,27 +58,47 @@ try {
                         }
                     }
                 }
+            }
 
-                // Check user visibility scope for Team View picker
-                $userQuery = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
-                $userQuery->execute([$user_id]);
-                $userData = $userQuery->fetch(PDO::FETCH_ASSOC);
-                $my_role_id = $userData ? $userData['role_id'] : null;
-                $isAdmin = $userData ? (int)$userData['is_admin'] : 0;
-                
-                $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
-                $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, $rule, (bool)$isAdmin);
-                
-                $visibleUsers = [];
-                if ($isAdmin || $rule === 'all') {
-                    $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
-                    $visibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
-                } else if ($allowedUserIds !== null && !empty($allowedUserIds)) {
-                    $inClause = implode(',', array_map('intval', $allowedUserIds));
-                    $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) ORDER BY u.username ASC");
-                    $visibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
-                }
+            // Check user visibility scope for Team View picker & Approvers
+            $userQuery = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
+            $userQuery->execute([$user_id]);
+            $userData = $userQuery->fetch(PDO::FETCH_ASSOC);
+            $my_role_id = $userData ? $userData['role_id'] : null;
+            $isAdmin = $userData ? (int)$userData['is_admin'] : 0;
+            
+            // Fetch approver users (equal & upper roles + admins) for TO/CC dropdowns
+            $approverRoleIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, 'role_up', (bool)$isAdmin);
+            
+            $rawUsers = [];
+            if ($isAdmin || $approverRoleIds === null) {
+                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+                $rawUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+            } else if (!empty($approverRoleIds)) {
+                $inClause = implode(',', array_map('intval', $approverRoleIds));
+                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) OR u.is_admin = 1 ORDER BY u.username ASC");
+                $rawUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.is_admin = 1 OR u.id = " . (int)$user_id . " ORDER BY u.username ASC");
+                $rawUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
 
+            if (empty($rawUsers) || (count($rawUsers) === 1 && (int)$rawUsers[0]['id'] === (int)$user_id)) {
+                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+                $rawUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            $visibleUsers = array_map(function($u) {
+                return [
+                    'id' => (int)$u['id'],
+                    'username' => $u['username'] ?? '',
+                    'first_name' => $u['first_name'] ?? '',
+                    'last_name' => $u['last_name'] ?? '',
+                    'role_name' => $u['role_name'] ?? ''
+                ];
+            }, $rawUsers);
+
+            if ($record) {
                 echo json_encode([
                     'success' => true,
                     'is_punched_in' => $is_punched_in,
@@ -92,31 +116,13 @@ try {
                     'server_time' => time() * 1000
                 ]);
             } else {
-                $userQuery = $conn->prepare("SELECT role_id, is_admin FROM {$prefix}users WHERE id = ?");
-                $userQuery->execute([$user_id]);
-                $userData = $userQuery->fetch(PDO::FETCH_ASSOC);
-                $my_role_id = $userData ? $userData['role_id'] : null;
-                $isAdmin = $userData ? (int)$userData['is_admin'] : 0;
-                
-                $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
-                $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, $rule, (bool)$isAdmin);
-                
-                $visibleUsers = [];
-                if ($isAdmin || $rule === 'all') {
-                    $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
-                    $visibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
-                } else if ($allowedUserIds !== null && !empty($allowedUserIds)) {
-                    $inClause = implode(',', array_map('intval', $allowedUserIds));
-                    $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) ORDER BY u.username ASC");
-                    $visibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
-                }
-
                 echo json_encode([
                     'success' => true, 
                     'is_punched_in' => false, 
                     'is_on_break' => false,
                     'visible_users' => $visibleUsers,
-                    'can_view_team' => count($visibleUsers) > 1
+                    'can_view_team' => count($visibleUsers) > 1,
+                    'server_time' => time() * 1000
                 ]);
             }
             break;

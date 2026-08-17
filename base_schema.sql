@@ -66,11 +66,19 @@ CREATE TABLE IF NOT EXISTS business_profile (
 CREATE TABLE IF NOT EXISTS leaves (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
+    to_user_id INT DEFAULT NULL,
+    to_user_ids JSON DEFAULT NULL,
+    cc_user_ids JSON DEFAULT NULL,
     leave_type VARCHAR(100) NOT NULL,
     from_date DATE NOT NULL,
     to_date DATE NOT NULL,
     reason TEXT,
-    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    status VARCHAR(50) DEFAULT 'pending',
+    to_status VARCHAR(50) DEFAULT 'pending',
+    cc_status VARCHAR(50) DEFAULT 'pending',
+    approved_by INT DEFAULT NULL,
+    approved_by_name VARCHAR(150) DEFAULT NULL,
+    updated_at DATETIME DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -78,11 +86,19 @@ CREATE TABLE IF NOT EXISTS leaves (
 CREATE TABLE IF NOT EXISTS permissions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
+    to_user_id INT DEFAULT NULL,
+    to_user_ids JSON DEFAULT NULL,
+    cc_user_ids JSON DEFAULT NULL,
     date DATE NOT NULL,
     time_window VARCHAR(100) NOT NULL,
     duration VARCHAR(50) NOT NULL,
     reason TEXT,
-    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    status VARCHAR(50) DEFAULT 'pending',
+    to_status VARCHAR(50) DEFAULT 'pending',
+    cc_status VARCHAR(50) DEFAULT 'pending',
+    approved_by INT DEFAULT NULL,
+    approved_by_name VARCHAR(150) DEFAULT NULL,
+    updated_at DATETIME DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

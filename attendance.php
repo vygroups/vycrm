@@ -18,6 +18,32 @@ $showMemberFilter = ($rule !== 'owner' && ($allowedUserIds === null || count($al
 $initialSelectedUserId = (string) $currentUserId;
 
 $users = [];
+$approverUsers = [];
+
+// Always fetch approver users (Equal & Upper Roles + Admins)
+try {
+    $currentRoleId = isset($_SESSION['role_id']) ? (int)$_SESSION['role_id'] : null;
+    $upperRoleIds = dm_get_visible_user_ids($conn, $prefix, $currentUserId, $currentRoleId, 'role_up', $isAdmin);
+    
+    if ($isAdmin || $upperRoleIds === null) {
+        $appStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+        $approverUsers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
+    } else if (!empty($upperRoleIds)) {
+        $appInClause = implode(',', array_map('intval', $upperRoleIds));
+        $appStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($appInClause) OR u.is_admin = 1 ORDER BY u.username ASC");
+        $approverUsers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $appStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.is_admin = 1 OR u.id = $currentUserId ORDER BY u.username ASC");
+        $approverUsers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    if (empty($approverUsers) || (count($approverUsers) === 1 && (int)$approverUsers[0]['id'] === $currentUserId)) {
+        $appStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+        $approverUsers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Exception $e) {
+}
+
 if ($showMemberFilter) {
     try {
         if ($allowedUserIds !== null) {
@@ -42,6 +68,8 @@ if ($showMemberFilter) {
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.default.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
     <script>
         async function apiPunch(action) {
             const res = await fetch('/api/attendance.php', {
@@ -75,23 +103,17 @@ if ($showMemberFilter) {
 
         function openModal(id) {
             const m = document.getElementById(id);
-            if (m) m.style.display = 'flex';
+            if (m) {
+                m.style.display = 'flex';
+                m.querySelectorAll('.tom-multi-select').forEach(el => {
+                    if (el.tomselect) el.tomselect.sync();
+                });
+            }
         }
 
         function closeModal(id) {
             const m = document.getElementById(id);
             if (m) m.style.display = 'none';
-        }
-
-        function switchTab(evt, id) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            const targetContent = document.getElementById(id);
-            if (targetContent) targetContent.classList.add('active');
-            if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
-            if (id === 'leaves' && typeof loadLeaves === 'function') loadLeaves();
-            if (id === 'permissions' && typeof loadPermissions === 'function') loadPermissions();
-            if (id === 'history' && typeof loadAttendanceHistory === 'function') loadAttendanceHistory();
         }
 
         function toggleSidebar() {
@@ -131,6 +153,70 @@ if ($showMemberFilter) {
         };
     </script>
     <style>
+        .ts-wrapper { width: 100% !important; margin-bottom: 0 !important; }
+        .ts-control {
+            border-radius: 12px !important;
+            border: 1px solid var(--border) !important;
+            padding: 6px 12px !important;
+            font-size: 14px !important;
+            min-height: 44px !important;
+            background: #ffffff !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            gap: 4px !important;
+            box-shadow: none !important;
+        }
+        .ts-control.focus {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 2px rgba(123,94,240,0.2) !important;
+        }
+        .ts-dropdown {
+            border-radius: 12px !important;
+            border: 1px solid var(--border) !important;
+            box-shadow: var(--shadow-lg) !important;
+            font-size: 14px !important;
+            padding: 6px !important;
+            z-index: 10500 !important;
+            background: #ffffff !important;
+        }
+        .ts-dropdown .option {
+            padding: 8px 12px !important;
+            border-radius: 8px !important;
+            cursor: pointer !important;
+        }
+        .ts-dropdown .option.active, .ts-dropdown .option:hover {
+            background: rgba(123,94,240,0.08) !important;
+            color: var(--primary) !important;
+        }
+        .ts-control .item {
+            background: rgba(123,94,240,0.12) !important;
+            color: var(--primary) !important;
+            border-radius: 8px !important;
+            padding: 4px 10px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            border: 1px solid rgba(123,94,240,0.2) !important;
+            margin: 2px 4px 2px 0 !important;
+        }
+        .ts-control .item .remove {
+            border-left: 1px solid rgba(123,94,240,0.3) !important;
+            margin-left: 6px !important;
+            padding-left: 6px !important;
+            color: var(--primary) !important;
+            text-decoration: none !important;
+            font-weight: 700 !important;
+            font-size: 13px !important;
+            opacity: 0.8 !important;
+        }
+        .ts-control .item .remove:hover {
+            opacity: 1 !important;
+            color: #ef4444 !important;
+        }
+
         .action-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -393,7 +479,7 @@ if ($showMemberFilter) {
                         <div style="display:flex; align-items:center; flex-wrap:wrap; gap:12px;">
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">FROM:</span>
-                                <input type="date" id="filterStartDate" class="form-control" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
+                                <input type="date" id="filterStartDate" class="form-control" value="<?= date('Y-m-01') ?>" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
                             </div>
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">TO:</span>
@@ -554,6 +640,32 @@ if ($showMemberFilter) {
                     </select>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">TO (Approvers) <span style="color:#ef4444;">*</span></label>
+                    <select multiple class="form-control tom-multi-select" name="to_user_ids[]" placeholder="Search and select TO approvers..." required style="width:100%;">
+                        <?php foreach ($approverUsers as $u):
+                            if ((int)$u['id'] === $currentUserId) continue;
+                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                            $disp = $fullName !== '' ? $fullName : $u['username'];
+                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                        ?>
+                            <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CC (Notify / Secondary Approval - Optional)</label>
+                    <select multiple class="form-control tom-multi-select" name="cc_user_ids[]" placeholder="Search and select CC members..." style="width:100%;">
+                        <?php foreach ($approverUsers as $u):
+                            if ((int)$u['id'] === $currentUserId) continue;
+                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                            $disp = $fullName !== '' ? $fullName : $u['username'];
+                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                        ?>
+                            <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label">From Date</label>
                     <input type="date" class="form-control" name="from_date" required>
                 </div>
@@ -581,6 +693,32 @@ if ($showMemberFilter) {
             <h3 class="mb-4">Request Permission</h3>
             <form id="permissionForm">
                 <input type="hidden" name="action" value="apply">
+                <div class="form-group">
+                    <label class="form-label">TO (Approvers) <span style="color:#ef4444;">*</span></label>
+                    <select multiple class="form-control tom-multi-select" name="to_user_ids[]" placeholder="Search and select TO approvers..." required style="width:100%;">
+                        <?php foreach ($approverUsers as $u):
+                            if ((int)$u['id'] === $currentUserId) continue;
+                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                            $disp = $fullName !== '' ? $fullName : $u['username'];
+                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                        ?>
+                            <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CC (Notify / Secondary Approval - Optional)</label>
+                    <select multiple class="form-control tom-multi-select" name="cc_user_ids[]" placeholder="Search and select CC members..." style="width:100%;">
+                        <?php foreach ($approverUsers as $u):
+                            if ((int)$u['id'] === $currentUserId) continue;
+                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                            $disp = $fullName !== '' ? $fullName : $u['username'];
+                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                        ?>
+                            <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label class="form-label">Date</label>
                     <input type="date" class="form-control" name="date" required>
@@ -649,6 +787,39 @@ if ($showMemberFilter) {
                 const d = new Date(tStr.includes(' ') ? tStr.replace(' ', 'T') : ('1970-01-01T' + tStr));
                 return isNaN(d.getTime()) ? tStr : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
             } catch (_) { return tStr; }
+        }
+
+        function switchTab(evt, tabName) {
+            let i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+                tabcontent[i].classList.remove("active");
+            }
+            tablinks = document.getElementsByClassName("tab-btn");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].classList.remove("active");
+            }
+            const targetTab = document.getElementById(tabName);
+            if (targetTab) {
+                targetTab.style.display = "block";
+                targetTab.classList.add("active");
+            }
+            if (evt && evt.currentTarget) {
+                evt.currentTarget.classList.add("active");
+            }
+
+            if (tabName === 'leaves' || tabName === 'permissions') {
+                const mf = document.getElementById('memberFilter');
+                if (mf) {
+                    mf.value = 'all';
+                    selectedUserId = 'all';
+                }
+            }
+
+            if (tabName === 'history') loadAttendanceHistory();
+            else if (tabName === 'leaves') loadLeaves();
+            else if (tabName === 'permissions') loadPermissions();
         }
 
         function filterMember(uid) {
@@ -790,8 +961,6 @@ if ($showMemberFilter) {
                         <td><button class="btn-icon" style="color:var(--primary); padding:5px 10px; background:var(--surface);" onclick='viewAttendanceHistory(${index})'><i class="fa-solid fa-eye"></i></button></td>
                     </tr>`;
                 }).join('');
-            } else {
-                const cols = isAll ? 8 : 7;
                 tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;padding:20px;color:var(--text-muted);">No attendance records found.</td></tr>`;
             }
         }
@@ -827,69 +996,188 @@ if ($showMemberFilter) {
             openModal('attendanceHistoryModal');
         }
 
-        async function loadLeaves() {
-            const res = await fetch('/api/leaves.php?user_id=' + selectedUserId);
+        function getStatusBadge(status) {
+            const s = (status || 'pending').toLowerCase();
+            if (s === 'approved') {
+                return `<span class="badge" style="background:rgba(16,185,129,.1);border:1px solid #10b981;color:#10b981;font-weight:700;">APPROVED</span>`;
+            } else if (s === 'partially_approved') {
+                return `<span class="badge" style="background:rgba(59,130,246,.1);border:1px solid #3b82f6;color:#3b82f6;font-weight:700;">PARTIALLY APPROVED</span>`;
+            } else if (s === 'rejected') {
+                return `<span class="badge" style="background:rgba(239,68,68,.1);border:1px solid #ef4444;font-weight:700;color:#ef4444;">REJECTED</span>`;
+            }
+            return `<span class="badge" style="background:rgba(245,158,11,.1);border:1px solid #f59e0b;font-weight:700;color:#f59e0b;">PENDING</span>`;
+        }
+
+        async function updateItemStatus(apiPath, id, status) {
+            const formData = new FormData();
+            formData.append('action', 'update_status');
+            formData.append('id', id);
+            formData.append('status', status);
+
+            const res = await fetch(apiPath, { method: 'POST', body: formData });
             const data = await res.json();
+            if (data.success) {
+                vyToast(data.message);
+                if (apiPath.includes('leaves')) loadLeaves();
+                else loadPermissions();
+            } else {
+                vyToast(data.message, 'error');
+            }
+        }
+
+        async function loadLeaves() {
             const tbody = document.getElementById('leaveHistoryBody');
             const headerRow = document.getElementById('leavesHeaderRow');
             const leavesTitle = document.getElementById('leavesTitle');
+            const startDate = document.getElementById('filterStartDate')?.value || '';
+            const endDate = document.getElementById('filterEndDate')?.value || '';
+
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px;color:var(--primary);margin-bottom:8px;"></i><br>Loading leave applications...</td></tr>`;
+            }
+
+            let url = '/api/leaves.php?user_id=' + selectedUserId;
+            if (startDate && endDate) {
+                url += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+            }
+
+            const res = await fetch(url);
+            const data = await res.json();
 
             const isAll = (selectedUserId === 'all');
             if (leavesTitle) {
                 leavesTitle.textContent = isAll ? "Team Leave Applications" : "My Leave Applications";
             }
             if (headerRow) {
-                headerRow.innerHTML = isAll
-                    ? `<th>User</th><th>Leave Type</th><th>From Date</th><th>To Date</th><th>Reason</th><th>Status</th>`
-                    : `<th>Leave Type</th><th>From Date</th><th>To Date</th><th>Reason</th><th>Status</th>`;
+                headerRow.innerHTML = `<th>Applicant</th><th>Leave Details</th><th>TO / CC Approvers</th><th>Status & Audit</th><th>Action</th>`;
             }
 
-            if (data.success) {
+            if (data.success && data.data) {
+                const currentUserId = <?= $currentUserId ?>;
                 tbody.innerHTML = data.data.map(l => {
-                    const userCell = isAll ? `<td class="text-bold">${escapeHtml(l.username || 'Unknown')}</td>` : '';
+                    const fn = (l.first_name || '').trim();
+                    const ln = (l.last_name || '').trim();
+                    const fullName = (fn + ' ' + ln).trim();
+                    const applicantName = fullName.length > 0 ? fullName : (l.username || 'User #' + l.user_id);
+                    
+                    const toName = l.to_display_name || 'Not assigned';
+                    const ccNames = (l.cc_user_names && l.cc_user_names.length > 0) ? l.cc_user_names.join(', ') : 'None';
+                    
+                    let auditText = '';
+                    if (l.approved_by_name) {
+                        auditText = `<div style="font-size:11px; color:var(--text-muted); margin-top:4px;"><i class="fa-solid fa-user-check"></i> By ${escapeHtml(l.approved_by_name)}</div>`;
+                    }
+
+                    let actionBtns = '-';
+                    const canDecision = (parseInt(l.user_id, 10) !== currentUserId) && (l.status === 'pending' || l.status === 'partially_approved');
+                    if (canDecision) {
+                        actionBtns = `
+                            <div style="display:flex; gap:6px;">
+                                <button class="btn" style="background:#10b981; color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer;" onclick="updateItemStatus('/api/leaves.php', ${l.id}, 'approved')"><i class="fa-solid fa-check"></i></button>
+                                <button class="btn" style="background:#ef4444; color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer;" onclick="updateItemStatus('/api/leaves.php', ${l.id}, 'rejected')"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        `;
+                    }
+
                     return `
                     <tr>
-                        ${userCell}
-                        <td class="${isAll ? '' : 'text-bold'}">${l.leave_type}</td>
-                        <td>${formatVyDate(l.from_date)}</td>
-                        <td>${formatVyDate(l.to_date)}</td>
-                        <td>${escapeHtml(l.reason)}</td>
-                        <td><span class="badge badge-${l.status === 'pending' ? 'warm' : (l.status === 'approved' ? 'success' : 'hot')}">${l.status}</span></td>
+                        <td class="text-bold">${escapeHtml(applicantName)}</td>
+                        <td>
+                            <strong style="color:var(--primary);">${escapeHtml(l.leave_type)}</strong><br>
+                            <span style="font-size:12px; color:var(--text-muted);">${formatVyDate(l.from_date)} to ${formatVyDate(l.to_date)}</span><br>
+                            <span style="font-size:12px; font-style:italic;">"${escapeHtml(l.reason)}"</span>
+                        </td>
+                        <td>
+                            <div style="font-size:12px;"><strong>TO:</strong> ${escapeHtml(toName)}</div>
+                            <div style="font-size:11px; color:var(--text-muted);"><strong>CC:</strong> ${escapeHtml(ccNames)}</div>
+                        </td>
+                        <td>
+                            ${getStatusBadge(l.status)}
+                            ${auditText}
+                        </td>
+                        <td>${actionBtns}</td>
                     </tr>
-                `}).join('') || `<tr><td colspan="${isAll ? 6 : 5}" style="text-align:center;padding:20px;color:var(--text-muted);">No leave applications found</td></tr>`;
+                `}).join('') || `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No leave applications found</td></tr>`;
+            } else {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No leave applications found</td></tr>`;
             }
         }
 
         async function loadPermissions() {
-            const res = await fetch('/api/permissions.php?user_id=' + selectedUserId);
-            const data = await res.json();
             const tbody = document.getElementById('permissionHistoryBody');
             const headerRow = document.getElementById('permissionsHeaderRow');
             const permissionsTitle = document.getElementById('permissionsTitle');
+            const startDate = document.getElementById('filterStartDate')?.value || '';
+            const endDate = document.getElementById('filterEndDate')?.value || '';
+
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px;color:var(--primary);margin-bottom:8px;"></i><br>Loading permission requests...</td></tr>`;
+            }
+
+            let url = '/api/permissions.php?user_id=' + selectedUserId;
+            if (startDate && endDate) {
+                url += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+            }
+
+            const res = await fetch(url);
+            const data = await res.json();
 
             const isAll = (selectedUserId === 'all');
             if (permissionsTitle) {
                 permissionsTitle.textContent = isAll ? "Team Permission Requests" : "My Permission Requests";
             }
             if (headerRow) {
-                headerRow.innerHTML = isAll
-                    ? `<th>User</th><th>Date</th><th>Time Window</th><th>Duration</th><th>Reason</th><th>Status</th>`
-                    : `<th>Date</th><th>Time Window</th><th>Duration</th><th>Reason</th><th>Status</th>`;
+                headerRow.innerHTML = `<th>Applicant</th><th>Permission Details</th><th>TO / CC Approvers</th><th>Status & Audit</th><th>Action</th>`;
             }
 
-            if (data.success) {
+            if (data.success && data.data) {
+                const currentUserId = <?= $currentUserId ?>;
                 tbody.innerHTML = data.data.map(p => {
-                    const userCell = isAll ? `<td class="text-bold">${escapeHtml(p.username || 'Unknown')}</td>` : '';
+                    const fn = (p.first_name || '').trim();
+                    const ln = (p.last_name || '').trim();
+                    const fullName = (fn + ' ' + ln).trim();
+                    const applicantName = fullName.length > 0 ? fullName : (p.username || 'User #' + p.user_id);
+                    
+                    const toName = p.to_display_name || 'Not assigned';
+                    const ccNames = (p.cc_user_names && p.cc_user_names.length > 0) ? p.cc_user_names.join(', ') : 'None';
+                    
+                    let auditText = '';
+                    if (p.approved_by_name) {
+                        auditText = `<div style="font-size:11px; color:var(--text-muted); margin-top:4px;"><i class="fa-solid fa-user-check"></i> By ${escapeHtml(p.approved_by_name)}</div>`;
+                    }
+
+                    let actionBtns = '-';
+                    const canDecision = (parseInt(p.user_id, 10) !== currentUserId) && (p.status === 'pending' || p.status === 'partially_approved');
+                    if (canDecision) {
+                        actionBtns = `
+                            <div style="display:flex; gap:6px;">
+                                <button class="btn" style="background:#10b981; color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer;" onclick="updateItemStatus('/api/permissions.php', ${p.id}, 'approved')"><i class="fa-solid fa-check"></i></button>
+                                <button class="btn" style="background:#ef4444; color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer;" onclick="updateItemStatus('/api/permissions.php', ${p.id}, 'rejected')"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        `;
+                    }
+
                     return `
                     <tr>
-                        ${userCell}
-                        <td class="${isAll ? '' : 'text-bold'}">${formatVyDate(p.date)}</td>
-                        <td>${escapeHtml(p.time_window)}</td>
-                        <td>${escapeHtml(p.duration)}</td>
-                        <td>${escapeHtml(p.reason)}</td>
-                        <td><span class="badge badge-${p.status === 'pending' ? 'warm' : (p.status === 'approved' ? 'success' : 'hot')}">${p.status}</span></td>
+                        <td class="text-bold">${escapeHtml(applicantName)}</td>
+                        <td>
+                            <strong style="color:var(--primary);">${formatVyDate(p.date)} (${escapeHtml(p.duration)})</strong><br>
+                            <span style="font-size:12px; color:var(--text-muted);">${escapeHtml(p.time_window)}</span><br>
+                            <span style="font-size:12px; font-style:italic;">"${escapeHtml(p.reason)}"</span>
+                        </td>
+                        <td>
+                            <div style="font-size:12px;"><strong>TO:</strong> ${escapeHtml(toName)}</div>
+                            <div style="font-size:11px; color:var(--text-muted);"><strong>CC:</strong> ${escapeHtml(ccNames)}</div>
+                        </td>
+                        <td>
+                            ${getStatusBadge(p.status)}
+                            ${auditText}
+                        </td>
+                        <td>${actionBtns}</td>
                     </tr>
-                `}).join('') || `<tr><td colspan="${isAll ? 6 : 5}" style="text-align:center;padding:20px;color:var(--text-muted);">No permission requests found</td></tr>`;
+                `}).join('') || `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No permission requests found</td></tr>`;
+            } else {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No permission requests found</td></tr>`;
             }
         }
 
@@ -912,7 +1200,15 @@ if ($showMemberFilter) {
                     e.preventDefault();
                     const res = await fetch('/api/leaves.php', { method: 'POST', body: new FormData(e.target) });
                     const data = await res.json();
-                    if (data.success) { vyToast(data.message); closeModal('leaveModal'); loadLeaves(); }
+                    if (data.success) { 
+                        vyToast(data.message); 
+                        closeModal('leaveModal'); 
+                        leaveForm.reset();
+                        leaveForm.querySelectorAll('.tom-multi-select').forEach(el => {
+                            if (el.tomselect) el.tomselect.clear();
+                        });
+                        loadLeaves(); 
+                    }
                     else vyToast(data.message, 'error');
                 };
             }
@@ -923,7 +1219,15 @@ if ($showMemberFilter) {
                     e.preventDefault();
                     const res = await fetch('/api/permissions.php', { method: 'POST', body: new FormData(e.target) });
                     const data = await res.json();
-                    if (data.success) { vyToast(data.message); closeModal('permissionModal'); loadPermissions(); }
+                    if (data.success) { 
+                        vyToast(data.message); 
+                        closeModal('permissionModal'); 
+                        permissionForm.reset();
+                        permissionForm.querySelectorAll('.tom-multi-select').forEach(el => {
+                            if (el.tomselect) el.tomselect.clear();
+                        });
+                        loadPermissions(); 
+                    }
                     else vyToast(data.message, 'error');
                 };
             }
@@ -932,6 +1236,18 @@ if ($showMemberFilter) {
             if (mf && mf.value) {
                 selectedUserId = mf.value === 'all' ? 'all' : parseInt(mf.value, 10);
             }
+
+            document.querySelectorAll('.tom-multi-select').forEach(el => {
+                if (typeof TomSelect !== 'undefined') {
+                    new TomSelect(el, {
+                        dropdownParent: 'body',
+                        plugins: ['remove_button'],
+                        create: false,
+                        maxItems: null,
+                        sortField: { field: 'text', direction: 'asc' }
+                    });
+                }
+            });
 
             setInterval(tickTimer, 1000);
             fetchStatus();
