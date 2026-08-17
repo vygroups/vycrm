@@ -1450,15 +1450,32 @@ function createFilterRuleRow(ruleData = null) {
                 ${ALL_MODULE_FIELDS.map(f => `<option value="${f.id}">${escapeHtml(f.label)}</option>`).join('')}
             </select>
             
-            <select class="form-control filter-operator-select" style="width: 140px; height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer;">
-                <option value="=">=</option>
-                <option value="!=">!=</option>
-                <option value="LIKE">contains</option>
-                <option value="NOT LIKE">does not contain</option>
-                <option value=">">&gt;</option>
-                <option value="<">&lt;</option>
-                <option value=">=">&gt;=</option>
-                <option value="<=">&lt;=</option>
+            <select class="form-control filter-operator-select" style="width: 175px; height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer;" onchange="onFilterOperatorChange('${rowId}')">
+                <optgroup label="Relative Time Windows">
+                    <option value="days_within_past">Within last X days</option>
+                    <option value="days_older">Older than X days</option>
+                    <option value="days_within_future">Within next X days</option>
+                </optgroup>
+                <optgroup label="Standard Date Periods">
+                    <option value="today">Is Today</option>
+                    <option value="yesterday">Is Yesterday</option>
+                    <option value="this_week">Is This Week</option>
+                    <option value="this_month">Is This Month</option>
+                </optgroup>
+                <optgroup label="Basic Comparisons">
+                    <option value="=" selected>Equals (=)</option>
+                    <option value="!=">Not Equals (!=)</option>
+                    <option value="LIKE">Contains (LIKE)</option>
+                    <option value="NOT LIKE">Does Not Contain</option>
+                    <option value=">">Greater Than (&gt;)</option>
+                    <option value="<">Less Than (&lt;)</option>
+                    <option value=">=">Greater Than or Equal (&gt;=)</option>
+                    <option value="<=">Less Than or Equal (&lt;=)</option>
+                </optgroup>
+                <optgroup label="Presence / Empty">
+                    <option value="empty">Is Empty (Blank)</option>
+                    <option value="not_empty">Is Not Empty</option>
+                </optgroup>
             </select>
             
             <div class="filter-value-container" style="flex: 1; min-width: 200px;">
@@ -1477,21 +1494,63 @@ function createFilterRuleRow(ruleData = null) {
     container.appendChild(element);
     
     if (ruleData) {
-        element.querySelector('.filter-field-select').value = ruleData.field_id;
-        onFilterFieldChange(rowId, ruleData.field_id, ruleData.value);
-        element.querySelector('.filter-operator-select').value = ruleData.operator;
+        element.querySelector('.filter-field-select').value = ruleData.field_id || '';
+        element.querySelector('.filter-operator-select').value = ruleData.operator || '=';
+        onFilterFieldChange(rowId, ruleData.field_id, ruleData.value !== undefined ? ruleData.value : '');
     }
+}
+
+function onFilterOperatorChange(rowId) {
+    const rowEl = document.getElementById(rowId);
+    if (!rowEl) return;
+    
+    const operatorSelect = rowEl.querySelector('.filter-operator-select');
+    const valueContainer = rowEl.querySelector('.filter-value-container');
+    const fieldSelect = rowEl.querySelector('.filter-field-select');
+    const op = operatorSelect ? operatorSelect.value : '=';
+    
+    const noValueOps = ['today', 'yesterday', 'this_week', 'this_month', 'empty', 'not_empty'];
+    if (noValueOps.includes(op)) {
+        valueContainer.innerHTML = `<span style="font-size:12px; color:var(--text-muted); font-style:italic; padding-left:8px;">No value required</span><input type="hidden" class="filter-value-input" value="">`;
+        return;
+    }
+    
+    if (['days_within_past', 'days_older', 'days_within_future'].includes(op)) {
+        let currentVal = '';
+        const existingInput = valueContainer.querySelector('.filter-value-input');
+        if (existingInput && existingInput.value) currentVal = existingInput.value;
+        valueContainer.innerHTML = `<input type="number" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" placeholder="Number of days (e.g. 7, 14, 30)..." value="${escapeHtml(currentVal)}">`;
+        return;
+    }
+    
+    const fieldId = fieldSelect ? fieldSelect.value : '';
+    const existingInput = valueContainer.querySelector('.filter-value-input');
+    const currentVal = existingInput ? existingInput.value : '';
+    onFilterFieldChange(rowId, fieldId, currentVal);
 }
 
 function onFilterFieldChange(rowId, fieldId, value = '') {
     const rowEl = document.getElementById(rowId);
     if (!rowEl) return;
     
+    const operatorSelect = rowEl.querySelector('.filter-operator-select');
+    const op = operatorSelect ? operatorSelect.value : '=';
+    const noValueOps = ['today', 'yesterday', 'this_week', 'this_month', 'empty', 'not_empty'];
     const valueContainer = rowEl.querySelector('.filter-value-container');
-    const field = ALL_MODULE_FIELDS.find(f => f.id == fieldId);
     
+    if (noValueOps.includes(op)) {
+        valueContainer.innerHTML = `<span style="font-size:12px; color:var(--text-muted); font-style:italic; padding-left:8px;">No value required</span><input type="hidden" class="filter-value-input" value="">`;
+        return;
+    }
+    
+    if (['days_within_past', 'days_older', 'days_within_future'].includes(op)) {
+        valueContainer.innerHTML = `<input type="number" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" placeholder="Number of days (e.g. 7, 14, 30)..." value="${escapeHtml(value)}">`;
+        return;
+    }
+
+    const field = ALL_MODULE_FIELDS.find(f => f.id == fieldId);
     if (!field) {
-        valueContainer.innerHTML = `<input type="text" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" placeholder="Enter value...">`;
+        valueContainer.innerHTML = `<input type="text" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" placeholder="Enter value..." value="${escapeHtml(value)}">`;
         return;
     }
     
