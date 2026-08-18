@@ -67,25 +67,21 @@ try {
             $my_role_id = $userData ? $userData['role_id'] : null;
             $isAdmin = $userData ? (int)$userData['is_admin'] : 0;
             
-            // Fetch approver users (equal & upper roles + admins) for TO/CC dropdowns
-            $approverRoleIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, 'role_up', (bool)$isAdmin);
-            
-            $rawUsers = [];
-            if ($isAdmin || $approverRoleIds === null) {
-                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
-                $rawUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
-            } else if (!empty($approverRoleIds)) {
-                $inClause = implode(',', array_map('intval', $approverRoleIds));
-                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) OR u.is_admin = 1 ORDER BY u.username ASC");
-                $rawUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
-            } else {
-                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.is_admin = 1 OR u.id = " . (int)$user_id . " ORDER BY u.username ASC");
-                $rawUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
-            }
+            // 1. Fetch team viewing scope users (based on attendance_visibility setting: all, role_down, etc.)
+            $rule = dm_get_system_setting($conn, $prefix, 'attendance_visibility', 'all');
+            $allowedUserIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, $rule, (bool)$isAdmin);
 
-            if (empty($rawUsers) || (count($rawUsers) === 1 && (int)$rawUsers[0]['id'] === (int)$user_id)) {
+            $rawVisibleUsers = [];
+            if ($isAdmin || $allowedUserIds === null) {
                 $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
-                $rawUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+                $rawVisibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+            } else if (!empty($allowedUserIds)) {
+                $inClause = implode(',', array_map('intval', $allowedUserIds));
+                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($inClause) ORDER BY u.username ASC");
+                $rawVisibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $uStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id = " . (int)$user_id . " ORDER BY u.username ASC");
+                $rawVisibleUsers = $uStmt->fetchAll(PDO::FETCH_ASSOC);
             }
 
             $visibleUsers = array_map(function($u) {
@@ -96,7 +92,38 @@ try {
                     'last_name' => $u['last_name'] ?? '',
                     'role_name' => $u['role_name'] ?? ''
                 ];
-            }, $rawUsers);
+            }, $rawVisibleUsers);
+
+            // 2. Fetch approver users (equal & upper roles + admins) for Leave & Permission TO/CC dropdowns
+            $approverRoleIds = dm_get_visible_user_ids($conn, $prefix, (int)$user_id, $my_role_id ? (int)$my_role_id : null, 'role_up', (bool)$isAdmin);
+            
+            $rawApprovers = [];
+            if ($isAdmin || $approverRoleIds === null) {
+                $appStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+                $rawApprovers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
+            } else if (!empty($approverRoleIds)) {
+                $appInClause = implode(',', array_map('intval', $approverRoleIds));
+                $appStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.id IN ($appInClause) OR u.is_admin = 1 ORDER BY u.username ASC");
+                $rawApprovers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $appStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id WHERE u.is_admin = 1 OR u.id = " . (int)$user_id . " ORDER BY u.username ASC");
+                $rawApprovers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            if (empty($rawApprovers) || (count($rawApprovers) === 1 && (int)$rawApprovers[0]['id'] === (int)$user_id)) {
+                $appStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+                $rawApprovers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            $approverUsers = array_map(function($u) {
+                return [
+                    'id' => (int)$u['id'],
+                    'username' => $u['username'] ?? '',
+                    'first_name' => $u['first_name'] ?? '',
+                    'last_name' => $u['last_name'] ?? '',
+                    'role_name' => $u['role_name'] ?? ''
+                ];
+            }, $rawApprovers);
 
             if ($record) {
                 echo json_encode([
@@ -112,6 +139,7 @@ try {
                     'punch_in_ms' => $punch_in_ms,
                     'break_in_ms' => $break_in_ms,
                     'visible_users' => $visibleUsers,
+                    'approver_users' => $approverUsers,
                     'can_view_team' => count($visibleUsers) > 1,
                     'server_time' => time() * 1000
                 ]);
@@ -121,6 +149,7 @@ try {
                     'is_punched_in' => false, 
                     'is_on_break' => false,
                     'visible_users' => $visibleUsers,
+                    'approver_users' => $approverUsers,
                     'can_view_team' => count($visibleUsers) > 1,
                     'server_time' => time() * 1000
                 ]);

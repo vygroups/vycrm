@@ -25,38 +25,46 @@ if (!$companySlug) {
 }
 
 function send_2fa_email($user, $company, $tenantConn, $tenantPrefix, $otp) {
-    $toEmail = $user['email'];
-    $subject = "Your Two-Step Verification Code - " . ($company['name'] ?? 'VY CRM');
+    $toEmail = $user['email'] ?? '';
+    if (!$toEmail) return false;
+
+    $companyName = $company['name'] ?? 'VY CRM';
+    $subject = "Your Two-Step Verification Code - " . $companyName;
     $body = "Hello " . htmlspecialchars($user['first_name'] ?: $user['username']) . ",<br><br>"
           . "Your Two-Step Verification code is: <div style='font-size:28px; font-weight:800; color:#7b5ef0; letter-spacing:6px; margin:16px 0;'>$otp</div>"
           . "This verification code is valid for <b>10 minutes</b>.<br><br>"
           . "If you did not attempt to log in to your account, please secure your credentials immediately.<br><br>"
-          . "Regards,<br>" . htmlspecialchars($company['name'] ?? 'VY CRM Team');
-
-    $smtpStmt = $tenantConn->prepare("SELECT * FROM {$tenantPrefix}communication_configs WHERE type = 'smtp' ORDER BY id ASC LIMIT 1");
-    $smtpStmt->execute();
-    $smtpConfig = $smtpStmt->fetch(PDO::FETCH_ASSOC);
+          . "Regards,<br>" . htmlspecialchars($companyName) . " Team";
 
     $emailSent = false;
-    if ($smtpConfig) {
-        $conf = json_decode($smtpConfig['config_json'], true);
-        if ($conf) {
-            $emailSent = dm_send_smtp_email(
-                $conf['smtp_host'] ?? '',
-                (int)($conf['smtp_port'] ?? 587),
-                $conf['smtp_user'] ?? '',
-                $conf['smtp_pass'] ?? '',
-                $conf['smtp_from_email'] ?? $conf['smtp_user'],
-                $conf['smtp_from_name'] ?? $company['name'],
-                $toEmail,
-                $subject,
-                $body,
-                $conf['smtp_encryption'] ?? 'tls'
-            );
+    try {
+        $smtpStmt = $tenantConn->prepare("SELECT * FROM {$tenantPrefix}communication_configs WHERE type = 'smtp' ORDER BY is_default DESC, id ASC LIMIT 1");
+        $smtpStmt->execute();
+        $smtpConfig = $smtpStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($smtpConfig) {
+            $rawConf = $smtpConfig['config_data'] ?? $smtpConfig['config_json'] ?? null;
+            $conf = is_array($rawConf) ? $rawConf : json_decode((string)$rawConf, true);
+            if ($conf && is_array($conf)) {
+                $emailSent = dm_send_smtp_email(
+                    $conf['smtp_host'] ?? $conf['host'] ?? '',
+                    (int)($conf['smtp_port'] ?? $conf['port'] ?? 587),
+                    $conf['smtp_user'] ?? $conf['user'] ?? $conf['username'] ?? '',
+                    $conf['smtp_pass'] ?? $conf['pass'] ?? $conf['password'] ?? '',
+                    $conf['smtp_from_email'] ?? $conf['from_email'] ?? $conf['smtp_user'] ?? $conf['user'] ?? '',
+                    $conf['smtp_from_name'] ?? $conf['from_name'] ?? $companyName,
+                    $toEmail,
+                    $subject,
+                    $body,
+                    $conf['smtp_encryption'] ?? $conf['encryption'] ?? 'tls'
+                );
+            }
         }
-    }
+    } catch (Throwable $e) {}
+
     if (!$emailSent) {
-        $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=utf-8\r\nFrom: no-reply@" . ($_SERVER['HTTP_HOST'] ?? 'vycrm.com') . "\r\n";
+        $fromHost = $_SERVER['HTTP_HOST'] ?? 'vycrm.vygroups.com';
+        $headers = "MIME-Version: 1.0\r\nContent-type: text/html; charset=utf-8\r\nFrom: no-reply@{$fromHost}\r\n";
         @mail($toEmail, $subject, $body, $headers);
     }
     return true;
@@ -130,7 +138,7 @@ try {
             echo json_encode(['success' => false, 'message' => 'Missing user ID or OTP code']);
             exit;
         }
-        $stmt = $tenantConn->prepare("SELECT * FROM {$tenantPrefix}users WHERE id = ?");
+        $stmt = $tenantConn->prepare("SELECT u.*, r.name as role_name FROM {$tenantPrefix}users u LEFT JOIN {$tenantPrefix}roles r ON r.id = u.role_id WHERE u.id = ?");
         $stmt->execute([$userIdInput]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -173,6 +181,8 @@ try {
         $_SESSION['expiry'] = time() + ($expiryHours * 3600);
         $apiToken = api_issue_token($user, $companySlug, $company['db_name'], $tenantPrefix);
 
+        $roleName = !empty($user['role_name']) ? $user['role_name'] : (!empty($user['is_admin']) ? 'Administrator' : 'Team Member');
+
         echo json_encode([
             'success' => true,
             'message' => 'Two-Step Verification successful',
@@ -184,6 +194,7 @@ try {
             'first_name' => $user['first_name'] ?? '',
             'last_name' => $user['last_name'] ?? '',
             'is_admin' => (int)($user['is_admin'] ?? 0),
+            'role_name' => $roleName,
             'profile_picture' => !empty($user['profile_picture']) 
                 ? '/serve_file.php?path=' . urlencode(ltrim($user['profile_picture'], '/'))
                 : 'https://ui-avatars.com/api/?name=' . urlencode(trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')) ?: $user['username']) . '&background=0A4D3E&color=FFFFFF&bold=true&format=png',
@@ -201,7 +212,7 @@ try {
         exit;
     }
 
-    $stmt = $tenantConn->prepare("SELECT * FROM {$tenantPrefix}users WHERE (username = ? OR email = ?)");
+    $stmt = $tenantConn->prepare("SELECT u.*, r.name as role_name FROM {$tenantPrefix}users u LEFT JOIN {$tenantPrefix}roles r ON r.id = u.role_id WHERE (u.username = ? OR u.email = ?)");
     $stmt->execute([$userInput, $userInput]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -251,6 +262,8 @@ try {
         $_SESSION['expiry'] = time() + ($expiryHours * 3600);
         $apiToken = api_issue_token($user, $companySlug, $company['db_name'], $tenantPrefix);
 
+        $roleName = !empty($user['role_name']) ? $user['role_name'] : (!empty($user['is_admin']) ? 'Administrator' : 'Team Member');
+
         echo json_encode([
             'success' => true,
             'message' => 'Login successful',
@@ -262,6 +275,7 @@ try {
             'first_name' => $user['first_name'] ?? '',
             'last_name' => $user['last_name'] ?? '',
             'is_admin' => (int)($user['is_admin'] ?? 0),
+            'role_name' => $roleName,
             'profile_picture' => !empty($user['profile_picture']) 
                 ? '/serve_file.php?path=' . urlencode(ltrim($user['profile_picture'], '/'))
                 : 'https://ui-avatars.com/api/?name=' . urlencode(trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')) ?: $user['username']) . '&background=0A4D3E&color=FFFFFF&bold=true&format=png',

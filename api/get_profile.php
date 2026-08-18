@@ -15,7 +15,10 @@ try {
     $companySlug = $context['tenant_slug'];
 
     // 1. Fetch user details from tenant database
-    $stmt = $conn->prepare("SELECT id, username, first_name, last_name, is_admin, profile_picture FROM {$prefix}users WHERE id = ?");
+    $stmt = $conn->prepare("SELECT u.id, u.username, u.first_name, u.last_name, u.is_admin, u.profile_picture, u.role_id, r.name as role_name 
+                            FROM {$prefix}users u 
+                            LEFT JOIN {$prefix}roles r ON r.id = u.role_id 
+                            WHERE u.id = ?");
     $stmt->execute([$userId]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -31,6 +34,8 @@ try {
     $stmt->execute([$companySlug]);
     $company = $stmt->fetch(PDO::FETCH_ASSOC);
 
+    $roleName = !empty($user['role_name']) ? $user['role_name'] : (!empty($user['is_admin']) ? 'Administrator' : 'Team Member');
+
     echo json_encode([
         'success' => true,
         'id' => (int)$user['id'],
@@ -38,6 +43,7 @@ try {
         'first_name' => $user['first_name'] ?? '',
         'last_name' => $user['last_name'] ?? '',
         'is_admin' => (int)($user['is_admin'] ?? 0),
+        'role_name' => $roleName,
         'profile_picture' => !empty($user['profile_picture']) 
             ? '/serve_file.php?path=' . urlencode(ltrim($user['profile_picture'], '/'))
             : 'https://ui-avatars.com/api/?name=' . urlencode(trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')) ?: $user['username']) . '&background=0A4D3E&color=FFFFFF&bold=true&format=png',

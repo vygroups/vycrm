@@ -20,6 +20,16 @@ try {
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+// Support raw JSON body for API / Mobile clients
+$rawBody = file_get_contents('php://input');
+if (!empty($rawBody)) {
+    $decodedBody = json_decode($rawBody, true);
+    if (is_array($decodedBody)) {
+        $_POST = array_merge($decodedBody, $_POST);
+    }
+}
+
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 // Ensure columns exist helper
@@ -49,8 +59,8 @@ try {
     if ($method == 'POST') {
         if ($action == 'apply') {
             $leave_type = trim($_POST['leave_type'] ?? 'Casual Leave');
-            $from_date = trim($_POST['from_date'] ?? '');
-            $to_date = trim($_POST['to_date'] ?? '');
+            $from_date = trim($_POST['from_date'] ?? $_POST['date'] ?? '');
+            $to_date = trim($_POST['to_date'] ?? $_POST['date'] ?? '');
             $reason = trim($_POST['reason'] ?? '');
 
             if (empty($from_date) || empty($to_date)) {
@@ -95,6 +105,11 @@ try {
                     if ($cidInt > 0 && !in_array($cidInt, $to_array) && $cidInt !== $user_id) {
                         $cc_array[] = $cidInt;
                     }
+                }
+            } else if (is_numeric($cc_user_ids_raw)) {
+                $cInt = (int)$cc_user_ids_raw;
+                if ($cInt > 0 && !in_array($cInt, $to_array) && $cInt !== $user_id) {
+                    $cc_array[] = $cInt;
                 }
             } else if (is_string($cc_user_ids_raw) && !empty($cc_user_ids_raw)) {
                 $decoded = json_decode($cc_user_ids_raw, true);
@@ -265,34 +280,42 @@ try {
 
         $leaves = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Pre-fetch all user display names once for fast & safe mapping
+        $uStmt = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users");
+        $uMap = [];
+        if ($uStmt) {
+            while ($ur = $uStmt->fetch(PDO::FETCH_ASSOC)) {
+                $fn = trim(($ur['first_name'] ?? '') . ' ' . ($ur['last_name'] ?? ''));
+                $uMap[(int)$ur['id']] = $fn !== '' ? $fn : ($ur['username'] ?? 'User #' . $ur['id']);
+            }
+        }
+
         // Enhance TO & CC user names for each leave
         foreach ($leaves as &$l) {
-            $to_ids = json_decode($l['to_user_ids'] ?: '[]', true);
+            $to_ids = is_array($l['to_user_ids'] ?? null) ? $l['to_user_ids'] : json_decode($l['to_user_ids'] ?: '[]', true);
             if (empty($to_ids) && !empty($l['to_user_id'])) {
                 $to_ids = [(int)$l['to_user_id']];
             }
+            if (!is_array($to_ids)) $to_ids = [];
+
             $to_names = [];
-            if (!empty($to_ids) && is_array($to_ids)) {
-                $inTo = implode(',', array_map('intval', $to_ids));
-                $toStmt = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users WHERE id IN ($inTo)");
-                $toUsers = $toStmt->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($toUsers as $tu) {
-                    $fn = trim(($tu['first_name'] ?? '') . ' ' . ($tu['last_name'] ?? ''));
-                    $to_names[] = $fn !== '' ? $fn : $tu['username'];
+            foreach ($to_ids as $tid) {
+                $tidInt = (int)$tid;
+                if ($tidInt > 0 && isset($uMap[$tidInt])) {
+                    $to_names[] = $uMap[$tidInt];
                 }
             }
             $l['to_user_names'] = $to_names;
             $l['to_display_name'] = !empty($to_names) ? implode(', ', $to_names) : 'Not specified';
 
-            $cc_ids = json_decode($l['cc_user_ids'] ?: '[]', true);
+            $cc_ids = is_array($l['cc_user_ids'] ?? null) ? $l['cc_user_ids'] : json_decode($l['cc_user_ids'] ?: '[]', true);
+            if (!is_array($cc_ids)) $cc_ids = [];
+
             $cc_names = [];
-            if (!empty($cc_ids) && is_array($cc_ids)) {
-                $inCc = implode(',', array_map('intval', $cc_ids));
-                $ccStmt = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users WHERE id IN ($inCc)");
-                $ccUsers = $ccStmt->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($ccUsers as $cu) {
-                    $fn = trim(($cu['first_name'] ?? '') . ' ' . ($cu['last_name'] ?? ''));
-                    $cc_names[] = $fn !== '' ? $fn : $cu['username'];
+            foreach ($cc_ids as $cid) {
+                $cidInt = (int)$cid;
+                if ($cidInt > 0 && isset($uMap[$cidInt])) {
+                    $cc_names[] = $uMap[$cidInt];
                 }
             }
             $l['cc_user_names'] = $cc_names;

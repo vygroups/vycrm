@@ -67,41 +67,56 @@ try {
         $body = "Hello {$user['first_name']},<br><br>Your OTP to reset your password is: <b>$otp</b><br>This OTP is valid for 15 minutes.<br><br>If you did not request this, please ignore this email.";
         
         // Check for SMTP config
-        $smtpStmt = $tenantConn->prepare("SELECT * FROM {$tenantPrefix}communication_configs WHERE type = 'smtp' ORDER BY id ASC LIMIT 1");
+        $smtpStmt = $tenantConn->prepare("SELECT * FROM {$tenantPrefix}communication_configs WHERE type = 'smtp' ORDER BY is_default DESC, id ASC LIMIT 1");
         $smtpStmt->execute();
         $smtpConfig = $smtpStmt->fetch(PDO::FETCH_ASSOC);
         
         $emailSent = false;
+        $lastError = '';
         if ($smtpConfig) {
-            $conf = json_decode($smtpConfig['config_json'], true);
-            if ($conf) {
-                $emailSent = dm_send_smtp_email(
-                    $conf['smtp_host'] ?? '',
-                    (int)($conf['smtp_port'] ?? 587),
-                    $conf['smtp_user'] ?? '',
-                    $conf['smtp_pass'] ?? '',
-                    $conf['smtp_from_email'] ?? $conf['smtp_user'],
-                    $conf['smtp_from_name'] ?? $company['name'],
-                    $toEmail,
-                    $subject,
-                    $body,
-                    $conf['smtp_encryption'] ?? 'tls'
-                );
+            try {
+                $rawConf = $smtpConfig['config_data'] ?? $smtpConfig['config_json'] ?? null;
+                $conf = is_array($rawConf) ? $rawConf : json_decode((string)$rawConf, true);
+                if ($conf && is_array($conf)) {
+                    $emailSent = dm_send_smtp_email(
+                        $conf['smtp_host'] ?? $conf['host'] ?? '',
+                        (int)($conf['smtp_port'] ?? $conf['port'] ?? 587),
+                        $conf['smtp_user'] ?? $conf['user'] ?? $conf['username'] ?? '',
+                        $conf['smtp_pass'] ?? $conf['pass'] ?? $conf['password'] ?? '',
+                        $conf['smtp_from_email'] ?? $conf['from_email'] ?? $conf['smtp_user'] ?? $conf['user'] ?? '',
+                        $conf['smtp_from_name'] ?? $conf['from_name'] ?? $company['name'] ?? 'VY CRM',
+                        $toEmail,
+                        $subject,
+                        $body,
+                        $conf['smtp_encryption'] ?? $conf['encryption'] ?? 'tls'
+                    );
+                }
+            } catch (Throwable $e) {
+                $lastError = $e->getMessage();
             }
         }
         
         if (!$emailSent) {
             // Fallback to PHP mail()
+            $fromHost = $_SERVER['HTTP_HOST'] ?? 'vycrm.vygroups.com';
             $headers = "MIME-Version: 1.0\r\n";
             $headers .= "Content-type: text/html; charset=utf-8\r\n";
-            $headers .= "From: no-reply@{$_SERVER['HTTP_HOST']}\r\n";
+            $headers .= "From: no-reply@{$fromHost}\r\n";
             $emailSent = @mail($toEmail, $subject, $body, $headers);
         }
         
         if ($emailSent) {
             echo json_encode(['success' => true, 'message' => 'OTP Sent']);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Failed to send OTP email.']);
+            $failMsg = 'Failed to send OTP email.';
+            if ($lastError) {
+                if (strpos($lastError, '535') !== false || strpos($lastError, 'BadCredentials') !== false) {
+                    $failMsg = 'SMTP Error: Gmail rejected the password. Please create and use a 16-character Google App Password (not your personal password).';
+                } else {
+                    $failMsg = 'SMTP Error: ' . $lastError;
+                }
+            }
+            echo json_encode(['success' => false, 'message' => $failMsg]);
         }
         exit;
     }

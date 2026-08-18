@@ -20,6 +20,16 @@ try {
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+// Support raw JSON body for API / Mobile clients
+$rawBody = file_get_contents('php://input');
+if (!empty($rawBody)) {
+    $decodedBody = json_decode($rawBody, true);
+    if (is_array($decodedBody)) {
+        $_POST = array_merge($decodedBody, $_POST);
+    }
+}
+
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 // Ensure columns exist helper
@@ -28,6 +38,8 @@ function ensure_permission_workflow_cols($conn, $prefix) {
         "to_user_id INT DEFAULT NULL",
         "to_user_ids JSON DEFAULT NULL",
         "cc_user_ids JSON DEFAULT NULL",
+        "from_time VARCHAR(20) DEFAULT NULL",
+        "to_time VARCHAR(20) DEFAULT NULL",
         "to_status VARCHAR(50) DEFAULT 'pending'",
         "cc_status VARCHAR(50) DEFAULT 'pending'",
         "approved_by INT DEFAULT NULL",
@@ -48,8 +60,10 @@ ensure_permission_workflow_cols($conn, $prefix);
 try {
     if ($method == 'POST') {
         if ($action == 'apply') {
-            $date = trim($_POST['date'] ?? '');
-            $time_window = trim($_POST['time_window'] ?? '');
+            $date = trim($_POST['date'] ?? $_POST['from_date'] ?? '');
+            $from_time = trim($_POST['from_time'] ?? '');
+            $to_time = trim($_POST['to_time'] ?? '');
+            $time_window = trim($_POST['time_window'] ?? $_POST['leave_type'] ?? '');
             $duration = trim($_POST['duration'] ?? '');
             $reason = trim($_POST['reason'] ?? '');
 
@@ -57,6 +71,34 @@ try {
                 echo json_encode(['success' => false, 'message' => 'Date is required.']);
                 exit;
             }
+
+            // Calculate formatted time window and duration if from_time and to_time are given
+            if (!empty($from_time) && !empty($to_time)) {
+                $from_ts = strtotime($from_time);
+                $to_ts = strtotime($to_time);
+                if ($from_ts && $to_ts) {
+                    $formattedFrom = date("h:i A", $from_ts);
+                    $formattedTo = date("h:i A", $to_ts);
+                    if (empty($time_window) || $time_window === 'Short Permission (1-2 hrs)') {
+                        $time_window = "{$formattedFrom} - {$formattedTo}";
+                    }
+                    if (empty($duration) || $duration === '1 Hour') {
+                        $diffMins = round(($to_ts - $from_ts) / 60);
+                        if ($diffMins < 0) $diffMins += 24 * 60;
+                        $hrs = floor($diffMins / 60);
+                        $mins = $diffMins % 60;
+                        if ($hrs > 0 && $mins > 0) {
+                            $duration = "{$hrs} hr {$mins} mins";
+                        } elseif ($hrs > 0) {
+                            $duration = $hrs == 1 ? "1 Hour" : "{$hrs} Hours";
+                        } else {
+                            $duration = "{$mins} Mins";
+                        }
+                    }
+                }
+            }
+            if (empty($duration)) $duration = '1 Hour';
+            if (empty($time_window)) $time_window = 'Permission';
 
             // Extract TO user IDs
             $to_user_ids_raw = $_POST['to_user_ids'] ?? $_POST['to_user_id'] ?? [];
@@ -96,6 +138,11 @@ try {
                         $cc_array[] = $cidInt;
                     }
                 }
+            } else if (is_numeric($cc_user_ids_raw)) {
+                $cInt = (int)$cc_user_ids_raw;
+                if ($cInt > 0 && !in_array($cInt, $to_array) && $cInt !== $user_id) {
+                    $cc_array[] = $cInt;
+                }
             } else if (is_string($cc_user_ids_raw) && !empty($cc_user_ids_raw)) {
                 $decoded = json_decode($cc_user_ids_raw, true);
                 if (is_array($decoded)) {
@@ -110,8 +157,8 @@ try {
             $cc_json = json_encode(array_values(array_unique($cc_array)));
 
             $primaryToId = $to_array[0];
-            $stmt = $conn->prepare("INSERT INTO {$prefix}permissions (user_id, to_user_id, to_user_ids, cc_user_ids, date, time_window, duration, reason, status, to_status, cc_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'pending')");
-            $stmt->execute([$user_id, $primaryToId, $to_json, $cc_json, $date, $time_window, $duration, $reason]);
+            $stmt = $conn->prepare("INSERT INTO {$prefix}permissions (user_id, to_user_id, to_user_ids, cc_user_ids, date, from_time, to_time, time_window, duration, reason, status, to_status, cc_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', 'pending')");
+            $stmt->execute([$user_id, $primaryToId, $to_json, $cc_json, $date, $from_time, $to_time, $time_window, $duration, $reason]);
 
             echo json_encode(['success' => true, 'message' => 'Permission request submitted successfully.']);
         } elseif ($action == 'update_status') {
@@ -265,37 +312,48 @@ try {
 
         $perms = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Pre-fetch all user display names once for fast & safe mapping
+        $uStmt = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users");
+        $uMap = [];
+        if ($uStmt) {
+            while ($ur = $uStmt->fetch(PDO::FETCH_ASSOC)) {
+                $fn = trim(($ur['first_name'] ?? '') . ' ' . ($ur['last_name'] ?? ''));
+                $uMap[(int)$ur['id']] = $fn !== '' ? $fn : ($ur['username'] ?? 'User #' . $ur['id']);
+            }
+        }
+
         // Enhance TO & CC user names for each permission
         foreach ($perms as &$p) {
-            $to_ids = json_decode($p['to_user_ids'] ?: '[]', true);
+            $to_ids = is_array($p['to_user_ids'] ?? null) ? $p['to_user_ids'] : json_decode($p['to_user_ids'] ?: '[]', true);
             if (empty($to_ids) && !empty($p['to_user_id'])) {
                 $to_ids = [(int)$p['to_user_id']];
             }
+            if (!is_array($to_ids)) $to_ids = [];
+
             $to_names = [];
-            if (!empty($to_ids) && is_array($to_ids)) {
-                $inTo = implode(',', array_map('intval', $to_ids));
-                $toStmt = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users WHERE id IN ($inTo)");
-                $toUsers = $toStmt->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($toUsers as $tu) {
-                    $fn = trim(($tu['first_name'] ?? '') . ' ' . ($tu['last_name'] ?? ''));
-                    $to_names[] = $fn !== '' ? $fn : $tu['username'];
+            foreach ($to_ids as $tid) {
+                $tidInt = (int)$tid;
+                if ($tidInt > 0 && isset($uMap[$tidInt])) {
+                    $to_names[] = $uMap[$tidInt];
                 }
             }
             $p['to_user_names'] = $to_names;
             $p['to_display_name'] = !empty($to_names) ? implode(', ', $to_names) : 'Not specified';
 
-            $cc_ids = json_decode($p['cc_user_ids'] ?: '[]', true);
+            $cc_ids = is_array($p['cc_user_ids'] ?? null) ? $p['cc_user_ids'] : json_decode($p['cc_user_ids'] ?: '[]', true);
+            if (!is_array($cc_ids)) $cc_ids = [];
+
             $cc_names = [];
-            if (!empty($cc_ids) && is_array($cc_ids)) {
-                $inCc = implode(',', array_map('intval', $cc_ids));
-                $ccStmt = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users WHERE id IN ($inCc)");
-                $ccUsers = $ccStmt->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($ccUsers as $cu) {
-                    $fn = trim(($cu['first_name'] ?? '') . ' ' . ($cu['last_name'] ?? ''));
-                    $cc_names[] = $fn !== '' ? $fn : $cu['username'];
+            foreach ($cc_ids as $cid) {
+                $cidInt = (int)$cid;
+                if ($cidInt > 0 && isset($uMap[$cidInt])) {
+                    $cc_names[] = $uMap[$cidInt];
                 }
             }
             $p['cc_user_names'] = $cc_names;
+            $p['leave_type'] = !empty($p['time_window']) ? $p['time_window'] : 'Permission';
+            $p['from_date'] = $p['date'] ?? '';
+            $p['to_date'] = $p['date'] ?? '';
         }
         unset($p);
 

@@ -19,6 +19,7 @@ $initialSelectedUserId = (string) $currentUserId;
 
 $users = [];
 $approverUsers = [];
+$allUsers = [];
 
 // Always fetch approver users (Equal & Upper Roles + Admins)
 try {
@@ -42,6 +43,16 @@ try {
         $approverUsers = $appStmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } catch (Exception $e) {
+}
+
+// Fetch all users for CC notification selection
+try {
+    $allStmt = $conn->query("SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name FROM {$prefix}users u LEFT JOIN {$prefix}roles r ON r.id = u.role_id ORDER BY u.username ASC");
+    if ($allStmt) {
+        $allUsers = $allStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Exception $e) {
+    $allUsers = $approverUsers;
 }
 
 if ($showMemberFilter) {
@@ -154,8 +165,15 @@ if ($showMemberFilter) {
     </script>
     <style>
         .ts-wrapper { width: 100% !important; margin-bottom: 0 !important; }
+        .ts-wrapper.form-control {
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
         .ts-control {
-            border-radius: 12px !important;
+            border-radius: 10px !important;
             border: 1px solid var(--border) !important;
             padding: 6px 12px !important;
             font-size: 14px !important;
@@ -166,6 +184,7 @@ if ($showMemberFilter) {
             align-items: center !important;
             gap: 4px !important;
             box-shadow: none !important;
+            box-sizing: border-box !important;
         }
         .ts-control.focus {
             border-color: var(--primary) !important;
@@ -189,8 +208,12 @@ if ($showMemberFilter) {
             background: rgba(123,94,240,0.08) !important;
             color: var(--primary) !important;
         }
+        .ts-control .item, .ts-control .item * {
+            text-shadow: none !important;
+            box-shadow: none !important;
+        }
         .ts-control .item {
-            background: rgba(123,94,240,0.12) !important;
+            background: rgba(123,94,240,0.1) !important;
             color: var(--primary) !important;
             border-radius: 8px !important;
             padding: 4px 10px !important;
@@ -199,8 +222,10 @@ if ($showMemberFilter) {
             display: inline-flex !important;
             align-items: center !important;
             gap: 4px !important;
-            border: 1px solid rgba(123,94,240,0.2) !important;
+            border: 1px solid rgba(123,94,240,0.25) !important;
             margin: 2px 4px 2px 0 !important;
+            text-shadow: none !important;
+            box-shadow: none !important;
         }
         .ts-control .item .remove {
             border-left: 1px solid rgba(123,94,240,0.3) !important;
@@ -211,6 +236,8 @@ if ($showMemberFilter) {
             font-weight: 700 !important;
             font-size: 13px !important;
             opacity: 0.8 !important;
+            text-shadow: none !important;
+            box-shadow: none !important;
         }
         .ts-control .item .remove:hover {
             opacity: 1 !important;
@@ -285,22 +312,27 @@ if ($showMemberFilter) {
 
         .tabs-header {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
             border-bottom: 2px solid var(--border);
-            padding-bottom: 10px;
+            padding-bottom: 8px;
+            gap: 10px;
+            flex-wrap: nowrap;
         }
 
         .tab-btn {
             background: transparent;
             border: none;
-            padding: 10px 20px;
-            font-size: 14px;
+            padding: 6px 12px;
+            font-size: 12px;
             font-weight: 700;
             color: var(--text-muted);
             cursor: pointer;
             transition: var(--transition);
             position: relative;
+            white-space: nowrap;
+            letter-spacing: 0.3px;
         }
 
         .tab-btn:hover {
@@ -314,12 +346,12 @@ if ($showMemberFilter) {
         .tab-btn.active::after {
             content: '';
             position: absolute;
-            bottom: -12px;
+            bottom: -10px;
             left: 0;
             width: 100%;
-            height: 4px;
+            height: 3px;
             background: var(--primary);
-            border-radius: 4px 4px 0 0;
+            border-radius: 3px 3px 0 0;
         }
 
         .tab-content {
@@ -467,44 +499,40 @@ if ($showMemberFilter) {
                     </button>
                 </div>
 
-                <div class="table-panel" style="padding:20px;">
-                    <div class="tabs-header"
-                        style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; border-bottom: 2px solid var(--border); padding-bottom: 10px; margin-bottom: 20px;">
-                        <div style="display:flex; gap:10px;">
-                            <button class="tab-btn active" onclick="switchTab(event,'history')">ATTENDANCE
-                                HISTORY</button>
+                <div class="table-panel" style="padding:16px 20px;">
+                    <div class="tabs-header">
+                        <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+                            <button class="tab-btn active" onclick="switchTab(event,'history')">ATTENDANCE HISTORY</button>
                             <button class="tab-btn" onclick="switchTab(event,'leaves')">LEAVE REQUESTS</button>
                             <button class="tab-btn" onclick="switchTab(event,'permissions')">PERMISSIONS</button>
                         </div>
-                        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:12px;">
-                            <div style="display:flex; align-items:center; gap:6px;">
-                                <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">FROM:</span>
-                                <input type="date" id="filterStartDate" class="form-control" value="<?= date('Y-m-01') ?>" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
+                        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <span style="font-size:11px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">FROM:</span>
+                                <input type="date" id="filterStartDate" class="form-control" value="<?= date('Y-m-01') ?>" onchange="applyFilters()" style="width:115px; padding:3px 6px; font-size:12px; border-radius:6px; border:1px solid var(--border); background:#fff; height:28px; box-sizing:border-box;">
                             </div>
-                            <div style="display:flex; align-items:center; gap:6px;">
-                                <span style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">TO:</span>
-                                <input type="date" id="filterEndDate" class="form-control" value="<?= date('Y-m-d') ?>" onchange="applyFilters()" style="width:130px; padding:4px 8px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; height:32px; box-sizing:border-box;">
-                                
-                                <?php if ($showMemberFilter): ?>
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <span
-                                        style="font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">MEMBER:</span>
-                                    <select class="form-control" id="memberFilter" autocomplete="off" onchange="filterMember(this.value)"
-                                        style="width:180px; padding:4px 10px; font-size:13px; border-radius:8px; border:1.5px solid var(--border); background:#fff; cursor:pointer; height:32px; box-sizing:border-box;">
-                                        <option value="all">All Team Members</option>
-                                        <?php foreach ($users as $u): 
-                                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
-                                            $disp = $fullName !== '' ? $fullName : $u['username'];
-                                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
-                                            $selected = ((int)$u['id'] === $currentUserId) ? 'selected' : '';
-                                        ?>
-                                            <option value="<?= $u['id'] ?>" <?= $selected ?>>
-                                                <?= htmlspecialchars($disp) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                                <?php endif; ?>
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <span style="font-size:11px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">TO:</span>
+                                <input type="date" id="filterEndDate" class="form-control" value="<?= date('Y-m-d') ?>" onchange="applyFilters()" style="width:115px; padding:3px 6px; font-size:12px; border-radius:6px; border:1px solid var(--border); background:#fff; height:28px; box-sizing:border-box;">
                             </div>
+                            <?php if ($showMemberFilter): ?>
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <span style="font-size:11px; font-weight:700; color:var(--text-muted); letter-spacing:0.5px;">MEMBER:</span>
+                                <select class="form-control" id="memberFilter" autocomplete="off" onchange="filterMember(this.value)"
+                                    style="width:145px; max-width:160px; padding:3px 8px; font-size:12px; border-radius:6px; border:1px solid var(--border); background:#fff; cursor:pointer; height:28px; box-sizing:border-box;">
+                                    <option value="all">All Team Members</option>
+                                    <?php foreach ($users as $u): 
+                                        $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                                        $disp = $fullName !== '' ? $fullName : $u['username'];
+                                        if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                                        $selected = ((int)$u['id'] === $currentUserId) ? 'selected' : '';
+                                    ?>
+                                        <option value="<?= $u['id'] ?>" <?= $selected ?>>
+                                            <?= htmlspecialchars($disp) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -588,24 +616,66 @@ if ($showMemberFilter) {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, .5);
+            background: rgba(0, 0, 0, .55);
             z-index: 1000;
             align-items: center;
             justify-content: center;
+            padding: 24px 16px;
+            box-sizing: border-box;
         }
 
         .modal-content {
             background: #fff;
-            padding: 30px;
-            border-radius: 20px;
+            padding: 0;
+            border-radius: 18px;
             width: 100%;
-            max-width: 450px;
+            max-width: 480px;
+            max-height: calc(100vh - 48px);
             box-shadow: var(--shadow-lg);
             border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            margin: auto;
+        }
+
+        .modal-header {
+            padding: 18px 22px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            background: #fff;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .modal-body {
+            padding: 18px 22px;
+            overflow-y: auto;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
+        .modal-footer {
+            padding: 14px 22px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+            background: #fff;
         }
 
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 14px;
         }
 
         .form-label {
@@ -613,76 +683,81 @@ if ($showMemberFilter) {
             margin-bottom: 5px;
             font-weight: 600;
             color: var(--text-main);
-            font-size: 14px;
+            font-size: 13.5px;
         }
 
         .form-control {
             width: 100%;
-            padding: 12px;
+            padding: 10px 12px;
             border: 1px solid var(--border);
             border-radius: 10px;
             font-size: 14px;
             background: #f9f9f9;
+            box-sizing: border-box;
         }
     </style>
 
     <div id="leaveModal" class="modal">
         <div class="modal-content">
-            <h3 class="mb-4">Request Leave</h3>
-            <form id="leaveForm">
+            <div class="modal-header">
+                <h3>Request Leave</h3>
+                <button type="button" onclick="closeModal('leaveModal')" style="background:none;border:none;font-size:18px;color:var(--text-muted);cursor:pointer;padding:4px;line-height:1;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="leaveForm" style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0; margin:0;">
                 <input type="hidden" name="action" value="apply">
-                <div class="form-group">
-                    <label class="form-label">Leave Type</label>
-                    <select class="form-control" name="leave_type" required>
-                        <option value="Casual Leave">Casual Leave</option>
-                        <option value="Sick Leave">Sick Leave</option>
-                        <option value="Earned Leave">Earned Leave</option>
-                    </select>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Leave Type</label>
+                        <select class="form-control" name="leave_type" required>
+                            <option value="Casual Leave">Casual Leave</option>
+                            <option value="Sick Leave">Sick Leave</option>
+                            <option value="Earned Leave">Earned Leave</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">TO (Approvers) <span style="color:#ef4444;">*</span></label>
+                        <select multiple class="tom-multi-select" name="to_user_ids[]" placeholder="Search and select TO approvers..." required style="width:100%;">
+                            <?php foreach ($approverUsers as $u):
+                                if ((int)$u['id'] === $currentUserId) continue;
+                                $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                                $disp = $fullName !== '' ? $fullName : $u['username'];
+                                if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                            ?>
+                                <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">CC (Notify / Secondary Approval - Optional)</label>
+                        <select multiple class="tom-multi-select" name="cc_user_ids[]" placeholder="Search and select CC members..." style="width:100%;">
+                            <?php foreach ($allUsers as $u):
+                                if ((int)$u['id'] === $currentUserId) continue;
+                                $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                                $disp = $fullName !== '' ? $fullName : $u['username'];
+                                if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                            ?>
+                                <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">From Date</label>
+                        <input type="date" class="form-control" name="from_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">To Date</label>
+                        <input type="date" class="form-control" name="to_date" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">Reason</label>
+                        <textarea class="form-control" name="reason" rows="3" required placeholder="State your reason for leave..."></textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">TO (Approvers) <span style="color:#ef4444;">*</span></label>
-                    <select multiple class="form-control tom-multi-select" name="to_user_ids[]" placeholder="Search and select TO approvers..." required style="width:100%;">
-                        <?php foreach ($approverUsers as $u):
-                            if ((int)$u['id'] === $currentUserId) continue;
-                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
-                            $disp = $fullName !== '' ? $fullName : $u['username'];
-                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
-                        ?>
-                            <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">CC (Notify / Secondary Approval - Optional)</label>
-                    <select multiple class="form-control tom-multi-select" name="cc_user_ids[]" placeholder="Search and select CC members..." style="width:100%;">
-                        <?php foreach ($approverUsers as $u):
-                            if ((int)$u['id'] === $currentUserId) continue;
-                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
-                            $disp = $fullName !== '' ? $fullName : $u['username'];
-                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
-                        ?>
-                            <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">From Date</label>
-                    <input type="date" class="form-control" name="from_date" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">To Date</label>
-                    <input type="date" class="form-control" name="to_date" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Reason</label>
-                    <textarea class="form-control" name="reason" rows="3" required></textarea>
-                </div>
-                <div class="flex justify-end mt-4" style="gap: 15px;">
+                <div class="modal-footer">
                     <button type="button" class="btn"
-                        style="width:auto;padding:10px 20px;background:#e5e7eb;color:#374151;border:none;border-radius:10px;font-weight:600;cursor:pointer;"
+                        style="width:auto;padding:8px 18px;background:#e5e7eb;color:#374151;border:none;border-radius:9px;font-weight:600;cursor:pointer;font-size:13.5px;"
                         onclick="closeModal('leaveModal')">Cancel</button>
-                    <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Submit
-                        Application</button>
+                    <button type="submit" class="btn-primary" style="width:auto;padding:8px 20px;border-radius:9px;font-size:13.5px;">Submit Application</button>
                 </div>
             </form>
         </div>
@@ -690,57 +765,68 @@ if ($showMemberFilter) {
 
     <div id="permissionModal" class="modal">
         <div class="modal-content">
-            <h3 class="mb-4">Request Permission</h3>
-            <form id="permissionForm">
+            <div class="modal-header">
+                <h3>Request Permission</h3>
+                <button type="button" onclick="closeModal('permissionModal')" style="background:none;border:none;font-size:18px;color:var(--text-muted);cursor:pointer;padding:4px;line-height:1;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="permissionForm" style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0; margin:0;">
                 <input type="hidden" name="action" value="apply">
-                <div class="form-group">
-                    <label class="form-label">TO (Approvers) <span style="color:#ef4444;">*</span></label>
-                    <select multiple class="form-control tom-multi-select" name="to_user_ids[]" placeholder="Search and select TO approvers..." required style="width:100%;">
-                        <?php foreach ($approverUsers as $u):
-                            if ((int)$u['id'] === $currentUserId) continue;
-                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
-                            $disp = $fullName !== '' ? $fullName : $u['username'];
-                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
-                        ?>
-                            <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">TO (Approvers) <span style="color:#ef4444;">*</span></label>
+                        <select multiple class="tom-multi-select" name="to_user_ids[]" placeholder="Search and select TO approvers..." required style="width:100%;">
+                            <?php foreach ($approverUsers as $u):
+                                if ((int)$u['id'] === $currentUserId) continue;
+                                $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                                $disp = $fullName !== '' ? $fullName : $u['username'];
+                                if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                            ?>
+                                <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">CC (Notify / Secondary Approval - Optional)</label>
+                        <select multiple class="tom-multi-select" name="cc_user_ids[]" placeholder="Search and select CC members..." style="width:100%;">
+                            <?php foreach ($allUsers as $u):
+                                if ((int)$u['id'] === $currentUserId) continue;
+                                $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+                                $disp = $fullName !== '' ? $fullName : $u['username'];
+                                if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
+                            ?>
+                                <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Date <span style="color:#ef4444;">*</span></label>
+                        <input type="date" class="form-control" name="date" required value="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <div class="form-group" style="flex:1;">
+                            <label class="form-label">From Time <span style="color:#ef4444;">*</span></label>
+                            <input type="time" class="form-control" name="from_time" id="permFromTime" value="09:00" required onchange="calcPermDuration()">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label class="form-label">To Time <span style="color:#ef4444;">*</span></label>
+                            <input type="time" class="form-control" name="to_time" id="permToTime" value="10:00" required onchange="calcPermDuration()">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Calculated Duration</label>
+                        <input type="text" class="form-control" name="duration" id="permDuration" value="1 Hour" readonly style="background:#f1f5f9; cursor:not-allowed;">
+                        <input type="hidden" name="time_window" id="permTimeWindow" value="09:00 AM - 10:00 AM">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">Reason <span style="color:#ef4444;">*</span></label>
+                        <textarea class="form-control" name="reason" rows="3" required placeholder="State your reason for permission..."></textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">CC (Notify / Secondary Approval - Optional)</label>
-                    <select multiple class="form-control tom-multi-select" name="cc_user_ids[]" placeholder="Search and select CC members..." style="width:100%;">
-                        <?php foreach ($approverUsers as $u):
-                            if ((int)$u['id'] === $currentUserId) continue;
-                            $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
-                            $disp = $fullName !== '' ? $fullName : $u['username'];
-                            if (!empty($u['role_name'])) $disp .= ' (' . $u['role_name'] . ')';
-                        ?>
-                            <option value="<?= $u['id'] ?>"><?= htmlspecialchars($disp) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Date</label>
-                    <input type="date" class="form-control" name="date" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Time Window (e.g., 2 PM - 4 PM)</label>
-                    <input type="text" class="form-control" name="time_window" placeholder="2:00 PM - 3:00 PM" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Duration</label>
-                    <input type="text" class="form-control" name="duration" placeholder="1 Hour" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Reason</label>
-                    <textarea class="form-control" name="reason" rows="3" required></textarea>
-                </div>
-                <div class="flex justify-end mt-4" style="gap: 15px;">
+                <div class="modal-footer">
                     <button type="button" class="btn"
-                        style="width:auto;padding:10px 20px;background:#e5e7eb;color:#374151;border:none;border-radius:10px;font-weight:600;cursor:pointer;"
+                        style="width:auto;padding:8px 18px;background:#e5e7eb;color:#374151;border:none;border-radius:9px;font-weight:600;cursor:pointer;font-size:13.5px;"
                         onclick="closeModal('permissionModal')">Cancel</button>
-                    <button type="submit" class="btn-primary" style="width:auto;padding:10px 20px;">Submit
-                        Request</button>
+                    <button type="submit" class="btn-primary" style="width:auto;padding:8px 20px;border-radius:9px;font-size:13.5px;">Submit Request</button>
                 </div>
             </form>
         </div>
@@ -762,6 +848,39 @@ if ($showMemberFilter) {
         const PUNCH_KEY = 'vycrm_punch_start';
         const BREAK_KEY = 'vycrm_break_start';
         let selectedUserId = <?= is_numeric($initialSelectedUserId) ? (int)$initialSelectedUserId : json_encode($initialSelectedUserId) ?>;
+
+        function calcPermDuration() {
+            const f = document.getElementById('permFromTime')?.value;
+            const t = document.getElementById('permToTime')?.value;
+            const dInput = document.getElementById('permDuration');
+            const twInput = document.getElementById('permTimeWindow');
+            if (!f || !t) return;
+
+            const [fH, fM] = f.split(':').map(Number);
+            const [tH, tM] = t.split(':').map(Number);
+            const fTotal = fH * 60 + fM;
+            const tTotal = tH * 60 + tM;
+
+            let diff = tTotal - fTotal;
+            if (diff < 0) diff += 24 * 60;
+
+            const hrs = Math.floor(diff / 60);
+            const mins = diff % 60;
+            let durText = '';
+            if (hrs > 0 && mins > 0) durText = `${hrs} hr ${mins} mins`;
+            else if (hrs > 0) durText = hrs === 1 ? '1 Hour' : `${hrs} Hours`;
+            else durText = `${mins} Mins`;
+
+            if (dInput) dInput.value = durText;
+
+            const fmtTime = (h, m) => {
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                const h12 = h % 12 || 12;
+                const mPad = m < 10 ? '0' + m : m;
+                return `${h12}:${mPad} ${ampm}`;
+            };
+            if (twInput) twInput.value = `${fmtTime(fH, fM)} - ${fmtTime(tH, tM)}`;
+        }
 
         function escapeHtml(str) {
             if (!str) return '';
