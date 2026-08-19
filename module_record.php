@@ -5,6 +5,7 @@ require_once 'includes/brand.php';
 require_once 'includes/dynamic_modules.php';
 require_once 'includes/upload_paths.php';
 
+$v = time();
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
 $prefix = $context['prefix'];
@@ -141,6 +142,50 @@ foreach ($module['blocks'] as $block) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <style>
+        html, body {
+            height: 100% !important;
+            max-height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+        .app-wrapper {
+            height: 100vh !important;
+            height: 100dvh !important;
+            max-height: 100vh !important;
+            overflow: hidden !important;
+            display: flex !important;
+            width: 100% !important;
+        }
+        .sidebar {
+            height: 100% !important;
+            max-height: 100vh !important;
+        }
+        .main-content {
+            flex: 1 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+            height: 100% !important;
+            max-height: 100vh !important;
+            min-width: 0 !important;
+        }
+        .topbar {
+            flex-shrink: 0 !important;
+        }
+        .content-scroll {
+            flex: 1 !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            padding: 20px 40px 40px !important;
+            height: calc(100vh - 80px) !important;
+            max-height: calc(100vh - 80px) !important;
+        }
+        .mr-form-container {
+            max-width: 900px !important;
+            margin: 0 auto !important;
+            padding-bottom: 24px !important;
+        }
         .ts-wrapper { width: 100%; }
         .ts-control { border-radius: 12px; border: 1px solid var(--border); padding: 8px 16px; font-size: 14px; min-height: 44px; background: var(--surface); display: flex; align-items: center; box-shadow: none !important; }
         .ts-control.focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(123,94,240,0.2) !important; }
@@ -1862,6 +1907,10 @@ function escapeHtml(str) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    window.scrollTo(0, 0);
+});
 </script>
 </body>
 </html>
