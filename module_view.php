@@ -972,6 +972,61 @@ function togglePickerQuickCreate(show) {
     }
 }
 
+function resolveDynamicDefaultValue(defaultVal, fieldType = 'text') {
+    if (!defaultVal) return '';
+    const lower = defaultVal.toString().trim().toLowerCase();
+    
+    if (['date', 'datetime', 'time'].includes(fieldType)) {
+        const pad = n => String(n).padStart(2, '0');
+        const formatDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const formatTime = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        const formatDateTime = d => `${formatDate(d)} ${formatTime(d)}`;
+
+        let target = new Date();
+        if (['today', 'current_date', 'current_day'].includes(lower)) {
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['tomorrow', '+1_day', '+1 day'].includes(lower)) {
+            target.setDate(target.getDate() + 1);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['yesterday', '-1_day', '-1 day'].includes(lower)) {
+            target.setDate(target.getDate() - 1);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['+7_days', '+7 days', 'next_week'].includes(lower)) {
+            target.setDate(target.getDate() + 7);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['+14_days', '+14 days'].includes(lower)) {
+            target.setDate(target.getDate() + 14);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['+30_days', '+30 days', 'next_month'].includes(lower)) {
+            target.setDate(target.getDate() + 30);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['-7_days', '-7 days'].includes(lower)) {
+            target.setDate(target.getDate() - 7);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['-14_days', '-14 days'].includes(lower)) {
+            target.setDate(target.getDate() - 14);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['-30_days', '-30 days'].includes(lower)) {
+            target.setDate(target.getDate() - 30);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['now', 'current_time', 'current_datetime'].includes(lower)) {
+            if (fieldType === 'time') return formatTime(target);
+            if (fieldType === 'datetime') return formatDateTime(target);
+            return formatDate(target);
+        }
+    }
+    return defaultVal;
+}
+
 function renderPickerQcFields() {
     const grid = document.getElementById('rpQuickCreateFieldsGrid');
     if (!grid) return;
@@ -981,7 +1036,7 @@ function renderPickerQcFields() {
         const fid = field.id;
         const type = field.field_type;
         const label = field.label;
-        const val = field.default_value || '';
+        const val = resolveDynamicDefaultValue(field.default_value || '', type);
         const isRequired = !!field.is_required;
         const reqStar = isRequired ? '<span style="color:#ef4444;">*</span>' : '';
         const fullWidth = ['textarea', 'attachment', 'name', 'address'].includes(type);
@@ -2715,7 +2770,8 @@ async function handleImportSubmit(event) {
                     $defaultCountry = 'IN';
                     foreach ($quickCreateFields as $field): 
                         $fid = $field['id'];
-                        $val = $field['default_value'] ?? '';
+                        $rawDef = $field['default_value'] ?? '';
+                        $val = dm_resolve_default_value($rawDef, $field['field_type']);
                         $fullWidth = in_array($field['field_type'], ['textarea', 'attachment', 'name', 'address']);
                         $req = $field['is_required'] ? '<span class="required-star" style="color:#ef4444;">*</span>' : '';
                     ?>

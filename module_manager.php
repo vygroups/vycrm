@@ -95,6 +95,8 @@ try {
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
@@ -943,8 +945,31 @@ try {
                     </div>
                     <div class="form-group"><label class="form-label">Placeholder</label><input type="text"
                             id="fieldPlaceholder" class="form-control"></div>
-                    <div class="form-group"><label class="form-label">Default Value</label><input type="text"
-                            id="fieldDefault" class="form-control"></div>
+                    <div class="form-group">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                            <label class="form-label" style="margin:0;">Default Value</label>
+                            <div id="fieldDynamicPresetGroup" style="display:none; align-items:center; gap:4px;">
+                                <span style="font-size:11px; color:var(--text-muted);">Presets:</span>
+                                <select id="fieldPresetSelect" class="form-control" style="padding:2px 6px; font-size:12px; height:24px; width:auto; border-radius:6px;" onchange="applyDatePreset(this.value)">
+                                    <option value="">-- Pick Fixed Date / Time --</option>
+                                    <option value="today">Today (Current Date)</option>
+                                    <option value="tomorrow">Tomorrow (+1 Day)</option>
+                                    <option value="yesterday">Yesterday (-1 Day)</option>
+                                    <option value="+7_days">+7 Days (Next Week)</option>
+                                    <option value="+14_days">+14 Days</option>
+                                    <option value="+30_days">+30 Days (Next Month)</option>
+                                    <option value="-7_days">-7 Days</option>
+                                    <option value="-14_days">-14 Days</option>
+                                    <option value="-30_days">-30 Days</option>
+                                    <option value="now">Current Time (Now)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <input type="text" id="fieldDefault" class="form-control" oninput="updatePresetUiFromValue(this.value)">
+                        <div id="fieldPresetBadge" style="display:none; margin-top:4px; font-size:11px; font-weight:600; color:var(--primary);">
+                            <i class="fa-solid fa-bolt"></i> <span id="fieldPresetText">Dynamic preset active</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="mm-checkbox-row">
                     <label><input type="checkbox" id="fieldRequired"> Required</label>
@@ -1530,13 +1555,118 @@ try {
             document.getElementById('fieldOptionsList').innerHTML = '';
             if (editData && editData.options) editData.options.forEach(o => addOptionRow(o.label, o.value));
             onFieldTypeChange();
+            updatePresetUiFromValue(document.getElementById('fieldDefault').value);
             document.getElementById('addFieldModal').classList.add('show');
         }
         function editField(id, fieldData) { openFieldModal(fieldData.block_id, fieldData.module_id, fieldData); }
+        let defaultPickerInstance = null;
+
+        const DATE_PRESET_LABELS = {
+            'today': 'Dynamic: Automatically sets to Current Date (Today) when record is created',
+            'tomorrow': 'Dynamic: Automatically sets to Tomorrow (+1 Day) when record is created',
+            'yesterday': 'Dynamic: Automatically sets to Yesterday (-1 Day) when record is created',
+            '+7_days': 'Dynamic: Automatically sets to 7 Days Ahead when record is created',
+            '+14_days': 'Dynamic: Automatically sets to 14 Days Ahead when record is created',
+            '+30_days': 'Dynamic: Automatically sets to 30 Days Ahead when record is created',
+            '-7_days': 'Dynamic: Automatically sets to 7 Days Before when record is created',
+            '-14_days': 'Dynamic: Automatically sets to 14 Days Before when record is created',
+            '-30_days': 'Dynamic: Automatically sets to 30 Days Before when record is created',
+            'now': 'Dynamic: Automatically sets to Current Time / Timestamp when record is created',
+        };
+
+        function applyDatePreset(val) {
+            const defInput = document.getElementById('fieldDefault');
+            const badge = document.getElementById('fieldPresetBadge');
+            const badgeText = document.getElementById('fieldPresetText');
+            
+            if (val) {
+                if (defaultPickerInstance) {
+                    defaultPickerInstance.clear();
+                }
+                defInput.value = val;
+                badge.style.display = 'block';
+                badgeText.textContent = DATE_PRESET_LABELS[val] || `Dynamic: ${val}`;
+            } else {
+                defInput.value = '';
+                badge.style.display = 'none';
+            }
+        }
+
+        function updatePresetUiFromValue(val) {
+            const presetSelect = document.getElementById('fieldPresetSelect');
+            const badge = document.getElementById('fieldPresetBadge');
+            const badgeText = document.getElementById('fieldPresetText');
+            const lower = (val || '').toString().trim().toLowerCase();
+
+            if (presetSelect) {
+                presetSelect.value = DATE_PRESET_LABELS[lower] ? lower : '';
+            }
+            if (badge && badgeText) {
+                if (DATE_PRESET_LABELS[lower]) {
+                    badge.style.display = 'block';
+                    badgeText.textContent = DATE_PRESET_LABELS[lower];
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+
         function onFieldTypeChange() {
             const t = document.getElementById('fieldType').value;
             document.getElementById('fieldOptionsSection').style.display = (t === 'dropdown' || t === 'multi_picker' || t === 'radio_group') ? '' : 'none';
             document.getElementById('fieldApiConfig').style.display = t === 'api_call_picker' ? '' : 'none';
+
+            const presetGroup = document.getElementById('fieldDynamicPresetGroup');
+            const isDateOrTime = ['date', 'datetime', 'time'].includes(t);
+            presetGroup.style.display = isDateOrTime ? 'flex' : 'none';
+
+            const defInput = document.getElementById('fieldDefault');
+            if (defaultPickerInstance) {
+                defaultPickerInstance.destroy();
+                defaultPickerInstance = null;
+            }
+
+            if (t === 'date') {
+                defInput.placeholder = 'YYYY-MM-DD or select preset';
+                defaultPickerInstance = flatpickr(defInput, {
+                    dateFormat: 'Y-m-d',
+                    allowInput: true,
+                    onChange: function(selectedDates, dateStr) {
+                        if (dateStr) {
+                            updatePresetUiFromValue(dateStr);
+                        }
+                    }
+                });
+            } else if (t === 'time') {
+                defInput.placeholder = 'HH:MM or select preset';
+                defaultPickerInstance = flatpickr(defInput, {
+                    enableTime: true,
+                    noCalendar: true,
+                    dateFormat: 'H:i',
+                    allowInput: true,
+                    onChange: function(selectedDates, dateStr) {
+                        if (dateStr) {
+                            updatePresetUiFromValue(dateStr);
+                        }
+                    }
+                });
+            } else if (t === 'datetime') {
+                defInput.placeholder = 'YYYY-MM-DD HH:MM or select preset';
+                defaultPickerInstance = flatpickr(defInput, {
+                    enableTime: true,
+                    dateFormat: 'Y-m-d H:i',
+                    allowInput: true,
+                    onChange: function(selectedDates, dateStr) {
+                        if (dateStr) {
+                            updatePresetUiFromValue(dateStr);
+                        }
+                    }
+                });
+            } else {
+                defInput.placeholder = '';
+            }
+
+            updatePresetUiFromValue(defInput.value);
         }
         function addOptionRow(label = '', value = '') {
             const div = document.createElement('div');
@@ -1643,7 +1773,12 @@ try {
                     <option value="copy_value" ${rule.action === 'copy_value' ? 'selected' : ''}>Copy Source Value</option>
                     <option value="update_other_module" ${rule.action === 'update_other_module' ? 'selected' : ''}>Update Other Module Field</option>
                 </select>
-                <div class="rule-action-value-container" style="flex: 2; min-width: 220px; display: flex; gap: 6px; flex-wrap: wrap;"></div>
+                <div class="rule-action-value-container" style="flex: 2; min-width: 200px; display: flex; gap: 6px; flex-wrap: wrap;"></div>
+                <select class="form-control rule-apply-on" title="When to apply this rule" style="width:135px;">
+                    <option value="all" ${(cfg.apply_on === 'all' || !cfg.apply_on) ? 'selected' : ''}>Create & Edit</option>
+                    <option value="edit_only" ${cfg.apply_on === 'edit_only' ? 'selected' : ''}>Edit Mode Only</option>
+                    <option value="create_only" ${cfg.apply_on === 'create_only' ? 'selected' : ''}>Create Mode Only</option>
+                </select>
                 <button class="mm-icon-btn mm-icon-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
             document.getElementById('rulesList').appendChild(div);
             
@@ -1932,9 +2067,12 @@ try {
                 const targetModEl = r.querySelector('.rule-target-module');
                 const targetFldEl = r.querySelector('.rule-target-field');
                 const targetModeEl = r.querySelector('.rule-target-mode');
+                const applyOnEl = r.querySelector('.rule-apply-on');
+                const applyOn = applyOnEl ? applyOnEl.value : 'all';
                 
                 const configObj = {
                     action_value: actionValue,
+                    apply_on: applyOn,
                     target_module_id: targetModEl ? (parseInt(targetModEl.value) || 0) : 0,
                     target_field_id: targetFldEl ? (parseInt(targetFldEl.value) || 0) : 0,
                     value_mode: targetModeEl ? targetModeEl.value : 'copy_value'

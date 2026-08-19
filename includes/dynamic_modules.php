@@ -92,6 +92,65 @@ function dm_slugify(string $text): string
 }
 
 /**
+ * Resolve dynamic default values for date/time fields (e.g. today, tomorrow, +7_days, now).
+ */
+function dm_resolve_default_value(?string $defaultVal, string $fieldType = 'text'): string
+{
+    if ($defaultVal === null || $defaultVal === '') {
+        return '';
+    }
+    
+    $lower = strtolower(trim($defaultVal));
+    
+    if (in_array($fieldType, ['date', 'datetime', 'time'])) {
+        $now = new DateTime('now', new DateTimeZone('Asia/Kolkata'));
+        
+        if (in_array($lower, ['today', 'current_date', 'current_day'])) {
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['tomorrow', '+1_day', '+1 day'])) {
+            $now->modify('+1 day');
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['yesterday', '-1_day', '-1 day'])) {
+            $now->modify('-1 day');
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['+7_days', '+7 days', 'next_week'])) {
+            $now->modify('+7 days');
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['+14_days', '+14 days'])) {
+            $now->modify('+14 days');
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['+30_days', '+30 days', 'next_month'])) {
+            $now->modify('+30 days');
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['-7_days', '-7 days'])) {
+            $now->modify('-7 days');
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['-14_days', '-14 days'])) {
+            $now->modify('-14 days');
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['-30_days', '-30 days'])) {
+            $now->modify('-30 days');
+            return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
+        }
+        if (in_array($lower, ['now', 'current_time', 'current_datetime'])) {
+            if ($fieldType === 'time') return $now->format('H:i');
+            if ($fieldType === 'datetime') return $now->format('Y-m-d H:i');
+            return $now->format('Y-m-d');
+        }
+    }
+    
+    return $defaultVal;
+}
+
+/**
  * Generate a field_key from a label (lowercase, underscored, unique per module).
  */
 function dm_field_key(string $label): string

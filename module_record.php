@@ -296,7 +296,9 @@ foreach ($module['blocks'] as $block) {
                                 continue;
                             }
                             $fid = $field['id'];
-                            $val = $record['values'][$fid] ?? ($prefilledValues[$fid] ?? ($field['default_value'] ?? ''));
+                            $rawDef = $field['default_value'] ?? '';
+                            $resolvedDef = dm_resolve_default_value($rawDef, $field['field_type']);
+                            $val = $record['values'][$fid] ?? ($prefilledValues[$fid] ?? $resolvedDef);
                             $fullWidth = in_array($field['field_type'], ['textarea', 'attachment', 'name']);
                             $req = $field['is_required'] ? '<span class="required-star">*</span>' : '';
                         ?>
@@ -1113,6 +1115,13 @@ function applyRules(evt) {
         let shouldShow = true, shouldRequire = null;
 
         rules.forEach(rule => {
+            const cfg = rule.config ? (typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config) : {};
+            const applyOn = cfg.apply_on || rule.apply_on || 'all';
+
+            // Respect apply_on setting (Edit Mode Only vs Create Mode Only)
+            if (applyOn === 'edit_only' && !RECORD_ID) return;
+            if (applyOn === 'create_only' && RECORD_ID) return;
+
             const rawSourceVal = getFieldValue(rule.source_field_id);
             const sourceVal = rawSourceVal !== undefined && rawSourceVal !== null ? rawSourceVal.toString().trim() : '';
             let match = false;
@@ -1131,7 +1140,6 @@ function applyRules(evt) {
                 case 'on_change': match = (triggeredSourceFieldId && triggeredSourceFieldId == rule.source_field_id); break;
             }
 
-            const cfg = rule.config ? (typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config) : {};
             const actionVal = cfg.action_value || rule.action_value || '';
 
             if (rule.action === 'show') { if (!match) shouldShow = false; }
