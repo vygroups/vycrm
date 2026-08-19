@@ -1484,7 +1484,7 @@ function dm_html_to_whatsapp_format(string $html): string
 /**
  * Sends a WhatsApp text message using curl to Meta Cloud API or standard webhook gateway.
  */
-function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, string $body): bool
+function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, string $body, ?string $templateName = null): bool
 {
     $body = dm_html_to_whatsapp_format($body);
 
@@ -1499,15 +1499,42 @@ function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, str
     ];
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     
-    $payload = json_encode([
-        "messaging_product" => "whatsapp",
-        "recipient_type" => "individual",
-        "to" => $to,
-        "type" => "text",
-        "text" => [
-            "body" => $body
-        ]
-    ]);
+    if ($templateName) {
+        $payloadArr = [
+            "messaging_product" => "whatsapp",
+            "recipient_type" => "individual",
+            "to" => $to,
+            "type" => "template",
+            "template" => [
+                "name" => $templateName,
+                "language" => ["code" => "en_US"],
+                "components" => [
+                    [
+                        "type" => "body",
+                        "parameters" => [
+                            ["type" => "text", "text" => $body]
+                        ]
+                    ]
+                ]
+            ],
+            "template_name" => $templateName,
+            "text" => [
+                "body" => $body
+            ]
+        ];
+    } else {
+        $payloadArr = [
+            "messaging_product" => "whatsapp",
+            "recipient_type" => "individual",
+            "to" => $to,
+            "type" => "text",
+            "text" => [
+                "body" => $body
+            ]
+        ];
+    }
+    
+    $payload = json_encode($payloadArr);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
     
     $response = curl_exec($ch);

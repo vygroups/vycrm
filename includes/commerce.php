@@ -540,11 +540,14 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             name VARCHAR(150) NOT NULL,
             type ENUM('email', 'whatsapp') NOT NULL,
             subject VARCHAR(255) DEFAULT NULL,
+            template_variable_name VARCHAR(150) DEFAULT NULL,
             body TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    try { $conn->exec("ALTER TABLE {$prefix}campaign_templates ADD COLUMN template_variable_name VARCHAR(150) DEFAULT NULL AFTER subject"); } catch (Throwable $e) {}
 
     // 15. Campaigns
     $conn->exec("

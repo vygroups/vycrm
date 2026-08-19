@@ -400,6 +400,13 @@ $v = time();
                     <input type="text" id="templateSubject" class="form-control" placeholder="Subject line" style="width: 100%; box-sizing: border-box;">
                 </div>
 
+                <div class="form-group" id="whatsappVarGroup" style="margin-top: 15px; display: none; flex-direction: column; gap: 6px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <label class="form-label" style="margin:0;">WhatsApp Template Variable / API Name <span style="font-size:11px; color:var(--text-muted); font-weight:normal;">(Required for Meta/Gateway API)</span></label>
+                    </div>
+                    <input type="text" id="templateVariableName" class="form-control" placeholder="e.g. welcome_message_01, festive_offer_v2" style="width: 100%; box-sizing: border-box;">
+                </div>
+
                 <div class="form-group" style="margin-top: 15px; display: flex; flex-direction: column; gap: 6px;">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
                         <label class="form-label" style="margin:0;">Message Body *</label>
@@ -475,11 +482,15 @@ $v = time();
                     ? `<span class="mm-badge" style="background:rgba(59,130,246,0.1); color:#3b82f6;"><i class="fa-solid fa-envelope"></i> Email</span>` 
                     : `<span class="mm-badge" style="background:rgba(16,185,129,0.1); color:#10b981;"><i class="fa-solid fa-message"></i> WhatsApp</span>`;
 
+                const subjectOrCode = t.type === 'email' 
+                    ? escapeHtml(t.subject || '-')
+                    : (t.template_variable_name ? `<span class="mm-badge" style="background:rgba(123,94,240,0.08); color:var(--primary); font-family:monospace; font-size:11px;"><i class="fa-solid fa-code"></i> ${escapeHtml(t.template_variable_name)}</span>` : '<span style="color:var(--text-muted);">-</span>');
+
                 return `
                     <tr>
                         <td style="padding:12px 16px; border-bottom:1px solid var(--border);"><strong>${escapeHtml(t.name)}</strong></td>
                         <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${typeLabel}</td>
-                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${escapeHtml(t.subject || '-')}</td>
+                        <td style="padding:12px 16px; border-bottom:1px solid var(--border);">${subjectOrCode}</td>
                         <td style="padding:12px 16px; border-bottom:1px solid var(--border); font-size:12px; color:var(--text-muted);">${formatVyDate(t.created_at)}</td>
                         <td style="padding:12px 16px; border-bottom:1px solid var(--border); text-align:right;">
                             <div style="display:inline-flex; gap:6px;">
@@ -498,45 +509,42 @@ $v = time();
         async function initCKEditor() {
             try {
                 $('#templateBody').summernote({
-                    placeholder: 'Message content...',
+                    placeholder: 'Write your message template here...',
                     tabsize: 2,
                     height: 280,
-                    lineHeights: ['0.5', '1.0', '1.2', '1.4', '1.5', '1.6', '1.8', '2.0', '3.0'],
                     toolbar: [
-                        ['history', ['undo', 'redo']],
                         ['style', ['style']],
-                        ['fontname', ['fontname']],
-                        ['fontsize', ['fontsize']],
-                        ['font', ['bold', 'italic', 'underline', 'strikethrough', 'superscript', 'subscript', 'clear']],
-                        ['color', ['color']],
-                        ['para', ['ul', 'ol', 'paragraph', 'height']],
-                        ['alignment', ['align']],
+                        ['font', ['bold', 'italic', 'underline', 'strikethrough', 'superscript', 'subscript', 'color', 'clear']],
+                        ['para', ['ul', 'ol', 'paragraph']],
                         ['table', ['table']],
                         ['insert', ['link', 'picture', 'video', 'hr']],
                         ['view', ['fullscreen', 'codeview', 'help']]
                     ],
-                    popover: {
-                        image: []
-                    },
                     buttons: {
-                        imageLinkPrompt: function(context) {
+                        imageLink: function(context) {
                             var ui = $.summernote.ui;
                             return ui.button({
-                                contents: '<i class="note-icon-link"/>',
-                                tooltip: 'Insert Image Link',
+                                contents: '<i class="note-icon-link"/> Link Image',
+                                tooltip: 'Link selected image',
                                 click: function() {
-                                    var $img = $(context.invoke('editor.restoreTarget'));
-                                    if (!$img.length || !$img.is('img')) {
-                                        $img = lastClickedImage ? $(lastClickedImage) : $();
-                                    }
-                                    if (!$img.length || !$img.is('img')) {
-                                        $img = $(document.getSelection().anchorNode).find('img');
+                                    var $img = $('.note-control-selection');
+                                    if (!$img.length) {
+                                        $img = $(context.layoutInfo.editable).find('img.active, img.selected');
                                     }
                                     if (!$img.length) {
-                                        $img = $('.note-control-selection-area').prev();
+                                        var range = context.invoke('editor.createRange');
+                                        if (range && range.nodes) {
+                                            var nodes = range.nodes();
+                                            for (var i = 0; i < nodes.length; i++) {
+                                                if (nodes[i].nodeName === 'IMG') {
+                                                    $img = $(nodes[i]);
+                                                    break;
+                                                }
+                                            }
+                                        }
                                     }
-                                    if (!$img.length || !$img.is('img')) {
-                                        alert('Please select an image first.');
+                                    if (!$img.length) {
+                                        vyToast('Please click and select an image first.', 'warning');
                                         return;
                                     }
                                     
@@ -544,7 +552,7 @@ $v = time();
                                     var currentUrl = parentA.length ? parentA.attr('href') : '';
                                     
                                     var url = prompt('To what URL should this link go?', currentUrl || 'https://');
-                                    if (url === null) return; // user cancelled
+                                    if (url === null) return;
                                     
                                     if (!applyImageLinkToImage($img, url)) return;
                                     context.invoke('editor.afterCommand');
@@ -610,6 +618,7 @@ $v = time();
         function onTypeChange() {
             const type = document.getElementById('templateType').value;
             document.getElementById('subjectGroup').style.display = type === 'email' ? 'flex' : 'none';
+            document.getElementById('whatsappVarGroup').style.display = type === 'whatsapp' ? 'flex' : 'none';
 
             const noteEditor = document.querySelector('.note-editor');
             const textareaEl = document.getElementById('templateBody');
@@ -629,6 +638,7 @@ $v = time();
             document.getElementById('templateName').value = editData ? editData.name : '';
             document.getElementById('templateType').value = editData ? editData.type : 'email';
             document.getElementById('templateSubject').value = editData ? (editData.subject || '') : '';
+            document.getElementById('templateVariableName').value = editData ? (editData.template_variable_name || '') : '';
 
             let bodyVal = editData ? editData.body : '';
 
@@ -669,6 +679,7 @@ $v = time();
             // Reset previous validation styles
             document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
             document.getElementById('templateName').style.border = '';
+            document.getElementById('templateVariableName').style.border = '';
             document.getElementById('templateBody').style.border = '';
             document.getElementById('templateSubject').style.border = '';
             const noteEditor = document.querySelector('.note-editor');
@@ -677,11 +688,13 @@ $v = time();
             const nameEl = document.getElementById('templateName');
             const bodyEl = document.getElementById('templateBody');
             const subEl = document.getElementById('templateSubject');
+            const varNameEl = document.getElementById('templateVariableName');
             
             const id = parseInt(document.getElementById('templateId').value);
             const name = nameEl.value.trim();
             const type = document.getElementById('templateType').value;
             const subject = subEl.value.trim();
+            const templateVariableName = varNameEl.value.trim();
             
             const body = $('#templateBody').summernote('code').trim();
 
@@ -710,7 +723,14 @@ $v = time();
                 return;
             }
 
-            const payload = { id, name, type, subject: type === 'email' ? subject : null, body };
+            const payload = { 
+                id, 
+                name, 
+                type, 
+                subject: type === 'email' ? subject : null, 
+                template_variable_name: type === 'whatsapp' ? templateVariableName : null, 
+                body 
+            };
 
             try {
                 const res = await fetch(API, {

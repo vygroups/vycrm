@@ -154,7 +154,7 @@ try {
         /* ════════════════════ CAMPAIGN TEMPLATES CRUD ════════════════════ */
 
         case 'list_templates':
-            $stmt = $conn->query("SELECT id, name, type, subject, created_at FROM {$prefix}campaign_templates ORDER BY created_at DESC");
+            $stmt = $conn->query("SELECT id, name, type, subject, template_variable_name, created_at FROM {$prefix}campaign_templates ORDER BY created_at DESC");
             $templates = $stmt->fetchAll(PDO::FETCH_ASSOC);
             commerce_json_response(['success' => true, 'templates' => $templates]);
 
@@ -172,18 +172,22 @@ try {
             $name = trim($input['name'] ?? '');
             $type = trim($input['type'] ?? 'email');
             $subject = trim($input['subject'] ?? '');
+            $templateVariableName = trim($input['template_variable_name'] ?? '');
+            if ($type !== 'whatsapp') {
+                $templateVariableName = null;
+            }
             $body = trim($input['body'] ?? '');
 
             if (!$name) throw new RuntimeException('Template name required');
             if (!$body) throw new RuntimeException('Message body required');
 
             if ($id > 0) {
-                $stmt = $conn->prepare("UPDATE {$prefix}campaign_templates SET name = ?, type = ?, subject = ?, body = ? WHERE id = ?");
-                $stmt->execute([$name, $type, $subject, $body, $id]);
+                $stmt = $conn->prepare("UPDATE {$prefix}campaign_templates SET name = ?, type = ?, subject = ?, template_variable_name = ?, body = ? WHERE id = ?");
+                $stmt->execute([$name, $type, $subject, $templateVariableName, $body, $id]);
                 $savedId = $id;
             } else {
-                $stmt = $conn->prepare("INSERT INTO {$prefix}campaign_templates (name, type, subject, body) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$name, $type, $subject, $body]);
+                $stmt = $conn->prepare("INSERT INTO {$prefix}campaign_templates (name, type, subject, template_variable_name, body) VALUES (?, ?, ?, ?, ?)");
+                $stmt->execute([$name, $type, $subject, $templateVariableName, $body]);
                 $savedId = (int)$conn->lastInsertId();
             }
             commerce_json_response(['success' => true, 'id' => $savedId]);
@@ -413,7 +417,7 @@ try {
 
             // Fetch campaign and template configuration
             $cStmt = $conn->prepare("
-                SELECT c.*, t.subject, t.body
+                SELECT c.*, t.subject, t.body, t.template_variable_name
                 FROM {$prefix}campaigns c
                 JOIN {$prefix}campaign_templates t ON t.id = c.template_id
                 WHERE c.id = ?
@@ -570,9 +574,10 @@ try {
                             $errorMsg = 'No phone number found for the selected option.';
                         } else {
                             $sendSuccess = true;
+                            $waTplName = !empty($campaign['template_variable_name']) ? trim($campaign['template_variable_name']) : null;
                             foreach ($phonesToSend as $toPhone) {
                                 try {
-                                    $ok = dm_send_whatsapp_message($waUrl, $waToken, $toPhone, $body);
+                                    $ok = dm_send_whatsapp_message($waUrl, $waToken, $toPhone, $body, $waTplName);
                                     if (!$ok) {
                                         $sendSuccess = false;
                                         $errorMsg = 'Failed to send to ' . $toPhone;

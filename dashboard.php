@@ -78,29 +78,24 @@ try {
     }
 
     foreach ($dynModules as $dm) {
-        $totalRes = dm_fetch_records($conn, $prefix, (int)$dm['id'], null, 1, 0);
-        $total = $totalRes['total'];
+        $mId = (int)$dm['id'];
+        $totalRes = dm_fetch_records($conn, $prefix, $mId, null, 1, 0);
+        $total = (int)$totalRes['total'];
         
-        $todayRules = [
-            'condition' => 'AND',
-            'rules' => [
-                [
-                    'field' => 'created_at',
-                    'operator' => 'between',
-                    'value' => date('Y-m-d 00:00:00') . '|' . date('Y-m-d 23:59:59')
-                ]
-            ]
-        ];
-        $todayRes = dm_fetch_records($conn, $prefix, (int)$dm['id'], null, 1, 0, $todayRules);
-        $today = $todayRes['total'];
+        $todayRes = dm_fetch_records($conn, $prefix, $mId, null, 1, 0, [
+            ['field_id' => 'created_at', 'operator' => 'today']
+        ]);
+        $today = (int)$todayRes['total'];
 
-        $weekStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)");
-        $weekStmt->execute([$dm['id']]);
-        $week = (int) $weekStmt->fetchColumn();
+        $weekRes = dm_fetch_records($conn, $prefix, $mId, null, 1, 0, [
+            ['field_id' => 'created_at', 'operator' => 'this_week']
+        ]);
+        $week = (int)$weekRes['total'];
 
-        $monthStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ? AND MONTH(created_at) = MONTH(CURDATE()) AND YEAR(created_at) = YEAR(CURDATE())");
-        $monthStmt->execute([$dm['id']]);
-        $month = (int) $monthStmt->fetchColumn();
+        $monthRes = dm_fetch_records($conn, $prefix, $mId, null, 1, 0, [
+            ['field_id' => 'created_at', 'operator' => 'this_month']
+        ]);
+        $month = (int)$monthRes['total'];
 
         $trendStmt = $conn->prepare("
             SELECT DATE(created_at) as d, COUNT(*) as c 
