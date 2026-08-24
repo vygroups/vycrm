@@ -270,6 +270,11 @@ if (!$hasUpdatedAt) {
         <header class="topbar">
             <div class="breadcrumb">Modules / <span class="current"><?= htmlspecialchars($module['name']) ?></span></div>
             <div class="topbar-right" style="display:flex; gap:10px; align-items:center;">
+                <?php if ($module['slug'] === 'calls'): ?>
+                <a href="call_settings.php" class="mm-btn mm-btn-outline" style="display:inline-flex; align-items:center; gap:8px; padding:12px 18px; font-weight:600; height: 42px; border-radius: 12px; box-sizing: border-box; text-decoration: none;">
+                    <i class="fa-solid fa-cloud-arrow-up" style="color:var(--primary);"></i> Storage Settings
+                </a>
+                <?php endif; ?>
                 <?php if ($canQuickCreate && !empty($quickCreateFields)): ?>
                 <button class="mm-btn mm-btn-outline" onclick="openQuickCreateModal()" style="display:inline-flex; align-items:center; gap:8px; padding:12px 20px; font-weight:600; height: 42px; border-radius: 12px; box-sizing: border-box;">
                     <i class="fa-solid fa-bolt" style="color:var(--primary);"></i> Quick Create
@@ -284,6 +289,172 @@ if (!$hasUpdatedAt) {
         </header>
         <div class="content-scroll">
             <div class="mv-container">
+                <?php if ($module['slug'] === 'calls'): ?>
+                    <?php
+                    $callsStats = [
+                        'total' => 0,
+                        'incoming' => 0,
+                        'outgoing' => 0,
+                        'missed' => 0,
+                        'duration' => 0,
+                        'recordings' => 0
+                    ];
+                    try {
+                        // 1. Get total records in this dynamic module
+                        $totStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}module_records WHERE module_id = ?");
+                        $totStmt->execute([$moduleId]);
+                        $callsStats['total'] = (int)$totStmt->fetchColumn();
+
+                        // 2. Fetch field mapping (field_key => id)
+                        $fMapStmt = $conn->prepare("SELECT field_key, id FROM {$prefix}module_fields WHERE module_id = ?");
+                        $fMapStmt->execute([$moduleId]);
+                        $fMap = $fMapStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+                        $callTypeFieldId = $fMap['call_type'] ?? 0;
+                        $durationFieldId = $fMap['duration_formatted'] ?? ($fMap['duration'] ?? 0);
+                        $recordingFieldId = $fMap['recording_file_url'] ?? 0;
+
+                        if ($callTypeFieldId) {
+                            $typeStmt = $conn->prepare("
+                                SELECT LOWER(TRIM(v.value)) as ctype, COUNT(*) as cnt
+                                FROM {$prefix}module_record_values v
+                                JOIN {$prefix}module_records r ON r.id = v.record_id
+                                WHERE r.module_id = ? AND v.field_id = ?
+                                GROUP BY LOWER(TRIM(v.value))
+                            ");
+                            $typeStmt->execute([$moduleId, $callTypeFieldId]);
+                            while ($row = $typeStmt->fetch(PDO::FETCH_ASSOC)) {
+                                $t = $row['ctype'];
+                                $c = (int)$row['cnt'];
+                                if (strpos($t, 'incoming') !== false) {
+                                    $callsStats['incoming'] += $c;
+                                } elseif (strpos($t, 'outgoing') !== false) {
+                                    $callsStats['outgoing'] += $c;
+                                } elseif (strpos($t, 'missed') !== false || strpos($t, 'rejected') !== false || strpos($t, 'blocked') !== false) {
+                                    $callsStats['missed'] += $c;
+                                }
+                            }
+                        }
+
+                        // If call_type wasn't specified on some records, default them to incoming
+                        if ($callsStats['incoming'] == 0 && $callsStats['outgoing'] == 0 && $callsStats['missed'] == 0 && $callsStats['total'] > 0) {
+                            $callsStats['incoming'] = $callsStats['total'];
+                        }
+
+                        if ($recordingFieldId) {
+                            $recStmt = $conn->prepare("
+                                SELECT COUNT(*)
+                                FROM {$prefix}module_record_values v
+                                JOIN {$prefix}module_records r ON r.id = v.record_id
+                                WHERE r.module_id = ? AND v.field_id = ? AND v.value IS NOT NULL AND v.value != ''
+                            ");
+                            $recStmt->execute([$moduleId, $recordingFieldId]);
+                            $callsStats['recordings'] = (int)$recStmt->fetchColumn();
+                        }
+
+                        if ($durationFieldId) {
+                            $durStmt = $conn->prepare("
+                                SELECT v.value
+                                FROM {$prefix}module_record_values v
+                                JOIN {$prefix}module_records r ON r.id = v.record_id
+                                WHERE r.module_id = ? AND v.field_id = ? AND v.value IS NOT NULL AND v.value != ''
+                            ");
+                            $durStmt->execute([$moduleId, $durationFieldId]);
+                            $totalSecs = 0;
+                            while ($durVal = $durStmt->fetchColumn()) {
+                                $durVal = trim((string)$durVal);
+                                if (strpos($durVal, ':') !== false) {
+                                    $parts = explode(':', $durVal);
+                                    if (count($parts) === 2) {
+                                        $totalSecs += ((int)$parts[0] * 60) + (int)$parts[1];
+                                    } elseif (count($parts) === 3) {
+                                        $totalSecs += ((int)$parts[0] * 3600) + ((int)$parts[1] * 60) + (int)$parts[2];
+                                    }
+                                } elseif (is_numeric($durVal)) {
+                                    $totalSecs += (int)$durVal;
+                                }
+                            }
+                            $callsStats['duration'] = $totalSecs;
+                        }
+
+                        // Fallback check from calls table if dynamic module is 0
+                        if ($callsStats['total'] === 0) {
+                            $st = $conn->query("
+                                SELECT 
+                                    COUNT(*) as total_calls,
+                                    SUM(CASE WHEN call_type = 'incoming' THEN 1 ELSE 0 END) as incoming_calls,
+                                    SUM(CASE WHEN call_type = 'outgoing' THEN 1 ELSE 0 END) as outgoing_calls,
+                                    SUM(CASE WHEN call_type IN ('missed', 'rejected', 'blocked') THEN 1 ELSE 0 END) as missed_calls,
+                                    SUM(duration) as total_duration,
+                                    SUM(CASE WHEN recording_file_url IS NOT NULL AND recording_file_url != '' THEN 1 ELSE 0 END) as recording_calls
+                                FROM {$prefix}calls
+                            ")->fetch(PDO::FETCH_ASSOC);
+                            if ($st && $st['total_calls'] > 0) {
+                                $callsStats['total'] = (int)($st['total_calls'] ?? 0);
+                                $callsStats['incoming'] = (int)($st['incoming_calls'] ?? 0);
+                                $callsStats['outgoing'] = (int)($st['outgoing_calls'] ?? 0);
+                                $callsStats['missed'] = (int)($st['missed_calls'] ?? 0);
+                                $callsStats['duration'] = (int)($st['total_duration'] ?? 0);
+                                $callsStats['recordings'] = (int)($st['recording_calls'] ?? 0);
+                            }
+                        }
+                    } catch (Exception $e) {}
+
+                    $mins = floor($callsStats['duration'] / 60);
+                    $secs = $callsStats['duration'] % 60;
+                    $durationFormatted = sprintf('%02d:%02d', $mins, $secs);
+                    if ($mins >= 60) {
+                        $hrs = floor($mins / 60);
+                        $remMins = $mins % 60;
+                        $durationFormatted = sprintf('%02dh %02dm', $hrs, $remMins);
+                    }
+                    ?>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                        <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm);">
+                            <div style="width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: rgba(99, 102, 241, 0.12); color: #6366f1; flex-shrink: 0;"><i class="fa-solid fa-headset"></i></div>
+                            <div>
+                                <div style="font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.2;"><?= number_format($callsStats['total']) ?></div>
+                                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Total Calls</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm);">
+                            <div style="width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: rgba(16, 185, 129, 0.12); color: #10b981; flex-shrink: 0;"><i class="fa-solid fa-phone-volume"></i></div>
+                            <div>
+                                <div style="font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.2;"><?= number_format($callsStats['incoming']) ?></div>
+                                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Incoming</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm);">
+                            <div style="width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: rgba(14, 165, 233, 0.12); color: #0ea5e9; flex-shrink: 0;"><i class="fa-solid fa-phone"></i></div>
+                            <div>
+                                <div style="font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.2;"><?= number_format($callsStats['outgoing']) ?></div>
+                                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Outgoing</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm);">
+                            <div style="width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: rgba(239, 68, 68, 0.12); color: #ef4444; flex-shrink: 0;"><i class="fa-solid fa-phone-slash"></i></div>
+                            <div>
+                                <div style="font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.2;"><?= number_format($callsStats['missed']) ?></div>
+                                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Missed / Rejected</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm);">
+                            <div style="width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: rgba(245, 158, 11, 0.12); color: #f59e0b; flex-shrink: 0;"><i class="fa-solid fa-clock"></i></div>
+                            <div>
+                                <div style="font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.2;"><?= $durationFormatted ?></div>
+                                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Talk Time</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm);">
+                            <div style="width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: rgba(168, 85, 247, 0.12); color: #a855f7; flex-shrink: 0;"><i class="fa-solid fa-microphone"></i></div>
+                            <div>
+                                <div style="font-size: 22px; font-weight: 800; color: var(--text); line-height: 1.2;"><?= number_format($callsStats['recordings']) ?></div>
+                                <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px;">Recordings</div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
                 <div class="mv-toolbar">
                     <form method="GET" class="mv-search" onsubmit="handleSearch(event)">
                         <input type="hidden" name="module" value="<?= $moduleId ?>">

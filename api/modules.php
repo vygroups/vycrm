@@ -245,6 +245,26 @@ try {
             $value = $input['value'] ?? '';
             if (!$key) throw new RuntimeException('Setting key required');
             dm_set_system_setting($conn, $prefix, $key, $value);
+
+            if ($key === 'calls_enabled') {
+                require_once __DIR__ . '/../includes/calls_helper.php';
+                calls_ensure_tables($conn, $prefix);
+                $stmt = $conn->prepare("SELECT id, status FROM {$prefix}modules WHERE slug = 'calls' LIMIT 1");
+                $stmt->execute();
+                $callsMod = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($value === '1') {
+                    if (!$callsMod) {
+                        calls_ensure_dynamic_module($conn, $prefix);
+                    } else {
+                        $conn->prepare("UPDATE {$prefix}modules SET status = 'active' WHERE id = ?")->execute([(int)$callsMod['id']]);
+                    }
+                } else {
+                    if ($callsMod) {
+                        $conn->prepare("UPDATE {$prefix}modules SET status = 'inactive' WHERE id = ?")->execute([(int)$callsMod['id']]);
+                    }
+                }
+            }
             commerce_json_response(['success' => true]);
 
         case 'toggle_module_status':

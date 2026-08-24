@@ -7,12 +7,27 @@ if (empty($_SESSION['is_admin'])) {
 require_once 'includes/commerce.php';
 require_once 'includes/brand.php';
 require_once 'includes/dynamic_modules.php';
+require_once 'includes/calls_helper.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
 $prefix = $context['prefix'];
 dm_ensure_tables($conn, $prefix);
 commerce_ensure_tables($conn, $prefix);
+calls_ensure_tables($conn, $prefix);
+
+$callsEnabled = dm_get_system_setting($conn, $prefix, 'calls_enabled', '1') === '1';
+if ($callsEnabled) {
+    // If enabled, ensure the dynamic module exists and is active
+    $checkMod = $conn->prepare("SELECT id, status FROM {$prefix}modules WHERE slug = 'calls' LIMIT 1");
+    $checkMod->execute();
+    $existingCallsMod = $checkMod->fetch(PDO::FETCH_ASSOC);
+    if (!$existingCallsMod) {
+        calls_ensure_dynamic_module($conn, $prefix);
+    } elseif ($existingCallsMod['status'] === 'inactive') {
+        $conn->prepare("UPDATE {$prefix}modules SET status = 'active' WHERE id = ?")->execute([$existingCallsMod['id']]);
+    }
+}
 
 $fieldTypes = dm_field_types();
 $countries = dm_get_countries();
@@ -514,6 +529,44 @@ try {
                                 </div>
                             </div>
 
+                            <!-- Mobile Calls & Recordings Card -->
+                            <?php
+                            $callsEnabled = dm_get_system_setting($conn, $prefix, 'calls_enabled', '1') === '1';
+                            $callsVisibility = dm_get_system_setting($conn, $prefix, 'calls_visibility', 'all');
+                            ?>
+                            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+                                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                                    <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #4f46e5, #818cf8); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                        <i class="fa-solid fa-phone-volume" style="color: #fff; font-size: 16px;"></i>
+                                    </div>
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                                            <h5 style="margin: 0; font-size: 13px; font-weight: 700; color: var(--text);">Mobile Calls & Voice</h5>
+                                            <label style="display: flex; align-items: center; cursor: pointer; flex-shrink: 0;">
+                                                <input type="checkbox" class="sys-toggle" <?= $callsEnabled ? 'checked' : '' ?> onchange="toggleSystemModule('calls_enabled', this.checked, this)" style="display:none;">
+                                                <span class="sys-toggle-pill <?= $callsEnabled ? 'active' : '' ?>"></span>
+                                            </label>
+                                        </div>
+                                        <div id="calls-settings-controls" style="display: <?= $callsEnabled ? 'block' : 'none' ?>;">
+                                            <div style="padding-top: 8px;">
+                                                <select class="form-control" onchange="updateSystemVisibility('calls_visibility', this.value)" style="width: 100%; font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; height: 28px; box-sizing: border-box;">
+                                                    <option value="all" <?= $callsVisibility === 'all' ? 'selected' : '' ?>>Show to all</option>
+                                                    <option value="owner" <?= $callsVisibility === 'owner' ? 'selected' : '' ?>>Owner Only</option>
+                                                    <option value="role_down" <?= $callsVisibility === 'role_down' ? 'selected' : '' ?>>Lower Roles</option>
+                                                    <option value="role_equal_down" <?= $callsVisibility === 'role_equal_down' ? 'selected' : '' ?>>Equal &amp; Lower</option>
+                                                    <option value="role_up" <?= $callsVisibility === 'role_up' ? 'selected' : '' ?>>Upper Roles</option>
+                                                </select>
+                                            </div>
+                                            <div style="padding-top: 6px;">
+                                                <a href="call_settings.php" class="mm-btn mm-btn-outline" style="width: 100%; font-size: 11px; padding: 4px 8px; height: 28px; display: flex; align-items: center; justify-content: center; gap: 4px; text-decoration: none; box-sizing: border-box;">
+                                                    <i class="fa-solid fa-cloud-arrow-up" style="color: #6366f1;"></i> Storage Settings
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Dashboard Widgets Card -->
                             <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 20px rgba(123,94,240,0.13)'" onmouseout="this.style.boxShadow='var(--shadow-sm)'">
                                 <div style="display: flex; align-items: flex-start; gap: 10px;">
@@ -533,8 +586,17 @@ try {
                         </div>
                     </div>
 
+                    <?php
+                    $visibleDynamicModules = array_values(array_filter($allModules, function($m) use ($callsEnabled) {
+                        if ($m['slug'] === 'calls' && !$callsEnabled) {
+                            return false;
+                        }
+                        return true;
+                    }));
+                    ?>
+
                     <div class="mm-grid" id="moduleGrid">
-                        <?php if (empty($allModules)): ?>
+                        <?php if (empty($visibleDynamicModules)): ?>
                             <div class="mm-empty-state" style="grid-column:1/-1;">
                                 <i class="fa-solid fa-cubes"></i>
                                 <h3>No Modules Yet</h3>
@@ -543,7 +605,7 @@ try {
                                         class="fa-solid fa-plus"></i> Create Module</button>
                             </div>
                         <?php else: ?>
-                            <?php foreach ($allModules as $mod): ?>
+                            <?php foreach ($visibleDynamicModules as $mod): ?>
                                 <div class="mm-module-card <?= $mod['status'] === 'inactive' ? 'mm-inactive' : '' ?>" id="mod-card-<?= $mod['id'] ?>">
                                     <div style="display:flex; align-items:center; justify-content:space-between; padding:0 0 12px 0; margin-bottom:12px; border-bottom:1px solid var(--border);">
                                         <div style="display:flex; align-items:center; gap:12px;">
@@ -567,7 +629,7 @@ try {
                                         <a href="module_manager.php?edit=<?= $mod['id'] ?>" class="mm-btn mm-btn-sm"><i
                                                 class="fa-solid fa-cog"></i> Configure</a>
                                         <a href="module_view.php?module=<?= $mod['id'] ?>"
-                                            class="mm-btn mm-btn-sm mm-btn-primary"><i class="fa-solid fa-eye"></i> View</a>
+                                             class="mm-btn mm-btn-sm mm-btn-primary"><i class="fa-solid fa-eye"></i> View</a>
                                         <button class="mm-icon-btn mm-icon-danger"
                                             onclick="deleteModule(<?= $mod['id'] ?>, '<?= htmlspecialchars($mod['name']) ?>')"><i
                                                 class="fa-solid fa-trash"></i></button>
@@ -1338,7 +1400,8 @@ try {
                 'attendance_enabled': 'sidebar-module-attendance',
                 'billing_enabled':    'sidebar-module-billing',
                 'campaigns_enabled':  'sidebar-module-campaigns',
-                'payroll_enabled':    'sidebar-module-payroll'
+                'payroll_enabled':    'sidebar-module-payroll',
+                'calls_enabled':      'sidebar-module-calls'
             };
 
             // Optimistically update pill visual
@@ -1355,8 +1418,17 @@ try {
                 if (invoiceSettingsEl) invoiceSettingsEl.style.display = enabled ? '' : 'none';
             }
 
+            if (key === 'calls_enabled') {
+                const callsCtrl = document.getElementById('calls-settings-controls');
+                if (callsCtrl) callsCtrl.style.display = enabled ? 'block' : 'none';
+            }
+
             api('update_system_setting', { key, value: enabled ? '1' : '0' }).then(r => {
-                if (!r.success) {
+                if (r.success) {
+                    if (key === 'calls_enabled') {
+                        location.reload();
+                    }
+                } else {
                     // Revert on failure
                     if (checkbox) {
                         checkbox.checked = !enabled;

@@ -422,3 +422,45 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS calls (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    user_name VARCHAR(150) NULL,
+    contact_name VARCHAR(150) NULL,
+    customer_id INT NULL,
+    caller_number VARCHAR(50) NOT NULL,
+    call_type ENUM('incoming', 'outgoing', 'missed', 'rejected', 'blocked', 'unknown') NOT NULL DEFAULT 'incoming',
+    call_start_time DATETIME NOT NULL,
+    call_end_time DATETIME NULL,
+    duration INT NOT NULL DEFAULT 0,
+    sim_slot VARCHAR(50) NULL,
+    device_id VARCHAR(100) NULL,
+    recording_file_url TEXT NULL,
+    recording_storage_type VARCHAR(50) NOT NULL DEFAULT 'local',
+    recording_file_id VARCHAR(255) NULL,
+    recording_file_size INT NOT NULL DEFAULT 0,
+    notes TEXT NULL,
+    outcome VARCHAR(100) NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'synced',
+    raw_data JSON NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_calls_number (caller_number),
+    INDEX idx_calls_user (user_id),
+    INDEX idx_calls_type (call_type),
+    INDEX idx_calls_start (call_start_time),
+    INDEX idx_calls_customer (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS call_storage_configs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    provider ENUM('google_drive', 's3', 'cloudflare_r2', 'local', 'dropbox') NOT NULL DEFAULT 'local',
+    config_name VARCHAR(150) NOT NULL,
+    config_data JSON NULL,
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

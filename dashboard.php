@@ -16,9 +16,11 @@ require_once 'includes/dynamic_modules.php';
 
 $billingEnabled = dm_get_system_setting($conn, $prefix, 'billing_enabled', '1') === '1';
 $attendanceEnabled = dm_get_system_setting($conn, $prefix, 'attendance_enabled', '1') === '1';
+$callsEnabled = dm_get_system_setting($conn, $prefix, 'calls_enabled', '1') === '1';
 
 if (!$billingEnabled) unset($dashboardModules['billing']);
 if (!$attendanceEnabled) unset($dashboardModules['hr_operations']);
+if (!$callsEnabled) unset($dashboardModules['calls']);
 
 // Fetch dashboard data
 $dashboardStats = [
@@ -32,10 +34,16 @@ $dashboardStats = [
         ['label' => 'Pending Leaves', 'value' => 0, 'icon' => 'fa-solid fa-plane-departure', 'desc' => 'Leave requests awaiting action'],
         ['label' => 'Pending Permissions', 'value' => 0, 'icon' => 'fa-solid fa-clipboard-check', 'desc' => 'Permission requests awaiting action'],
     ],
+    'calls' => [
+        ['label' => "Today's Calls", 'value' => 0, 'icon' => 'fa-solid fa-phone-volume', 'desc' => 'Logged calls today'],
+        ['label' => 'Recorded Calls', 'value' => 0, 'icon' => 'fa-solid fa-microphone-lines', 'desc' => 'Voice audio available'],
+        ['label' => 'Total Logged Calls', 'value' => 0, 'icon' => 'fa-solid fa-headset', 'desc' => 'All call history'],
+    ],
 ];
 
 if (!$billingEnabled) unset($dashboardStats['billing']);
 if (!$attendanceEnabled) unset($dashboardStats['hr_operations']);
+if (!$callsEnabled) unset($dashboardStats['calls']);
 
 // Append dynamic modules
 $dynModules = dm_fetch_active_modules($conn, $prefix);
@@ -75,6 +83,15 @@ try {
         $dashboardStats['hr_operations'][0]['value'] = (int) $attendanceStmt->fetchColumn();
         $dashboardStats['hr_operations'][1]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}leaves WHERE status = 'pending'")->fetchColumn();
         $dashboardStats['hr_operations'][2]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}permissions WHERE status = 'pending'")->fetchColumn();
+    }
+
+    if ($callsEnabled) {
+        $today = date('Y-m-d');
+        $callTodayStmt = $conn->prepare("SELECT COUNT(*) FROM {$prefix}calls WHERE call_start_time >= ?");
+        $callTodayStmt->execute([$today . ' 00:00:00']);
+        $dashboardStats['calls'][0]['value'] = (int) $callTodayStmt->fetchColumn();
+        $dashboardStats['calls'][1]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}calls WHERE recording_file_url IS NOT NULL AND recording_file_url != ''")->fetchColumn();
+        $dashboardStats['calls'][2]['value'] = (int) $conn->query("SELECT COUNT(*) FROM {$prefix}calls")->fetchColumn();
     }
 
     foreach ($dynModules as $dm) {

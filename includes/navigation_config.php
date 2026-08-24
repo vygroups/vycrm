@@ -29,5 +29,15 @@ function vycrm_module_config(): array
                 ['label' => 'Business Profile', 'href' => 'profile.php'],
             ],
         ],
+        'calls' => [
+            'title' => 'Mobile Calls',
+            'section_label' => 'Calls & Voice',
+            'icon' => 'fa-solid fa-phone-volume',
+            'description' => 'Mobile call logs, recordings, Google Drive & S3 cloud storage, and CRM integration.',
+            'links' => [
+                ['label' => 'Mobile Calls', 'href' => 'calls.php'],
+                ['label' => 'Storage Settings', 'href' => 'call_settings.php'],
+            ],
+        ],
     ];
 }

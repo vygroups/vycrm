@@ -20,6 +20,15 @@ try {
         $_sidebarBillingEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'billing_enabled', '1') === '1';
         $_sidebarCampaignsEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'campaigns_enabled', '1') === '1';
         $_sidebarPayrollEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'payroll_enabled', '1') === '1';
+        $_sidebarCallsEnabled = dm_get_system_setting($_sidebarConn, $_SESSION['tenant_prefix'], 'calls_enabled', '1') === '1';
+
+        // Filter out Calls from dynamic modules list if calls_enabled is false
+        $_sidebarDynModules = array_values(array_filter($_sidebarDynModules, function($dm) use ($_sidebarCallsEnabled) {
+            if ($dm['slug'] === 'calls' && !$_sidebarCallsEnabled) {
+                return false;
+            }
+            return true;
+        }));
     }
 } catch (Throwable $e) {
 }
