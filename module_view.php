@@ -465,13 +465,13 @@ if (!$hasUpdatedAt) {
                         <span class="text-muted text-sm"><?= $total ?> record<?= $total !== 1 ? 's' : '' ?></span>
                         
                         <button id="btnBulkEdit" class="mm-btn mm-btn-sm mm-btn-primary" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 12px; border-radius: 8px; font-weight: 600;" onclick="openBulkEditModal()">
-                            <i class="fa-solid fa-pen-to-square"></i> Bulk Edit (<span class="selectedCount">0</span>)
+                            <i class="fa-solid fa-pen-to-square"></i><span>Bulk Edit (<span class="selectedCount">0</span>)</span>
                         </button>
                         <button id="btnBulkDelete" class="mm-btn mm-btn-sm mm-btn-danger" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 10px; border-radius: 8px; font-weight: 600;" onclick="bulkDeleteRecords()">
-                            <i class="fa-solid fa-trash"></i> Delete Selected (<span class="selectedCount">0</span>)
+                            <i class="fa-solid fa-trash"></i><span>Delete Selected (<span class="selectedCount">0</span>)</span>
                         </button>
                         <button id="btnBulkExport" class="mm-btn mm-btn-sm mm-btn-outline" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 10px; border-radius: 8px; font-weight: 600; color: var(--primary); border-color: var(--primary);" onclick="bulkExportSelected()">
-                            <i class="fa-solid fa-file-export"></i> Export Selected (<span class="selectedCount">0</span>)
+                            <i class="fa-solid fa-file-export"></i><span>Export Selected (<span class="selectedCount">0</span>)</span>
                         </button>
                         <div style="display:inline-flex; align-items:center; gap:5px;">
                             <button id="btnFiltersToggle" class="mm-btn mm-btn-sm mm-btn-outline" onclick="toggleFilterPanel()" style="display:inline-flex;align-items:center;gap:6px; <?= (($activeFilterRules || $activeFilterId) ? 'background:rgba(123,94,240,0.1); border-color:var(--primary); color:var(--primary); font-weight:700;' : '') ?>">
