@@ -825,7 +825,7 @@ function calls_get_google_auth_url(string $clientId, string $redirectUri, string
         'client_id' => $clientId,
         'redirect_uri' => $redirectUri,
         'response_type' => 'code',
-        'scope' => 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+        'scope' => 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
         'access_type' => 'offline',
         'prompt' => 'consent',
         'include_granted_scopes' => 'true',
@@ -890,9 +890,12 @@ function calls_exchange_google_code(string $code, string $clientId, string $clie
  */
 function calls_list_google_folders(string $accessToken, string $parentId = 'root'): array
 {
-    $q = "mimeType = 'application/vnd.google-apps.folder' and trashed = false and '{$parentId}' in parents";
+    $parentId = trim($parentId) ?: 'root';
+    $q = "mimeType = 'application/vnd.google-apps.folder' and trashed = false and '" . str_replace("'", "\\'", $parentId) . "' in parents";
     $url = 'https://www.googleapis.com/drive/v3/files?' . http_build_query([
         'q' => $q,
+        'spaces' => 'drive',
+        'corpora' => 'user',
         'fields' => 'files(id, name, modifiedTime, parents)',
         'orderBy' => 'name asc',
         'pageSize' => 100,
@@ -906,7 +909,7 @@ function calls_list_google_folders(string $accessToken, string $parentId = 'root
         'Authorization: Bearer ' . $accessToken,
         'Accept: application/json'
     ]);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
@@ -928,7 +931,7 @@ function calls_list_google_folders(string $accessToken, string $parentId = 'root
         throw new RuntimeException("Google Drive: " . $json['error']['message']);
     }
 
-    if ($httpCode !== 200) {
+    if ($httpCode < 200 || $httpCode >= 300) {
         throw new RuntimeException("Google Drive responded with HTTP {$httpCode}: " . ($res ?: 'Empty response'));
     }
 
@@ -946,7 +949,7 @@ function calls_create_google_folder(string $accessToken, string $folderName, str
         'parents' => [$parentId]
     ];
 
-    $ch = curl_init('https://www.googleapis.com/drive/v3/files?fields=id,name');
+    $ch = curl_init('https://www.googleapis.com/drive/v3/files?fields=id,name&supportsAllDrives=true');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($metadata));
@@ -970,4 +973,3 @@ function calls_create_google_folder(string $accessToken, string $folderName, str
 
     throw new RuntimeException($json['error']['message'] ?? 'Failed to create folder in Google Drive');
 }
-

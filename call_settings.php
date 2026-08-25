@@ -594,13 +594,29 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
     </div>
 
     <script>
+        // Initialize picker state before optional UI helpers (such as Toast). This
+        // keeps the close/cancel controls functional even if an external script
+        // fails to load while returning from Google OAuth.
+        let folderHistory = [{ id: 'root', name: 'My Drive' }];
+        let currentFolderNavId = 'root';
+        let currentFolderNavName = 'My Drive';
+        let folderListRequestId = 0;
+
+        function encodeFolderActionValue(value) {
+            return encodeURIComponent(String(value)).replace(/'/g, '%27');
+        }
+
         // Check URL parameters for status
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('connected') === '1') {
-            Toast.show('Google Drive connected successfully with permanent offline access!', 'success');
+            if (window.Toast && typeof Toast.show === 'function') {
+                Toast.show('Google Drive connected successfully with permanent offline access!', 'success');
+            }
             window.history.replaceState({}, document.title, window.location.pathname);
         } else if (urlParams.get('error')) {
-            Toast.show(decodeURIComponent(urlParams.get('error')), 'error');
+            if (window.Toast && typeof Toast.show === 'function') {
+                Toast.show(decodeURIComponent(urlParams.get('error')), 'error');
+            }
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
@@ -737,11 +753,6 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
             }
         }
 
-        // Folder Navigator State
-        let folderHistory = [{ id: 'root', name: 'My Drive' }];
-        let currentFolderNavId = 'root';
-        let currentFolderNavName = 'My Drive';
-
         function openFolderNavigator() {
             document.getElementById('googleFolderModal').classList.add('show');
             folderHistory = [{ id: 'root', name: 'My Drive' }];
@@ -749,6 +760,8 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
         }
 
         function closeFolderNavigator() {
+            // Invalidate any in-flight response so it cannot redraw a closed picker.
+            folderListRequestId++;
             document.getElementById('googleFolderModal').classList.remove('show');
             document.getElementById('newFolderContainer').style.display = 'none';
         }
@@ -772,6 +785,8 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
         }
 
         async function navigateToFolder(folderId, folderName, pushHistory = true) {
+            const requestId = ++folderListRequestId;
+            const modal = document.getElementById('googleFolderModal');
             currentFolderNavId = folderId;
             currentFolderNavName = folderName;
             if (pushHistory && (folderHistory.length === 0 || folderHistory[folderHistory.length - 1].id !== folderId)) {
@@ -787,14 +802,22 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                 </div>
             `;
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 7000);
+            // Do not depend on AbortController: older mobile browsers can leave the
+            // loading state on screen forever when that API is unavailable.
+            let timeoutId;
+            const requestTimeout = new Promise((resolve, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('Google Drive took too long to respond. Please try again.')), 20000);
+            });
 
             try {
-                const res = await fetch(`/api/calls_api.php?action=google_drive_list_folders&parent_id=${encodeURIComponent(folderId)}`, {
-                    signal: controller.signal
-                });
+                const res = await Promise.race([
+                    fetch(`/api/calls_api.php?action=google_drive_list_folders&parent_id=${encodeURIComponent(folderId)}`, {
+                        cache: 'no-store'
+                    }),
+                    requestTimeout
+                ]);
                 clearTimeout(timeoutId);
+                if (requestId !== folderListRequestId || !modal.classList.contains('show')) return;
                 const rawText = await res.text();
                 let data;
                 try {
@@ -815,7 +838,7 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                                 <button type="button" class="btn-secondary" onclick="toggleNewFolderInput()" style="padding: 7px 14px; font-size: 12px;">
                                     <i class="fa-solid fa-plus"></i> Create Folder
                                 </button>
-                                <button type="button" class="btn-primary" onclick="setTargetFolder('${escapeHtml(folderId)}', '${escapeHtml(folderName)}')" style="padding: 7px 16px; font-size: 12px;">
+                                <button type="button" class="btn-primary" onclick="setTargetFolder(decodeURIComponent('${encodeFolderActionValue(folderId)}'), decodeURIComponent('${encodeFolderActionValue(folderName)}'))" style="padding: 7px 16px; font-size: 12px;">
                                     <i class="fa-solid fa-check"></i> Choose "${escapeHtml(folderName)}"
                                 </button>
                             </div>
@@ -824,25 +847,31 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                     return;
                 }
 
-                content.innerHTML = folders.map(f => `
+                content.innerHTML = folders.map(f => {
+                    const actionId = encodeFolderActionValue(f.id);
+                    const actionName = encodeFolderActionValue(f.name);
+                    return `
                     <div class="folder-list-item">
-                        <div style="display:flex; align-items:center; gap:12px; cursor:pointer; flex:1;" onclick="navigateToFolder('${f.id}', '${escapeHtml(f.name)}')">
+                        <div style="display:flex; align-items:center; gap:12px; cursor:pointer; flex:1;" onclick="navigateToFolder(decodeURIComponent('${actionId}'), decodeURIComponent('${actionName}'))">
                             <i class="fa-solid fa-folder" style="color: #f59e0b; font-size: 20px;"></i>
                             <div>
                                 <strong style="font-size: 13.5px; color: var(--text);">${escapeHtml(f.name)}</strong>
                             </div>
                         </div>
                         <div style="display:flex; gap:6px;">
-                            <button type="button" class="btn-secondary" onclick="navigateToFolder('${f.id}', '${escapeHtml(f.name)}')" style="padding: 6px 10px; font-size: 12px;" title="Open Folder">
+                            <button type="button" class="btn-secondary" onclick="navigateToFolder(decodeURIComponent('${actionId}'), decodeURIComponent('${actionName}'))" style="padding: 6px 10px; font-size: 12px;" title="Open Folder">
                                 <i class="fa-solid fa-folder-open"></i> Open
                             </button>
-                            <button type="button" class="btn-primary" onclick="setTargetFolder('${f.id}', '${escapeHtml(f.name)}')" style="padding: 6px 12px; font-size: 12px;">
+                            <button type="button" class="btn-primary" onclick="setTargetFolder(decodeURIComponent('${actionId}'), decodeURIComponent('${actionName}'))" style="padding: 6px 12px; font-size: 12px;">
                                 <i class="fa-solid fa-check"></i> Select
                             </button>
                         </div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             } catch (err) {
+                clearTimeout(timeoutId);
+                if (requestId !== folderListRequestId || !modal.classList.contains('show')) return;
                 content.innerHTML = `
                     <div style="padding: 30px 20px; text-align: center;">
                         <i class="fa-solid fa-triangle-exclamation" style="font-size: 32px; color: #ef4444; margin-bottom: 12px;"></i>
@@ -854,7 +883,7 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                             <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" class="btn-secondary" style="padding: 6px 14px; font-size: 12px; text-decoration: none;">
                                 <i class="fa-solid fa-arrow-up-right-from-square"></i> Enable Drive API in Google Cloud
                             </a>
-                            <button type="button" class="btn-secondary" onclick="navigateToFolder('${escapeHtml(folderId)}', '${escapeHtml(folderName)}')" style="padding: 6px 14px; font-size: 12px;">
+                            <button type="button" class="btn-secondary" onclick="navigateToFolder(decodeURIComponent('${encodeFolderActionValue(folderId)}'), decodeURIComponent('${encodeFolderActionValue(folderName)}'))" style="padding: 6px 14px; font-size: 12px;">
                                 <i class="fa-solid fa-rotate-right"></i> Retry
                             </button>
                             <button type="button" class="btn-primary" onclick="setTargetFolder('root', 'My Drive (Root)')" style="padding: 6px 14px; font-size: 12px;">
@@ -863,6 +892,9 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                         </div>
                     </div>
                 `;
+            }
+            finally {
+                clearTimeout(timeoutId);
             }
         }
 
