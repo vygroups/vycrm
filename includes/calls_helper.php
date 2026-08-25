@@ -397,30 +397,40 @@ function calls_process_recording_upload(PDO $conn, string $p, array $uploadedFil
     $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION)) ?: 'mp3';
 
     $callerNumber = preg_replace('/[^0-9+]/', '', $callMeta['caller_number'] ?? 'unknown');
-    $timestamp = date('Ymd_His', strtotime($callMeta['call_start_time'] ?? 'now'));
-    $safeFileName = "call_{$callerNumber}_{$timestamp}_" . bin2hex(random_bytes(4)) . ".{$ext}";
+    $callTime = !empty($callMeta['call_start_time']) ? strtotime($callMeta['call_start_time']) : time();
+    if ($callTime <= 0) $callTime = time();
+
+    // Format: call_{callerNumber}_{YYYYMMDD_HHMMSS}.{ext}
+    $timestamp = date('Ymd_His', $callTime);
+    $safeFileName = "call_{$callerNumber}_{$timestamp}.{$ext}";
 
     switch ($provider) {
         case 'google_drive':
-            return calls_upload_to_google_drive($conn, $p, $tmpPath, $safeFileName, $config, $origName);
+            return calls_upload_to_google_drive($conn, $p, $tmpPath, $safeFileName, $config, $origName, $callMeta);
 
         case 's3':
         case 'cloudflare_r2':
-            return calls_upload_to_s3_compatible($tmpPath, $safeFileName, $cfgData, $provider);
+            return calls_upload_to_s3_compatible($tmpPath, $safeFileName, $cfgData, $provider, $callMeta);
 
         case 'local':
         default:
-            return calls_upload_to_local_storage($tmpPath, $safeFileName, $cfgData);
+            return calls_upload_to_local_storage($tmpPath, $safeFileName, $cfgData, $callMeta);
     }
 }
 
 /**
  * Upload to Local CRM Web Storage
  */
-function calls_upload_to_local_storage(string $tmpPath, string $filename, array $cfg): array
+function calls_upload_to_local_storage(string $tmpPath, string $filename, array $cfg, array $callMeta = []): array
 {
-    $subDir = $cfg['folder'] ?? 'uploads/recordings/';
-    $subDir = trim($subDir, '/') . '/';
+    $callTime = !empty($callMeta['call_start_time']) ? strtotime($callMeta['call_start_time']) : time();
+    if ($callTime <= 0) $callTime = time();
+
+    $year = date('Y', $callTime);
+    $month = date('m', $callTime);
+    $day = date('d', $callTime);
+
+    $subDir = 'uploads/recordings/' . $year . '/' . $month . '/' . $day . '/';
     $targetDir = dirname(__DIR__) . '/' . $subDir;
 
     if (!is_dir($targetDir)) {
@@ -442,17 +452,104 @@ function calls_upload_to_local_storage(string $tmpPath, string $filename, array 
     throw new RuntimeException('Failed to save recording file locally');
 }
 
+function calls_get_effective_google_credentials(?array $cfgData = null): array
+{
+    $clientId = trim($cfgData['client_id'] ?? '');
+    $clientSecret = trim($cfgData['client_secret'] ?? '');
+
+    if (!$clientId || !$clientSecret) {
+        $globalId = (string)dm_get_global_setting('google_drive_client_id', '');
+        $globalSecret = (string)dm_get_global_setting('google_drive_client_secret', '');
+        if ($globalId && $globalSecret) {
+            $clientId = $clientId ?: $globalId;
+            $clientSecret = $clientSecret ?: $globalSecret;
+        }
+    }
+
+    return [$clientId, $clientSecret];
+}
+
 /**
- * Upload to Google Drive via Access Token / Refresh Token
+ * Recursively find or create a folder path in Google Drive (e.g. YYYY / MM / DD)
+ * Returns the final leaf folder ID
  */
-function calls_upload_to_google_drive(PDO $conn, string $p, string $tmpPath, string $filename, array $fullConfig, string $origName = ''): array
+function calls_get_or_create_google_drive_folder_path(string $rootFolderId, array $pathSegments, string $accessToken): string
+{
+    $currentParentId = $rootFolderId ?: 'root';
+
+    foreach ($pathSegments as $segment) {
+        $segment = trim((string)$segment);
+        if ($segment === '') continue;
+
+        // 1. Check if folder already exists under $currentParentId
+        $q = "mimeType = 'application/vnd.google-apps.folder' and name = '" . addslashes($segment) . "' and '{$currentParentId}' in parents and trashed = false";
+        $url = 'https://www.googleapis.com/drive/v3/files?' . http_build_query([
+            'q' => $q,
+            'spaces' => 'drive',
+            'fields' => 'files(id, name)',
+            'pageSize' => 1
+        ]);
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $accessToken,
+            'Accept: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $json = json_decode($res, true);
+        if ($httpCode >= 200 && $httpCode < 300 && !empty($json['files'][0]['id'])) {
+            $currentParentId = $json['files'][0]['id'];
+            continue;
+        }
+
+        // 2. Not found -> create folder under $currentParentId
+        $createUrl = 'https://www.googleapis.com/drive/v3/files?fields=id,name';
+        $createData = [
+            'name' => $segment,
+            'mimeType' => 'application/vnd.google-apps.folder',
+            'parents' => [$currentParentId]
+        ];
+
+        $ch = curl_init($createUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($createData));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $accessToken,
+            'Content-Type: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        $createRes = curl_exec($ch);
+        $createCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $createJson = json_decode($createRes, true);
+        if ($createCode >= 200 && $createCode < 300 && !empty($createJson['id'])) {
+            $currentParentId = $createJson['id'];
+        } else {
+            error_log("[VY-CRM Google Drive] Subfolder creation failed for '{$segment}': " . $createRes);
+            break;
+        }
+    }
+
+    return $currentParentId;
+}
+
+/**
+ * Upload to Google Drive via Access Token / Refresh Token into Year/Month/Date hierarchy
+ */
+function calls_upload_to_google_drive(PDO $conn, string $p, string $tmpPath, string $filename, array $fullConfig, string $origName = '', array $callMeta = []): array
 {
     $cfg = $fullConfig['config_data'] ?? [];
     $folderId = trim($cfg['folder_id'] ?? '');
     $accessToken = trim($cfg['access_token'] ?? '');
     $refreshToken = trim($cfg['refresh_token'] ?? '');
-    $clientId = trim($cfg['client_id'] ?? '');
-    $clientSecret = trim($cfg['client_secret'] ?? '');
+    [$clientId, $clientSecret] = calls_get_effective_google_credentials($cfg);
     $configId = (int)($fullConfig['id'] ?? 0);
 
     // Refresh token if needed
@@ -473,18 +570,44 @@ function calls_upload_to_google_drive(PDO $conn, string $p, string $tmpPath, str
 
     if (!$accessToken) {
         error_log("[VY-CRM Google Drive] Access token missing or refresh failed. Config ID: {$configId}. Falling back to local storage.");
-        return calls_upload_to_local_storage($tmpPath, $filename, []);
+        return calls_upload_to_local_storage($tmpPath, $filename, [], $callMeta);
     }
 
+    // Auto-organize into year/month/date folder hierarchy
+    $callTime = !empty($callMeta['call_start_time']) ? strtotime($callMeta['call_start_time']) : time();
+    if ($callTime <= 0) $callTime = time();
+
+    $year = date('Y', $callTime);
+    $month = date('m', $callTime);
+    $day = date('d', $callTime);
+
+    $targetFolderId = calls_get_or_create_google_drive_folder_path($folderId, [$year, $month, $day], $accessToken);
+
     $fileData = file_get_contents($tmpPath);
-    $mimeType = mime_content_type($tmpPath) ?: 'audio/mpeg';
+
+    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION)) ?: 'mp3';
+    $mimeMap = [
+        'm4a' => 'audio/mp4',
+        'mp3' => 'audio/mpeg',
+        'wav' => 'audio/wav',
+        'aac' => 'audio/aac',
+        'ogg' => 'audio/ogg',
+        'opus' => 'audio/opus',
+        '3gp' => 'audio/3gpp',
+        'amr' => 'audio/amr'
+    ];
+    $mimeType = $mimeMap[$ext] ?? (mime_content_type($tmpPath) ?: 'audio/mpeg');
+    if (stripos($mimeType, 'video/') === 0) {
+        $mimeType = $mimeMap[$ext] ?? 'audio/mp4';
+    }
 
     $metadata = [
         'name' => $filename,
+        'mimeType' => $mimeType,
         'description' => 'VY-AI CRM Call Recording: ' . $origName
     ];
-    if ($folderId) {
-        $metadata['parents'] = [$folderId];
+    if ($targetFolderId) {
+        $metadata['parents'] = [$targetFolderId];
     }
 
     $boundary = '-------314159265358979323846';
@@ -530,7 +653,7 @@ function calls_upload_to_google_drive(PDO $conn, string $p, string $tmpPath, str
     }
 
     error_log("[VY-CRM Google Drive] Upload failed with HTTP {$httpCode}: {$response}. Falling back to local storage.");
-    return calls_upload_to_local_storage($tmpPath, $filename, []);
+    return calls_upload_to_local_storage($tmpPath, $filename, [], $callMeta);
 }
 
 /**
@@ -667,8 +790,7 @@ function calls_get_valid_google_access_token(PDO $conn, string $p, ?int $userId 
     $cfg = $config['config_data'] ?? [];
     $accessToken = trim($cfg['access_token'] ?? '');
     $refreshToken = trim($cfg['refresh_token'] ?? '');
-    $clientId = trim($cfg['client_id'] ?? '');
-    $clientSecret = trim($cfg['client_secret'] ?? '');
+    [$clientId, $clientSecret] = calls_get_effective_google_credentials($cfg);
     $expiresAt = (int)($cfg['token_expires_at'] ?? 0);
     $configId = (int)($config['id'] ?? 0);
 
@@ -703,7 +825,7 @@ function calls_get_google_auth_url(string $clientId, string $redirectUri, string
         'client_id' => $clientId,
         'redirect_uri' => $redirectUri,
         'response_type' => 'code',
-        'scope' => 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+        'scope' => 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
         'access_type' => 'offline',
         'prompt' => 'consent',
         'include_granted_scopes' => 'true',

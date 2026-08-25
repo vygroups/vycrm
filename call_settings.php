@@ -27,6 +27,8 @@ $currentFolderName = $cfgData['folder_name'] ?? ($currentFolderId ? 'Selected Fo
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $redirectUri = $protocol . '://' . $_SERVER['HTTP_HOST'] . '/google_oauth_callback.php';
 
+$globalClientId = (string)dm_get_global_setting('google_drive_client_id', '');
+$hasGlobalGoogleConfig = !empty($globalClientId);
 $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk_import', '1');
 ?>
 <!DOCTYPE html>
@@ -311,9 +313,8 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                                 Automatically upload voice recordings to your Google Drive. Includes permanent offline refresh so you never have to log in repeatedly.
                             </div>
 
-                            <?php if ($isGoogleConnected): ?>
-                                <!-- CONNECTED STATE -->
-                                <div class="google-connect-box" style="border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.04);">
+                                <!-- CONNECTED STATE CONTAINER -->
+                                <div class="google-connect-box" id="gd_connected_box" style="<?= $isGoogleConnected ? 'border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.04);' : 'display:none;' ?>">
                                     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px;">
                                         <div style="display: flex; align-items: center; gap: 12px;">
                                             <?php if ($googlePicture): ?>
@@ -368,9 +369,9 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                                         </div>
                                     </div>
                                 </div>
-                            <?php else: ?>
-                                <!-- DISCONNECTED / 1-CLICK SIGN IN STATE -->
-                                <div class="google-connect-box">
+
+                                <!-- DISCONNECTED / 1-CLICK SIGN IN STATE CONTAINER -->
+                                <div class="google-connect-box" id="gd_disconnected_box" style="<?= $isGoogleConnected ? 'display:none;' : '' ?>">
                                     <div style="text-align: center; padding: 16px 8px;">
                                         <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" style="width: 56px; height: 56px; margin-bottom: 12px;">
                                         <h4 style="font-size: 17px; font-weight: 800; color: var(--text); margin: 0 0 6px;">Connect your Google Drive</h4>
@@ -384,22 +385,29 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                                         </button>
                                     </div>
                                 </div>
-                            <?php endif; ?>
 
-                            <!-- Google Cloud OAuth App Credentials Accordion -->
+                            <!-- Google Cloud OAuth App Status / Override -->
                             <details style="border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; background: var(--surface-muted, #f8fafc);">
                                 <summary style="font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
-                                    <span><i class="fa-solid fa-gear" style="color: var(--primary); margin-right: 6px;"></i> Google Cloud OAuth App Settings (Client ID & Secret)</span>
-                                    <span style="font-size: 11px; color: var(--text-muted);">Click to expand</span>
+                                    <span>
+                                        <i class="fa-solid fa-sliders" style="color: var(--primary); margin-right: 6px;"></i> 
+                                        <?= $hasGlobalGoogleConfig ? 'Custom Google OAuth App Override (Optional)' : 'Google Cloud OAuth App Settings (Client ID & Secret)' ?>
+                                    </span>
+                                    <span style="font-size: 11px; color: var(--text-muted);"><?= $hasGlobalGoogleConfig ? 'Managed by Super Admin' : 'Click to expand' ?></span>
                                 </summary>
                                 <div style="margin-top: 16px;">
+                                    <?php if ($hasGlobalGoogleConfig): ?>
+                                        <div style="font-size: 12px; color: #059669; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; line-height: 1.5;">
+                                            <i class="fa-solid fa-circle-check"></i> <strong>Central Super Admin OAuth is Active.</strong> Regular users can click "Sign in with Google Drive" directly without entering credentials below.
+                                        </div>
+                                    <?php endif; ?>
                                     <div class="form-group">
-                                        <label>Google Cloud OAuth Client ID</label>
-                                        <input type="text" id="gd_client_id" class="form-control-custom" placeholder="e.g. 123456789-abc.apps.googleusercontent.com" value="<?= htmlspecialchars($cfgData['client_id'] ?? '') ?>">
+                                        <label>Google Cloud OAuth Client ID (Optional Override)</label>
+                                        <input type="text" id="gd_client_id" class="form-control-custom" placeholder="Leave empty to use Super Admin default" value="<?= htmlspecialchars($cfgData['client_id'] ?? '') ?>">
                                     </div>
                                     <div class="form-group">
-                                        <label>Google Cloud OAuth Client Secret</label>
-                                        <input type="password" id="gd_client_secret" class="form-control-custom" placeholder="••••••••••••••••" value="<?= htmlspecialchars($cfgData['client_secret'] ?? '') ?>">
+                                        <label>Google Cloud OAuth Client Secret (Optional Override)</label>
+                                        <input type="password" id="gd_client_secret" class="form-control-custom" placeholder="Leave empty to use Super Admin default" value="<?= htmlspecialchars($cfgData['client_secret'] ?? '') ?>">
                                     </div>
                                     <div class="form-group">
                                         <label>Authorized Redirect URI in Google Cloud Console:</label>
@@ -412,10 +420,10 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                                     </div>
                                     <div style="display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;">
                                         <button type="button" class="btn-primary" onclick="saveGoogleCredentialsOnly()" style="padding: 9px 18px; font-size: 13px; border-radius: 8px;">
-                                            <i class="fa-solid fa-floppy-disk"></i> Save Client ID & Secret
+                                            <i class="fa-solid fa-floppy-disk"></i> Save Client Override
                                         </button>
                                         <button type="button" class="btn-secondary" onclick="clearGoogleCredentials()" style="padding: 9px 16px; font-size: 13px; border-radius: 8px; color: #ef4444; border-color: rgba(239, 68, 68, 0.4);">
-                                            <i class="fa-solid fa-trash-can"></i> Clear & Remove
+                                            <i class="fa-solid fa-trash-can"></i> Clear & Use Super Admin Default
                                         </button>
                                     </div>
                                 </div>
@@ -671,13 +679,6 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
             const clientId = document.getElementById('gd_client_id')?.value.trim() || '';
             const clientSecret = document.getElementById('gd_client_secret')?.value.trim() || '';
 
-            if (!clientId || !clientSecret) {
-                const details = document.querySelector('details');
-                if (details) details.open = true;
-                Toast.show('Please enter your Google Cloud OAuth Client ID & Secret below first.', 'error');
-                return;
-            }
-
             try {
                 const res = await fetch('/api/calls_api.php', {
                     method: 'POST',
@@ -689,7 +690,13 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                     })
                 });
                 const data = await res.json();
-                if (!data.success || !data.auth_url) throw new Error(data.error || 'Failed to initialize Google Sign-in');
+                if (!data.success || !data.auth_url) {
+                    if (data.error && data.error.includes('Super Admin')) {
+                        const details = document.querySelector('details');
+                        if (details) details.open = true;
+                    }
+                    throw new Error(data.error || 'Failed to initialize Google Sign-in');
+                }
                 window.location.href = data.auth_url;
             } catch (err) {
                 Toast.show(err.message, 'error');
@@ -699,6 +706,12 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
         async function disconnectGoogleDrive() {
             if (!confirm('Are you sure you want to disconnect your Google Drive account?')) return;
 
+            const btn = document.querySelector('button[onclick="disconnectGoogleDrive()"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Disconnecting...';
+            }
+
             try {
                 const res = await fetch('/api/calls_api.php', {
                     method: 'POST',
@@ -707,9 +720,19 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                 });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.error || 'Failed to disconnect');
+
+                // 1. Instant live DOM switch (0ms delay)
+                const connectedBox = document.getElementById('gd_connected_box');
+                const disconnectedBox = document.getElementById('gd_disconnected_box');
+                if (connectedBox) connectedBox.style.display = 'none';
+                if (disconnectedBox) disconnectedBox.style.display = 'block';
+
                 Toast.show('Google Drive disconnected successfully', 'success');
-                setTimeout(() => location.reload(), 800);
             } catch (err) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-link-slash"></i> Disconnect Account';
+                }
                 Toast.show(err.message, 'error');
             }
         }

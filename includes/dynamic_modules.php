@@ -1929,3 +1929,53 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
         }
     }
 }
+
+/**
+ * Get a global platform setting stored in master database
+ */
+function dm_get_global_setting(string $key, $default = null)
+{
+    try {
+        if (!class_exists('Database')) {
+            require_once __DIR__ . '/../config/database.php';
+        }
+        $db = Database::getMasterConn();
+        $prefix = Database::getMasterPrefix();
+        $db->exec("CREATE TABLE IF NOT EXISTS `{$prefix}global_settings` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `setting_key` VARCHAR(100) UNIQUE NOT NULL,
+            `setting_value` TEXT NULL,
+            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )");
+        $stmt = $db->prepare("SELECT setting_value FROM {$prefix}global_settings WHERE setting_key = ? LIMIT 1");
+        $stmt->execute([$key]);
+        $val = $stmt->fetchColumn();
+        return ($val !== false && $val !== null) ? $val : $default;
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+/**
+ * Set a global platform setting stored in master database
+ */
+function dm_set_global_setting(string $key, $value): bool
+{
+    try {
+        if (!class_exists('Database')) {
+            require_once __DIR__ . '/../config/database.php';
+        }
+        $db = Database::getMasterConn();
+        $prefix = Database::getMasterPrefix();
+        $db->exec("CREATE TABLE IF NOT EXISTS `{$prefix}global_settings` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `setting_key` VARCHAR(100) UNIQUE NOT NULL,
+            `setting_value` TEXT NULL,
+            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )");
+        $stmt = $db->prepare("INSERT INTO {$prefix}global_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+        return $stmt->execute([$key, $value, $value]);
+    } catch (Throwable $e) {
+        return false;
+    }
+}

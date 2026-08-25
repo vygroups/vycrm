@@ -683,25 +683,31 @@ try {
             $clientSecret = trim($input['client_secret'] ?? $cfgData['client_secret'] ?? '');
 
             if (!$clientId || !$clientSecret) {
-                throw new RuntimeException('Google OAuth Client ID & Client Secret are required before connecting.');
+                [$clientId, $clientSecret] = calls_get_effective_google_credentials($cfgData);
+            }
+
+            if (!$clientId || !$clientSecret) {
+                throw new RuntimeException('Google OAuth App is not configured in Super Admin yet. Please configure Client ID & Secret in Super Admin.');
             }
 
             $_SESSION['pending_gd_client_id'] = $clientId;
             $_SESSION['pending_gd_client_secret'] = $clientSecret;
 
-            // Also persist credentials to DB so future token auto-refreshes work permanently
-            $mergedCfg = array_merge($cfgData, [
-                'client_id' => $clientId,
-                'client_secret' => $clientSecret
-            ]);
-            calls_save_storage_config($conn, $prefix, [
-                'id' => $storageConfig['id'] ?? 0,
-                'provider' => 'google_drive',
-                'config_name' => $storageConfig['config_name'] ?? 'Google Drive Storage',
-                'config_data' => $mergedCfg,
-                'is_default' => 1,
-                'is_active' => 1
-            ], $userId);
+            // Also persist credentials to DB if local override was passed
+            if (!empty($input['client_id'])) {
+                $mergedCfg = array_merge($cfgData, [
+                    'client_id' => $clientId,
+                    'client_secret' => $clientSecret
+                ]);
+                calls_save_storage_config($conn, $prefix, [
+                    'id' => $storageConfig['id'] ?? 0,
+                    'provider' => 'google_drive',
+                    'config_name' => $storageConfig['config_name'] ?? 'Google Drive Storage',
+                    'config_data' => $mergedCfg,
+                    'is_default' => 1,
+                    'is_active' => 1
+                ], $userId);
+            }
 
             $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
             $redirectUri = $protocol . '://' . $_SERVER['HTTP_HOST'] . '/google_oauth_callback.php';
