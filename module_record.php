@@ -374,7 +374,7 @@ foreach ($module['blocks'] as $block) {
                                             <span style="font-size:14px;"><?= htmlspecialchars($field['placeholder'] ?: 'Yes') ?></span>
                                         </label>
                                     <?php break; case 'dropdown': ?>
-                                        <select class="dm-field dm-tom-select dm-dropdown" data-field-id="<?= $fid ?>" <?= $field['is_required'] ? 'required' : '' ?> placeholder="Select or type to add...">
+                                        <select class="form-control dm-field" data-field-id="<?= $fid ?>" <?= $field['is_required'] ? 'required' : '' ?>>
                                             <option value="">Select...</option>
                                             <?php foreach($field['options'] as $opt): ?>
                                             <option value="<?= htmlspecialchars($opt['value']) ?>" <?= $val === $opt['value'] ? 'selected' : '' ?>><?= htmlspecialchars($opt['label']) ?></option>
@@ -786,7 +786,7 @@ foreach ($module['blocks'] as $block) {
 </div>
 
 <script>
-const API = '/api/modules.php';
+const API = 'api/modules.php';
 const MODULE_ID = <?= $moduleId ?>;
 const RECORD_ID = <?= $recordId ?: 'null' ?>;
 const IS_VIEW_ONLY = <?= $isViewOnly ? 'true' : 'false' ?>;
@@ -806,6 +806,14 @@ function getFieldValue(fieldId) {
         const prefix = prefixEl ? prefixEl.value : '';
         const number = phoneNumEl.value.trim();
         return number ? (prefix + number) : '';
+    }
+
+    const dtPicker = document.querySelector(`.dm-datetime-picker[data-field-id="${fieldId}"], .dm-date-picker[data-field-id="${fieldId}"], .dm-time-picker[data-field-id="${fieldId}"]`);
+    if (dtPicker) {
+        if (dtPicker._flatpickr && dtPicker._flatpickr.input) {
+            return dtPicker._flatpickr.input.value || dtPicker.value;
+        }
+        return dtPicker.value;
     }
 
     const el = document.querySelector(`.dm-field[data-field-id="${fieldId}"]`);
@@ -935,8 +943,16 @@ function validateFields() {
                 hasErrors = true;
             }
         } else if (type === 'url') {
-            const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
-            if (!urlRegex.test(val)) {
+            let isValidUrl = false;
+            try {
+                const trimmed = val.trim();
+                const urlToCheck = /^https?:\/\//i.test(trimmed) ? trimmed : 'https://' + trimmed;
+                const parsed = new URL(urlToCheck);
+                isValidUrl = !!(parsed.hostname && (parsed.hostname.includes('.') || parsed.hostname === 'localhost'));
+            } catch (e) {
+                isValidUrl = false;
+            }
+            if (!isValidUrl) {
                 showFieldError(fid, `"${label}" must be a valid URL.`);
                 hasErrors = true;
             }
@@ -959,8 +975,20 @@ function saveRecord() {
     
     const hasErrors = validateFields();
     if (hasErrors) {
+        const firstInvalid = document.querySelector('.mr-field-group .is-invalid, .mr-field-group .error-msg');
+        if (firstInvalid) {
+            const group = firstInvalid.closest('.mr-field-group');
+            if (group) group.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
         vyToast('Please correct the highlighted errors before saving.', 'error');
         return;
+    }
+
+    const saveBtn = document.querySelector('.topbar-right button.btn-primary') || document.querySelector('button[onclick="saveRecord()"]');
+    const originalBtnHtml = saveBtn ? saveBtn.innerHTML : '';
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
     }
 
     const values = collectValues();
@@ -993,8 +1021,21 @@ function saveRecord() {
             vyToast('Record saved successfully!', 'success');
             setTimeout(() => { window.location.href = 'module_view.php?module=' + MODULE_ID; }, 1000);
         }
-        else vyToast(r.error, 'error');
-    }).catch(e => vyToast('Error: ' + e.message, 'error'));
+        else {
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = originalBtnHtml;
+            }
+            vyToast(r.error || 'Failed to save record', 'error');
+        }
+    }).catch(e => {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = originalBtnHtml;
+        }
+        console.error('Save record error:', e);
+        vyToast('Error: ' + e.message, 'error');
+    });
 }
 
 // Country → State dependency
@@ -1526,7 +1567,7 @@ function renderPickerQcFields() {
                 (field.options || []).forEach(opt => {
                     optsHtml += `<option value="${escapeHtml(opt.value)}" ${val === opt.value ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`;
                 });
-                inputHtml = `<select class="rp-qc-tom-select rp-qc-dropdown" data-field-id="${fid}" style="width:100%;">${optsHtml}</select>`;
+                inputHtml = `<select class="form-control rp-qc-input rp-qc-dropdown" data-field-id="${fid}" style="width:100%; height:38px; padding:8px 12px; border-radius:8px; border:1.5px solid var(--border); font-size:13px; background:#fff; box-sizing:border-box;">${optsHtml}</select>`;
                 break;
             case 'radio_group':
                 let radios = '';
@@ -1580,12 +1621,12 @@ function renderPickerQcFields() {
             flatpickr(group.querySelector('.rp-qc-time-picker'), { enableTime: true, noCalendar: true, dateFormat: "H:i", allowInput: true });
         }
         
-        if ((type === 'dropdown' || type === 'multi_picker') && typeof TomSelect !== 'undefined') {
+        if (type === 'multi_picker' && typeof TomSelect !== 'undefined') {
             const selectEl = group.querySelector('.rp-qc-tom-select');
             if (selectEl) {
                 currentPickerQcTomSelects[fid] = new TomSelect(selectEl, {
                     dropdownParent: 'body',
-                    plugins: type === 'multi_picker' ? ['remove_button'] : [],
+                    plugins: ['remove_button'],
                     sortField: { field: 'text', direction: 'asc' }
                 });
             }

@@ -1787,7 +1787,7 @@ function onFilterFieldChange(rowId, fieldId, value = '') {
     let html = '';
     if (field.field_type === 'user' || field.field_type === 'assigned_to' || field.field_type === 'sys_created_by' || field.field_type === 'sys_updated_by') {
         html = `
-            <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer;">
+            <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; color: #1e293b; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer;">
                 <option value="">-- Select User --</option>
                 ${Object.entries(COMPANY_USERS).map(([id, name]) => `
                     <option value="${id}" ${value == id ? 'selected' : ''}>${escapeHtml(name)}</option>
@@ -1796,19 +1796,28 @@ function onFilterFieldChange(rowId, fieldId, value = '') {
         `;
     } else if (field.field_type === 'checkbox') {
         html = `
-            <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer;">
+            <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; color: #1e293b; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer;">
                 <option value="1" ${value == '1' ? 'selected' : ''}>Yes</option>
                 <option value="0" ${value == '0' ? 'selected' : ''}>No</option>
             </select>
         `;
-    } else if (field.field_type === 'select' || field.field_type === 'dropdown') {
+    } else if (field.field_type === 'select' || field.field_type === 'dropdown' || field.field_type === 'multi_picker' || field.field_type === 'radio_group') {
         const opts = field.options || [];
+        let parsedOpts = [];
+        if (typeof opts === 'string') {
+            try { parsedOpts = JSON.parse(opts); } catch(e) {}
+        } else if (Array.isArray(opts)) {
+            parsedOpts = opts;
+        }
+        const optHtml = parsedOpts.map(o => {
+            const optVal = (o && typeof o === 'object') ? (o.value ?? o.option_value ?? o.label ?? '') : o;
+            const optLbl = (o && typeof o === 'object') ? (o.label ?? o.option_label ?? o.value ?? optVal) : o;
+            return `<option value="${escapeHtml(optVal)}" ${value == optVal ? 'selected' : ''}>${escapeHtml(optLbl)}</option>`;
+        }).join('');
         html = `
-            <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer;">
+            <select class="form-control filter-value-input" style="height: 36px; font-size: 13px; color: #1e293b; background:#fff; border: 1.5px solid var(--border); border-radius:8px; cursor:pointer;">
                 <option value="">-- Choose Option --</option>
-                ${opts.map(opt => `
-                    <option value="${opt.option_value}" ${value == opt.option_value ? 'selected' : ''}>${escapeHtml(opt.option_label || opt.option_value)}</option>
-                `).join('')}
+                ${optHtml}
             </select>
         `;
     } else if (field.field_type === 'date' || field.field_type === 'sys_created_at' || field.field_type === 'sys_updated_at') {
@@ -1816,17 +1825,17 @@ function onFilterFieldChange(rowId, fieldId, value = '') {
         if (value && value.includes(' ')) {
             valStr = value.split(' ')[0]; // extract date part only
         }
-        html = `<input type="date" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" value="${escapeHtml(valStr)}">`;
+        html = `<input type="date" class="form-control filter-value-input" style="height: 36px; font-size: 13px; color: #1e293b; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" value="${escapeHtml(valStr)}">`;
     } else if (field.field_type === 'datetime') {
         let valStr = '';
         if (value) {
             valStr = value.replace(' ', 'T').substring(0, 16);
         }
-        html = `<input type="datetime-local" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" value="${escapeHtml(valStr)}">`;
+        html = `<input type="datetime-local" class="form-control filter-value-input" style="height: 36px; font-size: 13px; color: #1e293b; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" value="${escapeHtml(valStr)}">`;
     } else if (field.field_type === 'time') {
-        html = `<input type="time" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" value="${escapeHtml(value)}">`;
+        html = `<input type="time" class="form-control filter-value-input" style="height: 36px; font-size: 13px; color: #1e293b; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" value="${escapeHtml(value)}">`;
     } else {
-        html = `<input type="text" class="form-control filter-value-input" style="height: 36px; font-size: 13px; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" placeholder="Enter value..." value="${escapeHtml(value)}">`;
+        html = `<input type="text" class="form-control filter-value-input" style="height: 36px; font-size: 13px; color: #1e293b; background:#fff; border: 1.5px solid var(--border); border-radius:8px;" placeholder="Enter value..." value="${escapeHtml(value)}">`;
     }
     
     valueContainer.innerHTML = html;
