@@ -674,6 +674,162 @@ try {
             commerce_json_response(['success' => true, 'message' => 'Storage configuration saved', 'id' => $configId]);
             break;
 
+        // GOOGLE DRIVE 1-CLICK AUTH & FOLDER MANAGEMENT
+        case 'google_drive_get_auth_url':
+            $storageConfig = calls_get_storage_config($conn, $prefix, $userId);
+            $cfgData = $storageConfig['config_data'] ?? [];
+
+            $clientId = trim($input['client_id'] ?? $cfgData['client_id'] ?? '');
+            $clientSecret = trim($input['client_secret'] ?? $cfgData['client_secret'] ?? '');
+
+            if (!$clientId || !$clientSecret) {
+                throw new RuntimeException('Google OAuth Client ID & Client Secret are required before connecting.');
+            }
+
+            $_SESSION['pending_gd_client_id'] = $clientId;
+            $_SESSION['pending_gd_client_secret'] = $clientSecret;
+
+            // Also persist credentials to DB so future token auto-refreshes work permanently
+            $mergedCfg = array_merge($cfgData, [
+                'client_id' => $clientId,
+                'client_secret' => $clientSecret
+            ]);
+            calls_save_storage_config($conn, $prefix, [
+                'id' => $storageConfig['id'] ?? 0,
+                'provider' => 'google_drive',
+                'config_name' => $storageConfig['config_name'] ?? 'Google Drive Storage',
+                'config_data' => $mergedCfg,
+                'is_default' => 1,
+                'is_active' => 1
+            ], $userId);
+
+            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $redirectUri = $protocol . '://' . $_SERVER['HTTP_HOST'] . '/google_oauth_callback.php';
+            $state = bin2hex(random_bytes(16));
+            $_SESSION['google_oauth_state'] = $state;
+
+            $authUrl = calls_get_google_auth_url($clientId, $redirectUri, $state);
+            commerce_json_response(['success' => true, 'auth_url' => $authUrl]);
+            break;
+
+        case 'save_google_credentials':
+            $clientId = trim($input['client_id'] ?? '');
+            $clientSecret = trim($input['client_secret'] ?? '');
+
+            // Update all rows for google_drive provider
+            $stmt = $conn->prepare("SELECT id, config_data FROM {$prefix}call_storage_configs WHERE provider = 'google_drive'");
+            $stmt->execute();
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (!empty($rows)) {
+                foreach ($rows as $row) {
+                    $cData = json_decode($row['config_data'] ?? '{}', true) ?: [];
+                    $cData['client_id'] = $clientId;
+                    $cData['client_secret'] = $clientSecret;
+                    if (empty($clientId) || empty($clientSecret)) {
+                        unset($cData['access_token'], $cData['refresh_token'], $cData['account_email'], $cData['account_name'], $cData['account_picture'], $cData['token_expires_at'], $cData['connected_at']);
+                    }
+                    $uStmt = $conn->prepare("UPDATE {$prefix}call_storage_configs SET config_data = ? WHERE id = ?");
+                    $uStmt->execute([json_encode($cData), $row['id']]);
+                }
+            } else {
+                calls_save_storage_config($conn, $prefix, [
+                    'provider' => 'google_drive',
+                    'config_name' => 'Google Drive Storage',
+                    'config_data' => [
+                        'client_id' => $clientId,
+                        'client_secret' => $clientSecret
+                    ],
+                    'is_default' => 1,
+                    'is_active' => 1
+                ], $userId);
+            }
+
+            commerce_json_response([
+                'success' => true,
+                'message' => (empty($clientId) && empty($clientSecret))
+                    ? 'Google OAuth credentials removed successfully' 
+                    : 'Google OAuth Client ID & Secret saved successfully'
+            ]);
+            break;
+
+        case 'google_drive_disconnect':
+            // Cleanly reset tokens & folder on all google_drive storage rows
+            $stmt = $conn->prepare("SELECT id, config_data FROM {$prefix}call_storage_configs WHERE provider = 'google_drive'");
+            $stmt->execute();
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (!empty($rows)) {
+                foreach ($rows as $row) {
+                    $cData = json_decode($row['config_data'] ?? '{}', true) ?: [];
+                    $cleanData = [
+                        'client_id' => $cData['client_id'] ?? '',
+                        'client_secret' => $cData['client_secret'] ?? ''
+                    ];
+                    $uStmt = $conn->prepare("UPDATE {$prefix}call_storage_configs SET config_name = 'Google Drive Storage (Disconnected)', config_data = ? WHERE id = ?");
+                    $uStmt->execute([json_encode($cleanData), $row['id']]);
+                }
+            } else {
+                $storageConfig = calls_get_storage_config($conn, $prefix, $userId);
+                $cData = $storageConfig['config_data'] ?? [];
+                calls_save_storage_config($conn, $prefix, [
+                    'provider' => 'google_drive',
+                    'config_name' => 'Google Drive Storage (Disconnected)',
+                    'config_data' => [
+                        'client_id' => $cData['client_id'] ?? '',
+                        'client_secret' => $cData['client_secret'] ?? ''
+                    ],
+                    'is_default' => 1,
+                    'is_active' => 1
+                ], $userId);
+            }
+
+            unset($_SESSION['google_oauth_state'], $_SESSION['pending_gd_client_id'], $_SESSION['pending_gd_client_secret']);
+
+            commerce_json_response(['success' => true, 'message' => 'Google Drive account disconnected successfully']);
+            break;
+
+        case 'google_drive_list_folders':
+            $accessToken = calls_get_valid_google_access_token($conn, $prefix, $userId);
+            $parentId = trim($_GET['parent_id'] ?? $input['parent_id'] ?? 'root');
+            if (empty($parentId)) $parentId = 'root';
+
+            $folders = calls_list_google_folders($accessToken, $parentId);
+            commerce_json_response(['success' => true, 'folders' => $folders, 'parent_id' => $parentId]);
+            break;
+
+        case 'google_drive_create_folder':
+            $accessToken = calls_get_valid_google_access_token($conn, $prefix, $userId);
+            $folderName = trim($input['folder_name'] ?? '');
+            if (!$folderName) throw new RuntimeException('Folder name is required');
+            $parentId = trim($input['parent_id'] ?? 'root');
+            if (empty($parentId)) $parentId = 'root';
+
+            $created = calls_create_google_folder($accessToken, $folderName, $parentId);
+            commerce_json_response(['success' => true, 'folder' => $created, 'message' => "Folder '{$folderName}' created successfully!"]);
+            break;
+
+        case 'google_drive_set_folder':
+            $folderId = trim($input['folder_id'] ?? '');
+            $folderName = trim($input['folder_name'] ?? 'Selected Folder');
+            if (!$folderId) throw new RuntimeException('Folder ID is required');
+
+            $storageConfig = calls_get_storage_config($conn, $prefix, $userId);
+            $cfgData = $storageConfig['config_data'] ?? [];
+            $cfgData['folder_id'] = $folderId;
+            $cfgData['folder_name'] = $folderName;
+
+            calls_save_storage_config($conn, $prefix, [
+                'id' => $storageConfig['id'] ?? 0,
+                'provider' => 'google_drive',
+                'config_name' => 'Google Drive Storage',
+                'config_data' => $cfgData,
+                'is_default' => 1,
+                'is_active' => 1
+            ], $userId);
+
+            commerce_json_response(['success' => true, 'message' => "Target folder updated to '{$folderName}'"]);
+            break;
+
         case 'save_admin_settings':
             if (isset($input['allow_bulk_import'])) {
                 $val = $input['allow_bulk_import'] ? '1' : '0';
@@ -683,8 +839,81 @@ try {
                 $val = $input['calls_enabled'] ? '1' : '0';
                 dm_set_system_setting($conn, $prefix, 'calls_enabled', $val);
             }
-            commerce_json_response(['success' => true, 'message' => 'Admin sync settings saved successfully']);
-            break;
+        case 'stream_recording':
+            if (ob_get_length()) {
+                @ob_end_clean();
+            }
+            $fileId = trim($_GET['file_id'] ?? $input['file_id'] ?? '');
+            $callId = (int)($_GET['call_id'] ?? $input['call_id'] ?? 0);
+
+            if (!$fileId && $callId > 0) {
+                $stmt = $conn->prepare("SELECT recording_file_url, recording_storage_type FROM {$prefix}calls WHERE id = ? LIMIT 1");
+                $stmt->execute([$callId]);
+                $c = $stmt->fetch(PDO::FETCH_ASSOC);
+                if (!empty($c['recording_file_url'])) {
+                    if (preg_match('/id=([a-zA-Z0-9_-]+)/', $c['recording_file_url'], $m) || preg_match('/\/d\/([a-zA-Z0-9_-]+)/', $c['recording_file_url'], $m)) {
+                        $fileId = $m[1];
+                    } else {
+                        $localPath = __DIR__ . '/../' . ltrim($c['recording_file_url'], '/');
+                        if (file_exists($localPath)) {
+                            header('Content-Type: ' . (mime_content_type($localPath) ?: 'audio/mpeg'));
+                            header('Content-Length: ' . filesize($localPath));
+                            header('Accept-Ranges: bytes');
+                            readfile($localPath);
+                            exit;
+                        }
+                        header('Location: ' . $c['recording_file_url']);
+                        exit;
+                    }
+                }
+            }
+
+            if (!$fileId) {
+                http_response_code(400);
+                echo "Missing recording file ID";
+                exit;
+            }
+
+            try {
+                $accessToken = calls_get_valid_google_access_token($conn, $prefix, $userId);
+            } catch (Throwable $e) {
+                header("Location: https://drive.google.com/uc?export=download&id={$fileId}");
+                exit;
+            }
+
+            // Stream directly from Google Drive API with Authorization header
+            $driveApiUrl = "https://www.googleapis.com/drive/v3/files/{$fileId}?alt=media";
+            
+            $headers = ["Authorization: Bearer {$accessToken}"];
+            if (isset($_SERVER['HTTP_RANGE'])) {
+                $headers[] = "Range: " . $_SERVER['HTTP_RANGE'];
+            }
+
+            $ch = curl_init($driveApiUrl);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+            curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $header) {
+                $len = strlen($header);
+                $headerClean = trim($header);
+                if (stripos($headerClean, 'Content-Type:') === 0 ||
+                    stripos($headerClean, 'Content-Length:') === 0 ||
+                    stripos($headerClean, 'Content-Range:') === 0 ||
+                    stripos($headerClean, 'Accept-Ranges:') === 0) {
+                    header($headerClean);
+                }
+                return $len;
+            });
+
+            header('Access-Control-Allow-Origin: *');
+            header('Content-Type: audio/mpeg');
+            header('Accept-Ranges: bytes');
+
+            curl_exec($ch);
+            curl_close($ch);
+            exit;
 
         default:
             throw new RuntimeException("Unknown action: {$action}");

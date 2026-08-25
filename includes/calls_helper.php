@@ -402,7 +402,7 @@ function calls_process_recording_upload(PDO $conn, string $p, array $uploadedFil
 
     switch ($provider) {
         case 'google_drive':
-            return calls_upload_to_google_drive($tmpPath, $safeFileName, $cfgData, $origName);
+            return calls_upload_to_google_drive($conn, $p, $tmpPath, $safeFileName, $config, $origName);
 
         case 's3':
         case 'cloudflare_r2':
@@ -445,24 +445,34 @@ function calls_upload_to_local_storage(string $tmpPath, string $filename, array 
 /**
  * Upload to Google Drive via Access Token / Refresh Token
  */
-function calls_upload_to_google_drive(string $tmpPath, string $filename, array $cfg, string $origName = ''): array
+function calls_upload_to_google_drive(PDO $conn, string $p, string $tmpPath, string $filename, array $fullConfig, string $origName = ''): array
 {
+    $cfg = $fullConfig['config_data'] ?? [];
     $folderId = trim($cfg['folder_id'] ?? '');
     $accessToken = trim($cfg['access_token'] ?? '');
     $refreshToken = trim($cfg['refresh_token'] ?? '');
     $clientId = trim($cfg['client_id'] ?? '');
     $clientSecret = trim($cfg['client_secret'] ?? '');
+    $configId = (int)($fullConfig['id'] ?? 0);
 
     // Refresh token if needed
-    if ((!$accessToken || (!empty($cfg['token_expires_at']) && time() > $cfg['token_expires_at'])) && $refreshToken && $clientId && $clientSecret) {
+    if ((!$accessToken || (!empty($cfg['token_expires_at']) && time() > (int)$cfg['token_expires_at'])) && $refreshToken && $clientId && $clientSecret) {
         $newToken = calls_refresh_google_drive_token($refreshToken, $clientId, $clientSecret);
         if ($newToken) {
             $accessToken = $newToken;
+            $cfg['access_token'] = $newToken;
+            $cfg['token_expires_at'] = time() + 3500;
+            // Persist back to DB
+            if ($configId > 0) {
+                try {
+                    $conn->prepare("UPDATE {$p}call_storage_configs SET config_data = ? WHERE id = ?")->execute([json_encode($cfg), $configId]);
+                } catch (Exception $e) {}
+            }
         }
     }
 
     if (!$accessToken) {
-        // Fallback to local if drive is not fully configured
+        error_log("[VY-CRM Google Drive] Access token missing or refresh failed. Config ID: {$configId}. Falling back to local storage.");
         return calls_upload_to_local_storage($tmpPath, $filename, []);
     }
 
@@ -508,19 +518,18 @@ function calls_upload_to_google_drive(string $tmpPath, string $filename, array $
     $json = json_decode($response, true);
     if ($httpCode >= 200 && $httpCode < 300 && !empty($json['id'])) {
         $fileId = $json['id'];
-        @calls_set_google_drive_public($fileId, $accessToken);
-
-        $viewLink = "https://drive.google.com/uc?export=open&id=" . $fileId;
+        $webViewLink = "https://drive.google.com/file/d/" . $fileId . "/view";
         return [
             'success' => true,
             'storage_type' => 'google_drive',
-            'file_url' => $viewLink,
+            'file_url' => $webViewLink,
             'file_id' => $fileId,
             'file_size' => strlen($fileData),
-            'web_view_link' => $json['webViewLink'] ?? ''
+            'web_view_link' => $webViewLink
         ];
     }
 
+    error_log("[VY-CRM Google Drive] Upload failed with HTTP {$httpCode}: {$response}. Falling back to local storage.");
     return calls_upload_to_local_storage($tmpPath, $filename, []);
 }
 
@@ -648,3 +657,195 @@ function calls_upload_to_s3_compatible(string $tmpPath, string $filename, array 
 
     return calls_upload_to_local_storage($tmpPath, $filename, []);
 }
+
+/**
+ * Get valid Google Drive access token (auto-refreshing if expired)
+ */
+function calls_get_valid_google_access_token(PDO $conn, string $p, ?int $userId = null): string
+{
+    $config = calls_get_storage_config($conn, $p, $userId);
+    $cfg = $config['config_data'] ?? [];
+    $accessToken = trim($cfg['access_token'] ?? '');
+    $refreshToken = trim($cfg['refresh_token'] ?? '');
+    $clientId = trim($cfg['client_id'] ?? '');
+    $clientSecret = trim($cfg['client_secret'] ?? '');
+    $expiresAt = (int)($cfg['token_expires_at'] ?? 0);
+    $configId = (int)($config['id'] ?? 0);
+
+    // Refresh token if needed
+    if ((!$accessToken || ($expiresAt && time() > ($expiresAt - 120))) && $refreshToken && $clientId && $clientSecret) {
+        $newToken = calls_refresh_google_drive_token($refreshToken, $clientId, $clientSecret);
+        if ($newToken) {
+            $accessToken = $newToken;
+            $cfg['access_token'] = $newToken;
+            $cfg['token_expires_at'] = time() + 3500;
+            if ($configId > 0) {
+                try {
+                    $conn->prepare("UPDATE {$p}call_storage_configs SET config_data = ? WHERE id = ?")->execute([json_encode($cfg), $configId]);
+                } catch (Exception $e) {}
+            }
+        }
+    }
+
+    if (!$accessToken) {
+        throw new RuntimeException('Google Drive is not connected or token has expired. Please sign in with Google in Call Settings.');
+    }
+
+    return $accessToken;
+}
+
+/**
+ * Generate Google OAuth 2.0 Auth URL with offline access
+ */
+function calls_get_google_auth_url(string $clientId, string $redirectUri, string $state): string
+{
+    $params = [
+        'client_id' => $clientId,
+        'redirect_uri' => $redirectUri,
+        'response_type' => 'code',
+        'scope' => 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+        'access_type' => 'offline',
+        'prompt' => 'consent',
+        'include_granted_scopes' => 'true',
+        'state' => $state
+    ];
+    return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($params);
+}
+
+/**
+ * Exchange OAuth authorization code for permanent refresh token + access token
+ */
+function calls_exchange_google_code(string $code, string $clientId, string $clientSecret, string $redirectUri): array
+{
+    $ch = curl_init('https://oauth2.googleapis.com/token');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+        'code' => $code,
+        'client_id' => $clientId,
+        'client_secret' => $clientSecret,
+        'redirect_uri' => $redirectUri,
+        'grant_type' => 'authorization_code'
+    ]));
+    curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+    $res = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $json = json_decode($res, true);
+    if ($httpCode < 200 || $httpCode >= 300 || empty($json['access_token'])) {
+        throw new RuntimeException($json['error_description'] ?? ($json['error'] ?? 'Failed to exchange Google OAuth code.'));
+    }
+
+    $accessToken = $json['access_token'];
+    $refreshToken = $json['refresh_token'] ?? null;
+    $expiresIn = (int)($json['expires_in'] ?? 3600);
+
+    // Fetch user info (email & profile)
+    $userInfo = [];
+    $uCh = curl_init('https://www.googleapis.com/oauth2/v2/userinfo');
+    curl_setopt($uCh, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($uCh, CURLOPT_HTTPHEADER, ['Authorization: Bearer ' . $accessToken]);
+    curl_setopt($uCh, CURLOPT_TIMEOUT, 10);
+    $uRes = curl_exec($uCh);
+    curl_close($uCh);
+    if ($uRes) {
+        $userInfo = json_decode($uRes, true) ?: [];
+    }
+
+    return [
+        'access_token' => $accessToken,
+        'refresh_token' => $refreshToken,
+        'token_expires_at' => time() + $expiresIn - 60,
+        'account_email' => $userInfo['email'] ?? '',
+        'account_name' => $userInfo['name'] ?? '',
+        'account_picture' => $userInfo['picture'] ?? ''
+    ];
+}
+
+/**
+ * List folders in Google Drive under a parent directory
+ */
+function calls_list_google_folders(string $accessToken, string $parentId = 'root'): array
+{
+    $q = "mimeType = 'application/vnd.google-apps.folder' and trashed = false and '{$parentId}' in parents";
+    $url = 'https://www.googleapis.com/drive/v3/files?' . http_build_query([
+        'q' => $q,
+        'fields' => 'files(id, name, modifiedTime, parents)',
+        'orderBy' => 'name asc',
+        'pageSize' => 100,
+        'supportsAllDrives' => 'true',
+        'includeItemsFromAllDrives' => 'true'
+    ]);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $accessToken,
+        'Accept: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+    $res = curl_exec($ch);
+    $curlErr = curl_error($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($res === false || !empty($curlErr)) {
+        throw new RuntimeException("Google Drive Connection Error: " . ($curlErr ?: 'Request timed out'));
+    }
+
+    $json = json_decode($res, true);
+    if ($httpCode >= 200 && $httpCode < 300 && isset($json['files'])) {
+        return $json['files'];
+    }
+
+    if (!empty($json['error']['message'])) {
+        throw new RuntimeException("Google Drive: " . $json['error']['message']);
+    }
+
+    if ($httpCode !== 200) {
+        throw new RuntimeException("Google Drive responded with HTTP {$httpCode}: " . ($res ?: 'Empty response'));
+    }
+
+    return [];
+}
+
+/**
+ * Create a new folder in Google Drive
+ */
+function calls_create_google_folder(string $accessToken, string $folderName, string $parentId = 'root'): array
+{
+    $metadata = [
+        'name' => $folderName,
+        'mimeType' => 'application/vnd.google-apps.folder',
+        'parents' => [$parentId]
+    ];
+
+    $ch = curl_init('https://www.googleapis.com/drive/v3/files?fields=id,name');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($metadata));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $accessToken,
+        'Content-Type: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    $res = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $json = json_decode($res, true);
+    if ($httpCode >= 200 && $httpCode < 300 && !empty($json['id'])) {
+        return [
+            'success' => true,
+            'id' => $json['id'],
+            'name' => $json['name'] ?? $folderName
+        ];
+    }
+
+    throw new RuntimeException($json['error']['message'] ?? 'Failed to create folder in Google Drive');
+}
+

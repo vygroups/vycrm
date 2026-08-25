@@ -16,6 +16,18 @@ calls_ensure_tables($conn, $prefix);
 $currentStorage = calls_get_storage_config($conn, $prefix, $userId);
 $provider = $currentStorage['provider'] ?? 'google_drive';
 $cfgData = $currentStorage['config_data'] ?? [];
+
+$isGoogleConnected = !empty($cfgData['access_token']) || !empty($cfgData['refresh_token']);
+$googleEmail = $cfgData['account_email'] ?? '';
+$googleName = $cfgData['account_name'] ?? '';
+$googlePicture = $cfgData['account_picture'] ?? '';
+$currentFolderId = $cfgData['folder_id'] ?? '';
+$currentFolderName = $cfgData['folder_name'] ?? ($currentFolderId ? 'Selected Folder' : 'Not Selected');
+
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$redirectUri = $protocol . '://' . $_SERVER['HTTP_HOST'] . '/google_oauth_callback.php';
+
+$allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk_import', '1');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -119,6 +131,99 @@ $cfgData = $currentStorage['config_data'] ?? [];
             font-weight: 700;
             margin-left: auto;
         }
+        .google-connect-box {
+            border: 1.5px solid rgba(66, 133, 244, 0.2);
+            background: linear-gradient(135deg, rgba(66, 133, 244, 0.04) 0%, rgba(99, 102, 241, 0.04) 100%);
+            border-radius: 16px;
+            padding: 22px;
+            margin-bottom: 20px;
+        }
+        .btn-google {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: #ffffff;
+            color: #374151;
+            border: 1.5px solid #d1d5db;
+            border-radius: 12px;
+            padding: 12px 24px;
+            font-size: 14.5px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn-google:hover {
+            background: #f9fafb;
+            border-color: #9ca3af;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .folder-picker-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .folder-picker-modal.show {
+            display: flex;
+        }
+        .folder-dialog {
+            background: var(--surface, #fff);
+            border: 1.5px solid var(--border);
+            border-radius: 20px;
+            width: 90%;
+            max-width: 580px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        .folder-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .folder-list-item:hover {
+            background: var(--surface-muted, #f8fafc);
+        }
+        .sys-toggle-pill {
+            width: 38px;
+            height: 20px;
+            background: #cbd5e1;
+            border-radius: 20px;
+            position: relative;
+            transition: background 0.2s;
+            display: inline-block;
+        }
+        .sys-toggle-pill::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.2s;
+        }
+        .sys-toggle-pill.active {
+            background: #10b981;
+        }
+        .sys-toggle-pill.active::after {
+            transform: translateX(18px);
+        }
         @media (max-width: 900px) {
             .settings-grid {
                 grid-template-columns: 1fr;
@@ -147,7 +252,7 @@ $cfgData = $currentStorage['config_data'] ?? [];
             <div class="content-scroll" style="padding: 24px;">
                 <div style="margin-bottom: 24px;">
                     <h3 style="font-size: 22px; font-weight: 800; color: var(--text); margin: 0 0 4px;">Call Recordings Storage Provider</h3>
-                    <p style="font-size: 13.5px; color: var(--text-muted); margin: 0;">Select and configure where incoming and outgoing call recording audio files will be stored.</p>
+                    <p style="font-size: 13.5px; color: var(--text-muted); margin: 0;">Connect your cloud storage so mobile call recordings automatically upload and remain available indefinitely.</p>
                 </div>
 
                 <div class="settings-grid">
@@ -161,7 +266,7 @@ $cfgData = $currentStorage['config_data'] ?? [];
                             </div>
                             <div class="storage-nav-item <?= $provider === 's3' ? 'active' : '' ?>" onclick="switchTab('s3')">
                                 <i class="fa-solid fa-cloud" style="color: #f59e0b; font-size: 16px;"></i>
-                                <span>AWS S3 Storage</span>
+                                <span>AWS S3</span>
                                 <?php if ($provider === 's3'): ?><span class="provider-badge-selected">ACTIVE</span><?php endif; ?>
                             </div>
                             <div class="storage-nav-item <?= $provider === 'cloudflare_r2' ? 'active' : '' ?>" onclick="switchTab('cloudflare_r2')">
@@ -176,27 +281,9 @@ $cfgData = $currentStorage['config_data'] ?? [];
                             </div>
                         </div>
 
-                        <!-- Mobile Sync Architecture & Admin Controls -->
-                        <?php
-                        $allowBulkImport = dm_get_system_setting($conn, $prefix, 'calls_allow_bulk_import', '1') === '1';
-                        ?>
-                        <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 18px; padding: 20px; margin-top: 18px; box-shadow: var(--shadow-sm);">
-                            <div style="font-size: 14px; font-weight: 800; color: #4f46e5; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-                                <i class="fa-solid fa-mobile-screen-button"></i> Mobile Sync Architecture
-                            </div>
-                            
-                            <!-- Default Standard Flow: Auto-Sync After Each Call -->
-                            <div style="background: rgba(16, 185, 129, 0.08); border-left: 3px solid #10b981; border-radius: 10px; padding: 12px; margin-bottom: 14px;">
-                                <div style="font-size: 13px; font-weight: 800; color: #065f46; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                                    <i class="fa-solid fa-circle-check"></i> Standard Mode: Auto-Sync After Each Call
-                                </div>
-                                <div style="font-size: 11.5px; color: #047857; line-height: 1.45;">
-                                    Immediately after each call disconnects on mobile, the app automatically fetches call duration, caller number, contact info, and uploads the voice recording to CRM & cloud storage in real-time.
-                                </div>
-                            </div>
-
-                            <!-- Onboarding / Bulk Import Admin Toggle -->
-                            <div style="background: var(--surface-muted, #f8fafc); border: 1px solid var(--border); border-radius: 12px; padding: 14px;">
+                        <!-- Global Sync Guardrail -->
+                        <div class="storage-nav" style="margin-top: 16px; border-color: rgba(99, 102, 241, 0.2); background: rgba(99, 102, 241, 0.03);">
+                            <div style="padding: 14px 16px;">
                                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px;">
                                     <div style="font-size: 12.5px; font-weight: 700; color: var(--text);">
                                         <i class="fa-solid fa-shield-halved" style="color: #6366f1;"></i> Allow Bulk / History Import
@@ -207,7 +294,7 @@ $cfgData = $currentStorage['config_data'] ?? [];
                                     </label>
                                 </div>
                                 <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
-                                    Enable only for <strong>new users</strong> who need to import past device call history into CRM. Turn OFF to prevent unwanted bulk dumps.
+                                    Enable for bulk device history imports. Turn OFF to restrict to new real-time syncs only.
                                 </div>
                             </div>
                         </div>
@@ -215,39 +302,124 @@ $cfgData = $currentStorage['config_data'] ?? [];
 
                     <!-- Config Forms -->
                     <div>
-                        <!-- 1. Google Drive Form -->
+                        <!-- 1. Google Drive Form (1-Click Sign-in + Visual Folder Browser) -->
                         <div class="storage-card" id="pane_google_drive" style="<?= $provider === 'google_drive' ? '' : 'display:none;' ?>">
                             <div class="storage-title">
                                 <i class="fa-brands fa-google-drive" style="color: #4285f4;"></i> Google Drive Storage
                             </div>
                             <div class="storage-desc">
-                                Automatically upload voice recordings to your Google Drive folder. Team members can listen to recordings directly from CRM web.
+                                Automatically upload voice recordings to your Google Drive. Includes permanent offline refresh so you never have to log in repeatedly.
                             </div>
 
-                            <form onsubmit="saveStorageConfig(event, 'google_drive')">
-                                <div class="form-group">
-                                    <label>Google Cloud OAuth Client ID</label>
-                                    <input type="text" id="gd_client_id" class="form-control-custom" placeholder="e.g. 123456789-abc.apps.googleusercontent.com" value="<?= htmlspecialchars($cfgData['client_id'] ?? '') ?>">
+                            <?php if ($isGoogleConnected): ?>
+                                <!-- CONNECTED STATE -->
+                                <div class="google-connect-box" style="border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.04);">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 16px;">
+                                        <div style="display: flex; align-items: center; gap: 12px;">
+                                            <?php if ($googlePicture): ?>
+                                                <img src="<?= htmlspecialchars($googlePicture) ?>" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid #10b981;">
+                                            <?php else: ?>
+                                                <div style="width: 44px; height: 44px; border-radius: 50%; background: #10b981; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                                                    <i class="fa-brands fa-google"></i>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div>
+                                                <div style="font-size: 14.5px; font-weight: 800; color: var(--text);">
+                                                    <?= htmlspecialchars($googleName ?: 'Connected Google Account') ?>
+                                                    <span style="font-size: 11px; background: #10b981; color:#fff; padding: 2px 8px; border-radius: 6px; margin-left: 6px;">CONNECTED</span>
+                                                </div>
+                                                <div style="font-size: 12.5px; color: var(--text-muted);">
+                                                    <?= htmlspecialchars($googleEmail) ?>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <button type="button" class="btn-secondary" onclick="disconnectGoogleDrive()" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.3); padding: 8px 14px; font-size: 12.5px;">
+                                            <i class="fa-solid fa-link-slash"></i> Disconnect Account
+                                        </button>
+                                    </div>
+
+                                    <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #059669; font-weight: 600; margin-bottom: 18px;">
+                                        <i class="fa-solid fa-circle-check"></i> Permanent Offline Access Active — Tokens auto-refresh in the background without logout.
+                                    </div>
+
+                                    <div style="background: var(--surface, #fff); border: 1.5px solid var(--border); border-radius: 12px; padding: 16px;">
+                                        <label style="font-size: 12.5px; font-weight: 700; color: var(--text); display: block; margin-bottom: 8px;">
+                                            Target Upload Folder in Google Drive:
+                                        </label>
+                                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                                            <div style="display: flex; align-items: center; gap: 10px;">
+                                                <i class="fa-solid fa-folder-open" style="color: #f59e0b; font-size: 22px;"></i>
+                                                <div>
+                                                    <strong style="font-size: 14px; color: var(--text);" id="displayFolderName"><?= htmlspecialchars($currentFolderName) ?></strong>
+                                                    <div style="font-size: 11px; color: var(--text-muted);" id="displayFolderId">Folder ID: <?= htmlspecialchars($currentFolderId ?: 'None (Root Drive)') ?></div>
+                                                </div>
+                                            </div>
+                                            <div style="display: flex; gap: 8px;">
+                                                <button type="button" class="btn-primary" onclick="openFolderNavigator()" style="padding: 8px 16px; border-radius: 10px; font-size: 13px;">
+                                                    <i class="fa-solid fa-folder-tree"></i> Browse & Select Folder
+                                                </button>
+                                                <?php if (!$currentFolderId): ?>
+                                                    <button type="button" class="btn-secondary" onclick="autoCreateCallRecordingsFolder()" style="padding: 8px 14px; border-radius: 10px; font-size: 13px;">
+                                                        <i class="fa-solid fa-plus"></i> Auto-Create "Call Recordings"
+                                                    </button>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label>Google Cloud OAuth Client Secret</label>
-                                    <input type="password" id="gd_client_secret" class="form-control-custom" placeholder="••••••••••••••••" value="<?= htmlspecialchars($cfgData['client_secret'] ?? '') ?>">
+                            <?php else: ?>
+                                <!-- DISCONNECTED / 1-CLICK SIGN IN STATE -->
+                                <div class="google-connect-box">
+                                    <div style="text-align: center; padding: 16px 8px;">
+                                        <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" style="width: 56px; height: 56px; margin-bottom: 12px;">
+                                        <h4 style="font-size: 17px; font-weight: 800; color: var(--text); margin: 0 0 6px;">Connect your Google Drive</h4>
+                                        <p style="font-size: 13px; color: var(--text-muted); max-width: 440px; margin: 0 auto 20px;">
+                                            1-Click sign-in to securely authorize VY-AI CRM to upload voice call recordings directly to your chosen Google Drive folder.
+                                        </p>
+                                        
+                                        <button type="button" class="btn-google" onclick="startGoogleSignIn()">
+                                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 20px; height: 20px;">
+                                            <span>Sign in with Google Drive</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label>Target Google Drive Folder ID</label>
-                                    <input type="text" id="gd_folder_id" class="form-control-custom" placeholder="e.g. 1B2M3N4O5P6Q7R8S9T0U (from Google Drive folder URL)" value="<?= htmlspecialchars($cfgData['folder_id'] ?? '') ?>">
-                                    <small style="color: var(--text-muted); font-size: 11.5px; margin-top: 4px; display: block;">Open the folder in Google Drive and copy the ID from the end of the URL.</small>
+                            <?php endif; ?>
+
+                            <!-- Google Cloud OAuth App Credentials Accordion -->
+                            <details style="border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; background: var(--surface-muted, #f8fafc);">
+                                <summary style="font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+                                    <span><i class="fa-solid fa-gear" style="color: var(--primary); margin-right: 6px;"></i> Google Cloud OAuth App Settings (Client ID & Secret)</span>
+                                    <span style="font-size: 11px; color: var(--text-muted);">Click to expand</span>
+                                </summary>
+                                <div style="margin-top: 16px;">
+                                    <div class="form-group">
+                                        <label>Google Cloud OAuth Client ID</label>
+                                        <input type="text" id="gd_client_id" class="form-control-custom" placeholder="e.g. 123456789-abc.apps.googleusercontent.com" value="<?= htmlspecialchars($cfgData['client_id'] ?? '') ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Google Cloud OAuth Client Secret</label>
+                                        <input type="password" id="gd_client_secret" class="form-control-custom" placeholder="••••••••••••••••" value="<?= htmlspecialchars($cfgData['client_secret'] ?? '') ?>">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Authorized Redirect URI in Google Cloud Console:</label>
+                                        <div style="display: flex; gap: 8px;">
+                                            <input type="text" class="form-control-custom" value="<?= htmlspecialchars($redirectUri) ?>" readonly id="redirectUriInput" style="background: rgba(0,0,0,0.03);">
+                                            <button type="button" class="btn-secondary" onclick="copyRedirectUri()" style="padding: 8px 14px; white-space: nowrap;">
+                                                <i class="fa-solid fa-copy"></i> Copy URI
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;">
+                                        <button type="button" class="btn-primary" onclick="saveGoogleCredentialsOnly()" style="padding: 9px 18px; font-size: 13px; border-radius: 8px;">
+                                            <i class="fa-solid fa-floppy-disk"></i> Save Client ID & Secret
+                                        </button>
+                                        <button type="button" class="btn-secondary" onclick="clearGoogleCredentials()" style="padding: 9px 16px; font-size: 13px; border-radius: 8px; color: #ef4444; border-color: rgba(239, 68, 68, 0.4);">
+                                            <i class="fa-solid fa-trash-can"></i> Clear & Remove
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label>Refresh Token / Authorization Token</label>
-                                    <textarea id="gd_refresh_token" class="form-control-custom" rows="2" placeholder="Google Drive Refresh Token"><?= htmlspecialchars($cfgData['refresh_token'] ?? '') ?></textarea>
-                                </div>
-                                <div style="display: flex; gap: 12px; margin-top: 24px;">
-                                    <button type="submit" class="btn-primary" style="padding: 10px 22px; border-radius: 10px;">
-                                        <i class="fa-solid fa-floppy-disk"></i> Save & Set as Active Storage
-                                    </button>
-                                </div>
-                            </form>
+                            </details>
                         </div>
 
                         <!-- 2. AWS S3 Form -->
@@ -355,7 +527,75 @@ $cfgData = $currentStorage['config_data'] ?? [];
         </main>
     </div>
 
+    <!-- Interactive Google Drive Folder Picker Modal -->
+    <div class="folder-picker-modal" id="googleFolderModal">
+        <div class="folder-dialog">
+            <div style="padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+                <div style="font-size: 16px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-brands fa-google-drive" style="color: #4285f4;"></i>
+                    <span>Select Google Drive Folder</span>
+                </div>
+                <button type="button" class="btn-icon" onclick="closeFolderNavigator()" style="border:none; background:transparent; font-size:18px; cursor:pointer; color:var(--text-muted);">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Breadcrumbs & New Folder bar -->
+            <div style="padding: 12px 20px; background: var(--surface-muted, #f8fafc); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                <div id="folderBreadcrumbs" style="font-size: 13px; font-weight: 600; color: var(--primary); display: flex; align-items: center; gap: 6px;">
+                    <span onclick="navigateToFolder('root', 'My Drive')" style="cursor:pointer;"><i class="fa-solid fa-house"></i> My Drive</span>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button type="button" class="btn-secondary" onclick="toggleNewFolderInput()" style="padding: 6px 12px; font-size: 12px; border-radius: 8px;">
+                        <i class="fa-solid fa-folder-plus"></i> New Folder
+                    </button>
+                </div>
+            </div>
+
+            <!-- Inline New Folder Creator -->
+            <div id="newFolderContainer" style="display:none; padding: 10px 20px; background: #fff; border-bottom: 1px solid var(--border);">
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="newFolderNameInput" class="form-control-custom" placeholder="Folder Name (e.g. Call Recordings)" style="height: 36px; padding: 4px 12px; font-size: 13px;">
+                    <button type="button" class="btn-primary" onclick="submitCreateFolder()" style="padding: 6px 14px; font-size: 12.5px; border-radius: 8px; white-space: nowrap;">
+                        Create & Select
+                    </button>
+                </div>
+            </div>
+
+            <!-- Folder List Body -->
+            <div id="folderListContent" style="flex: 1; overflow-y: auto; max-height: 380px; min-height: 200px;">
+                <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--primary); margin-bottom: 10px;"></i>
+                    <div>Loading Google Drive Folders...</div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="padding: 14px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface);">
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    Current: <strong id="currentSelectedFolderName" style="color: var(--text);">My Drive</strong>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="closeFolderNavigator()" style="padding: 8px 16px; border-radius: 10px; font-size: 13px;">Cancel</button>
+                    <button type="button" class="btn-primary" onclick="selectCurrentNavFolder()" style="padding: 8px 18px; border-radius: 10px; font-size: 13px;">
+                        <i class="fa-solid fa-check"></i> Choose This Folder
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // Check URL parameters for status
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('connected') === '1') {
+            Toast.show('Google Drive connected successfully with permanent offline access!', 'success');
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (urlParams.get('error')) {
+            Toast.show(decodeURIComponent(urlParams.get('error')), 'error');
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
         function switchTab(p) {
             document.querySelectorAll('.storage-nav-item').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.storage-card').forEach(el => el.style.display = 'none');
@@ -363,7 +603,6 @@ $cfgData = $currentStorage['config_data'] ?? [];
             const card = document.getElementById('pane_' + p);
             if (card) card.style.display = 'block';
 
-            // Find matching nav
             const navs = document.querySelectorAll('.storage-nav-item');
             navs.forEach(nav => {
                 if (nav.innerText.toLowerCase().includes(p.replace('_', ' '))) {
@@ -372,20 +611,331 @@ $cfgData = $currentStorage['config_data'] ?? [];
             });
         }
 
+        function copyRedirectUri() {
+            const input = document.getElementById('redirectUriInput');
+            input.select();
+            navigator.clipboard.writeText(input.value);
+            Toast.show('Redirect URI copied to clipboard!', 'success');
+        }
+
+        async function saveGoogleCredentialsOnly() {
+            const clientId = document.getElementById('gd_client_id').value.trim();
+            const clientSecret = document.getElementById('gd_client_secret').value.trim();
+
+            try {
+                const res = await fetch('/api/calls_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'save_google_credentials',
+                        client_id: clientId,
+                        client_secret: clientSecret
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed to save credentials');
+                Toast.show(data.message || 'Google OAuth Client credentials saved successfully!', 'success');
+                if (!clientId && !clientSecret) {
+                    setTimeout(() => location.reload(), 600);
+                }
+            } catch (err) {
+                Toast.show(err.message, 'error');
+            }
+        }
+
+        async function clearGoogleCredentials() {
+            if (!confirm('Are you sure you want to remove and clear your Google Client ID and Secret?')) return;
+            document.getElementById('gd_client_id').value = '';
+            document.getElementById('gd_client_secret').value = '';
+
+            try {
+                const res = await fetch('/api/calls_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'save_google_credentials',
+                        client_id: '',
+                        client_secret: ''
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed to clear credentials');
+                Toast.show('Google Client credentials removed successfully!', 'success');
+                setTimeout(() => location.reload(), 600);
+            } catch (err) {
+                Toast.show(err.message, 'error');
+            }
+        }
+
+        async function startGoogleSignIn() {
+            const clientId = document.getElementById('gd_client_id')?.value.trim() || '';
+            const clientSecret = document.getElementById('gd_client_secret')?.value.trim() || '';
+
+            if (!clientId || !clientSecret) {
+                const details = document.querySelector('details');
+                if (details) details.open = true;
+                Toast.show('Please enter your Google Cloud OAuth Client ID & Secret below first.', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/calls_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'google_drive_get_auth_url',
+                        client_id: clientId,
+                        client_secret: clientSecret
+                    })
+                });
+                const data = await res.json();
+                if (!data.success || !data.auth_url) throw new Error(data.error || 'Failed to initialize Google Sign-in');
+                window.location.href = data.auth_url;
+            } catch (err) {
+                Toast.show(err.message, 'error');
+            }
+        }
+
+        async function disconnectGoogleDrive() {
+            if (!confirm('Are you sure you want to disconnect your Google Drive account?')) return;
+
+            try {
+                const res = await fetch('/api/calls_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'google_drive_disconnect' })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed to disconnect');
+                Toast.show('Google Drive disconnected successfully', 'success');
+                setTimeout(() => location.reload(), 800);
+            } catch (err) {
+                Toast.show(err.message, 'error');
+            }
+        }
+
+        // Folder Navigator State
+        let folderHistory = [{ id: 'root', name: 'My Drive' }];
+        let currentFolderNavId = 'root';
+        let currentFolderNavName = 'My Drive';
+
+        function openFolderNavigator() {
+            document.getElementById('googleFolderModal').classList.add('show');
+            folderHistory = [{ id: 'root', name: 'My Drive' }];
+            navigateToFolder('root', 'My Drive');
+        }
+
+        function closeFolderNavigator() {
+            document.getElementById('googleFolderModal').classList.remove('show');
+            document.getElementById('newFolderContainer').style.display = 'none';
+        }
+
+        function updateBreadcrumbs() {
+            const container = document.getElementById('folderBreadcrumbs');
+            container.innerHTML = folderHistory.map((f, idx) => {
+                if (idx === folderHistory.length - 1) {
+                    return `<span style="color:var(--text); font-weight:800;">${escapeHtml(f.name)}</span>`;
+                }
+                return `<span onclick="jumpToHistory(${idx})" style="cursor:pointer; color:var(--primary);">${escapeHtml(f.name)}</span> <span style="color:var(--text-muted);">&gt;</span>`;
+            }).join(' ');
+
+            document.getElementById('currentSelectedFolderName').textContent = currentFolderNavName;
+        }
+
+        function jumpToHistory(idx) {
+            folderHistory = folderHistory.slice(0, idx + 1);
+            const target = folderHistory[idx];
+            navigateToFolder(target.id, target.name, false);
+        }
+
+        async function navigateToFolder(folderId, folderName, pushHistory = true) {
+            currentFolderNavId = folderId;
+            currentFolderNavName = folderName;
+            if (pushHistory && (folderHistory.length === 0 || folderHistory[folderHistory.length - 1].id !== folderId)) {
+                folderHistory.push({ id: folderId, name: folderName });
+            }
+            updateBreadcrumbs();
+
+            const content = document.getElementById('folderListContent');
+            content.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--primary); margin-bottom: 10px;"></i>
+                    <div>Loading folders inside "${escapeHtml(folderName)}"...</div>
+                </div>
+            `;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+            try {
+                const res = await fetch(`/api/calls_api.php?action=google_drive_list_folders&parent_id=${encodeURIComponent(folderId)}`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                const rawText = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                } catch (pe) {
+                    throw new Error('Server response error: ' + rawText.replace(/<[^>]*>?/gm, ' ').trim().substring(0, 250));
+                }
+                if (!data.success) throw new Error(data.error || 'Failed to list folders');
+
+                const folders = data.folders || [];
+                if (folders.length === 0) {
+                    content.innerHTML = `
+                        <div style="text-align: center; padding: 36px 20px; color: var(--text-muted);">
+                            <i class="fa-regular fa-folder-open" style="font-size: 36px; color: #cbd5e1; margin-bottom: 12px;"></i>
+                            <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px;">No subfolders in "${escapeHtml(folderName)}"</div>
+                            <div style="font-size: 12px; margin-bottom: 16px;">You can create a folder here or choose this directory.</div>
+                            <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                                <button type="button" class="btn-secondary" onclick="toggleNewFolderInput()" style="padding: 7px 14px; font-size: 12px;">
+                                    <i class="fa-solid fa-plus"></i> Create Folder
+                                </button>
+                                <button type="button" class="btn-primary" onclick="setTargetFolder('${escapeHtml(folderId)}', '${escapeHtml(folderName)}')" style="padding: 7px 16px; font-size: 12px;">
+                                    <i class="fa-solid fa-check"></i> Choose "${escapeHtml(folderName)}"
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                content.innerHTML = folders.map(f => `
+                    <div class="folder-list-item">
+                        <div style="display:flex; align-items:center; gap:12px; cursor:pointer; flex:1;" onclick="navigateToFolder('${f.id}', '${escapeHtml(f.name)}')">
+                            <i class="fa-solid fa-folder" style="color: #f59e0b; font-size: 20px;"></i>
+                            <div>
+                                <strong style="font-size: 13.5px; color: var(--text);">${escapeHtml(f.name)}</strong>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:6px;">
+                            <button type="button" class="btn-secondary" onclick="navigateToFolder('${f.id}', '${escapeHtml(f.name)}')" style="padding: 6px 10px; font-size: 12px;" title="Open Folder">
+                                <i class="fa-solid fa-folder-open"></i> Open
+                            </button>
+                            <button type="button" class="btn-primary" onclick="setTargetFolder('${f.id}', '${escapeHtml(f.name)}')" style="padding: 6px 12px; font-size: 12px;">
+                                <i class="fa-solid fa-check"></i> Select
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                content.innerHTML = `
+                    <div style="padding: 30px 20px; text-align: center;">
+                        <i class="fa-solid fa-triangle-exclamation" style="font-size: 32px; color: #ef4444; margin-bottom: 12px;"></i>
+                        <div style="font-size: 14px; font-weight: 700; color: #ef4444; margin-bottom: 8px;">${escapeHtml(err.message)}</div>
+                        <div style="font-size: 12px; color: var(--text-muted); max-width: 440px; margin: 0 auto 16px;">
+                            Make sure <strong>Google Drive API</strong> is enabled in your Google Cloud Console for project "vycrm".
+                        </div>
+                        <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                            <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" class="btn-secondary" style="padding: 6px 14px; font-size: 12px; text-decoration: none;">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Enable Drive API in Google Cloud
+                            </a>
+                            <button type="button" class="btn-secondary" onclick="navigateToFolder('${escapeHtml(folderId)}', '${escapeHtml(folderName)}')" style="padding: 6px 14px; font-size: 12px;">
+                                <i class="fa-solid fa-rotate-right"></i> Retry
+                            </button>
+                            <button type="button" class="btn-primary" onclick="setTargetFolder('root', 'My Drive (Root)')" style="padding: 6px 14px; font-size: 12px;">
+                                <i class="fa-solid fa-check"></i> Use Root Drive
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function toggleNewFolderInput() {
+            const container = document.getElementById('newFolderContainer');
+            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+            if (container.style.display === 'block') {
+                document.getElementById('newFolderNameInput').focus();
+            }
+        }
+
+        async function submitCreateFolder() {
+            const folderName = document.getElementById('newFolderNameInput').value.trim();
+            if (!folderName) {
+                Toast.show('Please enter a folder name', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/calls_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'google_drive_create_folder',
+                        folder_name: folderName,
+                        parent_id: currentFolderNavId
+                    })
+                });
+                const data = await res.json();
+                if (!data.success || !data.folder) throw new Error(data.error || 'Failed to create folder');
+
+                Toast.show(`Folder "${folderName}" created and selected!`, 'success');
+                await setTargetFolder(data.folder.id, data.folder.name);
+            } catch (err) {
+                Toast.show(err.message, 'error');
+            }
+        }
+
+        async function autoCreateCallRecordingsFolder() {
+            try {
+                const res = await fetch('/api/calls_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'google_drive_create_folder',
+                        folder_name: 'Call Recordings',
+                        parent_id: 'root'
+                    })
+                });
+                const data = await res.json();
+                if (!data.success || !data.folder) throw new Error(data.error || 'Failed to create Call Recordings folder');
+
+                await setTargetFolder(data.folder.id, data.folder.name);
+            } catch (err) {
+                Toast.show(err.message, 'error');
+            }
+        }
+
+        function selectCurrentNavFolder() {
+            setTargetFolder(currentFolderNavId, currentFolderNavName);
+        }
+
+        async function setTargetFolder(folderId, folderName) {
+            try {
+                const res = await fetch('/api/calls_api.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'google_drive_set_folder',
+                        folder_id: folderId,
+                        folder_name: folderName
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed to set target folder');
+
+                Toast.show(`Target folder set to "${folderName}"`, 'success');
+                closeFolderNavigator();
+                document.getElementById('displayFolderName').textContent = folderName;
+                document.getElementById('displayFolderId').textContent = 'Folder ID: ' + (folderId === 'root' ? 'Root Drive' : folderId);
+            } catch (err) {
+                Toast.show(err.message, 'error');
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
         async function saveStorageConfig(e, provider) {
             e.preventDefault();
             let configData = {};
             let configName = '';
 
-            if (provider === 'google_drive') {
-                configName = 'Google Drive Storage';
-                configData = {
-                    client_id: document.getElementById('gd_client_id').value.trim(),
-                    client_secret: document.getElementById('gd_client_secret').value.trim(),
-                    folder_id: document.getElementById('gd_folder_id').value.trim(),
-                    refresh_token: document.getElementById('gd_refresh_token').value.trim()
-                };
-            } else if (provider === 's3') {
+            if (provider === 's3') {
                 configName = 'AWS S3 Storage';
                 configData = {
                     bucket: document.getElementById('s3_bucket').value.trim(),

@@ -839,15 +839,24 @@ $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 let audioPlayerHtml = `<span style="font-size: 12px; color: var(--text-muted);"><i class="fa-solid fa-microphone-slash"></i> No audio</span>`;
                 if (call.recording_file_url) {
+                    let playUrl = call.recording_file_url;
+                    let downloadUrl = call.recording_file_url;
+
+                    const driveMatch = call.recording_file_url.match(/id=([a-zA-Z0-9_-]+)/) || call.recording_file_url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                    if (driveMatch) {
+                        playUrl = `/api/calls_api.php?action=stream_recording&file_id=${driveMatch[1]}`;
+                        downloadUrl = `https://drive.google.com/file/d/${driveMatch[1]}/view`;
+                    }
+
                     audioPlayerHtml = `
                         <div class="audio-player-wrapper">
-                            <button type="button" class="play-btn" onclick="toggleAudio(this, '${escapeHtml(call.recording_file_url)}')">
+                            <button type="button" class="play-btn" onclick="toggleAudio(this, '${escapeHtml(playUrl)}')">
                                 <i class="fa-solid fa-play"></i>
                             </button>
                             <input type="range" class="audio-slider" min="0" max="100" value="0" oninput="seekAudio(this)">
                             <span class="audio-timer">00:00</span>
-                            <a href="${escapeHtml(call.recording_file_url)}" target="_blank" download class="row-actions" title="Download Audio" style="color: var(--text-muted); font-size: 12px; text-decoration: none;">
-                                <i class="fa-solid fa-download"></i>
+                            <a href="${escapeHtml(downloadUrl)}" target="_blank" class="row-actions" title="Open in Google Drive / Download" style="color: var(--text-muted); font-size: 12px; text-decoration: none;">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i>
                             </a>
                         </div>
                     `;
