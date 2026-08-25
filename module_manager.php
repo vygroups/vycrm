@@ -73,12 +73,15 @@ if ($editModule) {
 }
 
 try {
-    $usersQuery = $conn->query("SELECT id, username, first_name, last_name FROM {$prefix}users ORDER BY username ASC");
-    while ($u = $usersQuery->fetch(PDO::FETCH_ASSOC)) {
+    $rawUsers = dm_fetch_users($conn, $prefix);
+    foreach ($rawUsers as $u) {
         $fullName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? ''));
+        $roleName = !empty($u['role_name']) ? " (" . $u['role_name'] . ")" : "";
+        $displayName = $fullName ? "$fullName ({$u['username']})$roleName" : "{$u['username']}$roleName";
         $usersList[] = [
             'id' => (int)$u['id'],
-            'name' => $fullName ?: $u['username']
+            'username' => $u['username'],
+            'name' => $displayName
         ];
     }
 } catch (Exception $e) {}
@@ -1007,7 +1010,7 @@ try {
                     </div>
                     <div class="form-group"><label class="form-label">Placeholder</label><input type="text"
                             id="fieldPlaceholder" class="form-control"></div>
-                    <div class="form-group">
+                    <div class="form-group" id="fieldDefaultGroup">
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
                             <label class="form-label" style="margin:0;">Default Value</label>
                             <div id="fieldDynamicPresetGroup" style="display:none; align-items:center; gap:4px;">
@@ -1027,7 +1030,16 @@ try {
                                 </select>
                             </div>
                         </div>
-                        <input type="text" id="fieldDefault" class="form-control" oninput="updatePresetUiFromValue(this.value)">
+                        <input type="text" id="fieldDefault" class="form-control" placeholder="Default value" oninput="updatePresetUiFromValue(this.value)">
+                        <select id="fieldDefaultAssigned" class="form-control" style="display:none;" onchange="document.getElementById('fieldDefault').value = this.value">
+                            <option value="">-- None (Leave Empty) --</option>
+                            <option value="current_user">⚡ Current Logged-in User</option>
+                            <optgroup label="Or select a specific user:">
+                                <?php foreach ($usersList as $u): ?>
+                                    <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
+                                <?php endforeach; ?>
+                            </optgroup>
+                        </select>
                         <div id="fieldPresetBadge" style="display:none; margin-top:4px; font-size:11px; font-weight:600; color:var(--primary);">
                             <i class="fa-solid fa-bolt"></i> <span id="fieldPresetText">Dynamic preset active</span>
                         </div>
@@ -1584,6 +1596,17 @@ try {
         document.addEventListener('DOMContentLoaded', () => {
             initIconPicker();
             initFieldDragging();
+            api('get_users').then(r => {
+                if (r && r.success && r.users) {
+                    window.ALL_USERS = r.users.map(u => {
+                        const fullName = ((u.first_name || '') + ' ' + (u.last_name || '')).trim();
+                        const roleStr = u.role_name ? ` (${u.role_name})` : '';
+                        const name = fullName ? `${fullName} (${u.username})${roleStr}` : `${u.username}${roleStr}`;
+                        return { id: u.id, username: u.username, name: name };
+                    });
+                    populateAssignedUsersDropdown(document.getElementById('fieldDefaultAssigned')?.value || document.getElementById('fieldDefault')?.value || '');
+                }
+            }).catch(e => {});
         });
         function addBlock() {
             const name = prompt('Block Name:', 'New Block');
@@ -1610,7 +1633,9 @@ try {
             document.getElementById('fieldLabel').value = editData ? editData.label : '';
             document.getElementById('fieldType').value = editData ? editData.field_type : 'text';
             document.getElementById('fieldPlaceholder').value = editData ? (editData.placeholder || '') : '';
-            document.getElementById('fieldDefault').value = editData ? (editData.default_value || '') : '';
+            const defVal = editData ? (editData.default_value || '') : '';
+            document.getElementById('fieldDefault').value = defVal;
+            document.getElementById('fieldDefaultAssigned').value = defVal;
             document.getElementById('fieldRequired').checked = editData ? !!editData.is_required : false;
             document.getElementById('fieldUnique').checked = editData ? !!editData.is_unique : false;
             document.getElementById('fieldSearchable').checked = editData ? !!editData.is_searchable : false;
@@ -1627,14 +1652,21 @@ try {
             document.getElementById('fieldOptionsList').innerHTML = '';
             if (editData && editData.options) editData.options.forEach(o => addOptionRow(o.label, o.value));
             onFieldTypeChange();
-            updatePresetUiFromValue(document.getElementById('fieldDefault').value);
+            updatePresetUiFromValue(defVal);
             document.getElementById('addFieldModal').classList.add('show');
         }
         function editField(id, fieldData) { openFieldModal(fieldData.block_id, fieldData.module_id, fieldData); }
         let defaultPickerInstance = null;
 
-        const DATE_PRESET_LABELS = {
+        const DYNAMIC_PRESET_LABELS = {
+            'current_user': 'Dynamic: Automatically sets to the Name of the user creating the record',
+            '{current_user}': 'Dynamic: Automatically sets to the Name of the user creating the record',
+            'current_user_id': 'Dynamic: Automatically sets to the User ID of the user creating the record',
+            '{current_user_id}': 'Dynamic: Automatically sets to the User ID of the user creating the record',
+            'current_user_email': 'Dynamic: Automatically sets to the Email of the user creating the record',
+            '{current_user_email}': 'Dynamic: Automatically sets to the Email of the user creating the record',
             'today': 'Dynamic: Automatically sets to Current Date (Today) when record is created',
+            '{today}': 'Dynamic: Automatically sets to Current Date (Today) when record is created',
             'tomorrow': 'Dynamic: Automatically sets to Tomorrow (+1 Day) when record is created',
             'yesterday': 'Dynamic: Automatically sets to Yesterday (-1 Day) when record is created',
             '+7_days': 'Dynamic: Automatically sets to 7 Days Ahead when record is created',
@@ -1644,6 +1676,7 @@ try {
             '-14_days': 'Dynamic: Automatically sets to 14 Days Before when record is created',
             '-30_days': 'Dynamic: Automatically sets to 30 Days Before when record is created',
             'now': 'Dynamic: Automatically sets to Current Time / Timestamp when record is created',
+            '{now}': 'Dynamic: Automatically sets to Current Time / Timestamp when record is created',
         };
 
         function applyDatePreset(val) {
@@ -1657,7 +1690,7 @@ try {
                 }
                 defInput.value = val;
                 badge.style.display = 'block';
-                badgeText.textContent = DATE_PRESET_LABELS[val] || `Dynamic: ${val}`;
+                badgeText.textContent = DYNAMIC_PRESET_LABELS[val] || `Dynamic: ${val}`;
             } else {
                 defInput.value = '';
                 badge.style.display = 'none';
@@ -1671,26 +1704,52 @@ try {
             const lower = (val || '').toString().trim().toLowerCase();
 
             if (presetSelect) {
-                presetSelect.value = DATE_PRESET_LABELS[lower] ? lower : '';
+                presetSelect.value = DYNAMIC_PRESET_LABELS[lower] ? lower : '';
             }
             if (badge && badgeText) {
-                if (DATE_PRESET_LABELS[lower]) {
+                if (DYNAMIC_PRESET_LABELS[lower]) {
                     badge.style.display = 'block';
-                    badgeText.textContent = DATE_PRESET_LABELS[lower];
+                    badgeText.textContent = DYNAMIC_PRESET_LABELS[lower];
                 } else {
                     badge.style.display = 'none';
                 }
             }
         }
 
+        function populateAssignedUsersDropdown(selectedVal = '') {
+            const select = document.getElementById('fieldDefaultAssigned');
+            if (!select) return;
+            const users = (typeof ALL_USERS !== 'undefined' ? ALL_USERS : (window.ALL_USERS || []));
+            let html = '<option value="">-- None (Leave Empty) --</option>';
+            html += '<option value="current_user">⚡ Current Logged-in User</option>';
+            if (users && users.length > 0) {
+                html += '<optgroup label="Or select a specific user:">';
+                users.forEach(u => {
+                    const isSel = (String(selectedVal) === String(u.id) || String(selectedVal) === String(u.username)) ? 'selected' : '';
+                    html += `<option value="${u.id}" ${isSel}>${u.name || u.username}</option>`;
+                });
+                html += '</optgroup>';
+            }
+            select.innerHTML = html;
+            if (selectedVal) select.value = selectedVal;
+        }
+
         function onFieldTypeChange() {
             const t = document.getElementById('fieldType').value;
+            const isAssigned = ['assigned_to', 'user', 'owner', 'author'].includes(t);
+            const isDateOrTime = ['date', 'datetime', 'time'].includes(t);
+
             document.getElementById('fieldOptionsSection').style.display = (t === 'dropdown' || t === 'multi_picker' || t === 'radio_group') ? '' : 'none';
             document.getElementById('fieldApiConfig').style.display = t === 'api_call_picker' ? '' : 'none';
 
-            const presetGroup = document.getElementById('fieldDynamicPresetGroup');
-            const isDateOrTime = ['date', 'datetime', 'time'].includes(t);
-            presetGroup.style.display = isDateOrTime ? 'flex' : 'none';
+            document.getElementById('fieldDefaultAssigned').style.display = isAssigned ? '' : 'none';
+            document.getElementById('fieldDefault').style.display = isAssigned ? 'none' : '';
+            document.getElementById('fieldDynamicPresetGroup').style.display = isDateOrTime ? 'flex' : 'none';
+
+            if (isAssigned) {
+                const currentVal = document.getElementById('fieldDefault').value || document.getElementById('fieldDefaultAssigned').value || '';
+                populateAssignedUsersDropdown(currentVal);
+            }
 
             const defInput = document.getElementById('fieldDefault');
             if (defaultPickerInstance) {
@@ -1750,13 +1809,17 @@ try {
         }
         function saveField() {
             const editId = document.getElementById('fieldEditId').value;
+            const t = document.getElementById('fieldType').value;
+            const isAssigned = ['assigned_to', 'user', 'owner', 'author'].includes(t);
+            const defVal = isAssigned ? document.getElementById('fieldDefaultAssigned').value : document.getElementById('fieldDefault').value;
+
             const data = {
                 block_id: +document.getElementById('fieldBlockId').value,
                 module_id: +document.getElementById('fieldModuleId').value,
                 label: document.getElementById('fieldLabel').value.trim(),
-                field_type: document.getElementById('fieldType').value,
+                field_type: t,
                 placeholder: document.getElementById('fieldPlaceholder').value,
-                default_value: document.getElementById('fieldDefault').value,
+                default_value: defVal,
                 is_required: +document.getElementById('fieldRequired').checked,
                 is_unique: +document.getElementById('fieldUnique').checked,
                 is_searchable: +document.getElementById('fieldSearchable').checked,

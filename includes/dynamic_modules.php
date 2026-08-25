@@ -53,18 +53,51 @@ function dm_ensure_tables(PDO $conn, string $p): void
     commerce_ensure_tables($conn, $p);
 
     // Auto-migrate modules controls
-    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_import TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_export TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_multidelete TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_create TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_quickcreate TINYINT(1) DEFAULT 1"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_quick_create TINYINT(1) DEFAULT 0 AFTER is_list_visible"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_mobile_list_visible TINYINT(1) DEFAULT 0 AFTER is_quick_create"); } catch (Throwable $e) {}
+    try {
+        @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_import TINYINT(1) DEFAULT 1");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_export TINYINT(1) DEFAULT 1");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_multidelete TINYINT(1) DEFAULT 1");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_create TINYINT(1) DEFAULT 1");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}modules ADD COLUMN enable_quickcreate TINYINT(1) DEFAULT 1");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_quick_create TINYINT(1) DEFAULT 0 AFTER is_list_visible");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_mobile_list_visible TINYINT(1) DEFAULT 0 AFTER is_quick_create");
+    } catch (Throwable $e) {
+    }
     // Auto-migrate users controls
-    try { @$conn->exec("ALTER TABLE {$p}users ADD COLUMN status VARCHAR(20) DEFAULT 'active'"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_enabled TINYINT(1) DEFAULT 0"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_otp VARCHAR(10) DEFAULT NULL"); } catch (Throwable $e) {}
-    try { @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_expires DATETIME DEFAULT NULL"); } catch (Throwable $e) {}
+    try {
+        @$conn->exec("ALTER TABLE {$p}users ADD COLUMN status VARCHAR(20) DEFAULT 'active'");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_enabled TINYINT(1) DEFAULT 0");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_otp VARCHAR(10) DEFAULT NULL");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_expires DATETIME DEFAULT NULL");
+    } catch (Throwable $e) {
+    }
 }
 
 /* ──────────────────────────── HELPER FUNCTIONS ──────────────────────────── */
@@ -92,31 +125,69 @@ function dm_slugify(string $text): string
 }
 
 /**
- * Resolve dynamic default values for date/time fields (e.g. today, tomorrow, +7_days, now).
+ * Resolve dynamic default values for fields (e.g. current_user, today, tomorrow, +7_days, now, specific static values).
  */
-function dm_resolve_default_value(?string $defaultVal, string $fieldType = 'text'): string
+function dm_resolve_default_value(?string $defaultVal, string $fieldType = 'text', ?array $userContext = null): string
 {
     if ($defaultVal === null || $defaultVal === '') {
         return '';
     }
-    
-    $lower = strtolower(trim($defaultVal));
-    
-    if (in_array($fieldType, ['date', 'datetime', 'time'])) {
+
+    $trimmed = trim($defaultVal);
+    $lower = strtolower($trimmed);
+
+    // Context resolution (current user)
+    if (!$userContext) {
+        $userId = $_SESSION['user_id'] ?? null;
+        $userName = trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? ''));
+        if (!$userName) {
+            $userName = $_SESSION['username'] ?? 'User';
+        }
+        $userEmail = $_SESSION['email'] ?? '';
+        $userContext = [
+            'id' => $userId,
+            'name' => $userName,
+            'username' => $_SESSION['username'] ?? '',
+            'email' => $userEmail,
+        ];
+    }
+
+    // Dynamic User Tokens (Current logged-in user / Creator)
+    if (in_array($lower, ['current_user', '{current_user}', 'creator', '{creator}', 'current_user_name', '{current_user_name}', 'me', '{me}', 'logged_in_user', '{logged_in_user}'])) {
+        if (in_array($fieldType, ['assigned_to', 'user', 'owner', 'author'])) {
+            return (string) ($userContext['id'] ?? $userContext['name'] ?? '');
+        }
+        return (string) ($userContext['name'] ?? $userContext['username'] ?? '');
+    }
+
+    if (in_array($lower, ['current_user_id', '{current_user_id}', 'creator_id', '{creator_id}', 'user_id', '{user_id}'])) {
+        return (string) ($userContext['id'] ?? '');
+    }
+
+    if (in_array($lower, ['current_user_email', '{current_user_email}', 'creator_email', '{creator_email}'])) {
+        return (string) ($userContext['email'] ?? '');
+    }
+
+    if (in_array($lower, ['current_user_username', '{current_user_username}'])) {
+        return (string) ($userContext['username'] ?? '');
+    }
+
+    // Dynamic Date & Time Tokens
+    if (in_array($fieldType, ['date', 'datetime', 'time']) || in_array($lower, ['today', 'tomorrow', 'yesterday', 'now', '{today}', '{now}', '+7_days', '+14_days', '+30_days', '-7_days', '-14_days', '-30_days'])) {
         $now = new DateTime('now', new DateTimeZone('Asia/Kolkata'));
-        
-        if (in_array($lower, ['today', 'current_date', 'current_day'])) {
+
+        if (in_array($lower, ['today', '{today}', 'current_date', '{current_date}', 'current_day'])) {
             return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
         }
-        if (in_array($lower, ['tomorrow', '+1_day', '+1 day'])) {
+        if (in_array($lower, ['tomorrow', '{tomorrow}', '+1_day', '+1 day'])) {
             $now->modify('+1 day');
             return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
         }
-        if (in_array($lower, ['yesterday', '-1_day', '-1 day'])) {
+        if (in_array($lower, ['yesterday', '{yesterday}', '-1_day', '-1 day'])) {
             $now->modify('-1 day');
             return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
         }
-        if (in_array($lower, ['+7_days', '+7 days', 'next_week'])) {
+        if (in_array($lower, ['+7_days', '+7 days', 'next_week', '{next_week}'])) {
             $now->modify('+7 days');
             return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
         }
@@ -124,7 +195,7 @@ function dm_resolve_default_value(?string $defaultVal, string $fieldType = 'text
             $now->modify('+14 days');
             return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
         }
-        if (in_array($lower, ['+30_days', '+30 days', 'next_month'])) {
+        if (in_array($lower, ['+30_days', '+30 days', 'next_month', '{next_month}'])) {
             $now->modify('+30 days');
             return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
         }
@@ -140,13 +211,15 @@ function dm_resolve_default_value(?string $defaultVal, string $fieldType = 'text
             $now->modify('-30 days');
             return $now->format($fieldType === 'datetime' ? 'Y-m-d H:i' : 'Y-m-d');
         }
-        if (in_array($lower, ['now', 'current_time', 'current_datetime'])) {
-            if ($fieldType === 'time') return $now->format('H:i');
-            if ($fieldType === 'datetime') return $now->format('Y-m-d H:i');
+        if (in_array($lower, ['now', '{now}', 'current_time', '{current_time}', 'current_datetime', '{current_datetime}'])) {
+            if ($fieldType === 'time')
+                return $now->format('H:i');
+            if ($fieldType === 'datetime')
+                return $now->format('Y-m-d H:i');
             return $now->format('Y-m-d');
         }
     }
-    
+
     return $defaultVal;
 }
 
@@ -274,7 +347,8 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
     $mStmt = $conn->prepare("SELECT * FROM {$p}modules WHERE id = ?");
     $mStmt->execute([$moduleId]);
     $module = $mStmt->fetch(PDO::FETCH_ASSOC);
-    if (!$module) return ['fields' => [], 'records' => [], 'total' => 0];
+    if (!$module)
+        return ['fields' => [], 'records' => [], 'total' => 0];
     $rule = $module['visibility_rule'] ?: 'all';
 
     $baseSql = " FROM {$p}module_records r WHERE r.module_id = ?";
@@ -321,7 +395,7 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
         } elseif ($rule === 'specific_roles') {
             $rolesStr = $module['visibility_roles'] ?? '';
             $roles = array_filter(array_map('trim', explode(',', $rolesStr)));
-            if (!in_array((string)$currentUserRole, $roles, true)) {
+            if (!in_array((string) $currentUserRole, $roles, true)) {
                 // If not in the specific roles, can only see own records
                 $vConditions[] = "r.created_by = ?";
                 $params[] = $currentUserId;
@@ -368,7 +442,7 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
         $moduleFields = $fStmt->fetchAll(PDO::FETCH_ASSOC);
         $sysFieldTypes = [];
         foreach ($moduleFields as $f) {
-            $sysFieldTypes[(int)$f['id']] = $f['field_type'];
+            $sysFieldTypes[(int) $f['id']] = $f['field_type'];
         }
 
         foreach ($filterRules as $rule_item) {
@@ -395,13 +469,17 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
             if (array_key_exists($fid, $sysFields)) {
                 $mappedCol = $sysFields[$fid];
             } else {
-                $numericFid = (int)$fid;
+                $numericFid = (int) $fid;
                 if ($numericFid > 0 && isset($sysFieldTypes[$numericFid])) {
                     $type = $sysFieldTypes[$numericFid];
-                    if ($type === 'sys_created_by') $mappedCol = 'r.created_by';
-                    elseif ($type === 'sys_created_at') $mappedCol = 'r.created_at';
-                    elseif ($type === 'sys_updated_by') $mappedCol = 'r.updated_by';
-                    elseif ($type === 'sys_updated_at') $mappedCol = 'r.updated_at';
+                    if ($type === 'sys_created_by')
+                        $mappedCol = 'r.created_by';
+                    elseif ($type === 'sys_created_at')
+                        $mappedCol = 'r.created_at';
+                    elseif ($type === 'sys_updated_by')
+                        $mappedCol = 'r.updated_by';
+                    elseif ($type === 'sys_updated_at')
+                        $mappedCol = 'r.updated_at';
                 }
             }
 
@@ -422,13 +500,13 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                     $baseSql .= " AND MONTH($mappedCol) = MONTH(CURDATE()) AND YEAR($mappedCol) = YEAR(CURDATE())";
                 } elseif ($op === 'days_within_past') {
                     $baseSql .= " AND DATE($mappedCol) >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND DATE($mappedCol) <= CURDATE()";
-                    $params[] = (int)$val;
+                    $params[] = (int) $val;
                 } elseif ($op === 'days_older') {
                     $baseSql .= " AND DATE($mappedCol) <= DATE_SUB(CURDATE(), INTERVAL ? DAY)";
-                    $params[] = (int)$val;
+                    $params[] = (int) $val;
                 } elseif ($op === 'days_within_future') {
                     $baseSql .= " AND DATE($mappedCol) >= CURDATE() AND DATE($mappedCol) <= DATE_ADD(CURDATE(), INTERVAL ? DAY)";
-                    $params[] = (int)$val;
+                    $params[] = (int) $val;
                 } elseif ($op === 'empty') {
                     $baseSql .= " AND ($mappedCol IS NULL OR TRIM($mappedCol) = '')";
                 } elseif ($op === 'not_empty') {
@@ -439,7 +517,7 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                 }
             } else {
                 // Custom field
-                $fieldId = (int)$fid;
+                $fieldId = (int) $fid;
                 if ($fieldId > 0) {
                     $isRelation = isset($sysFieldTypes[$fieldId]) && $sysFieldTypes[$fieldId] === 'api_call_picker';
                     if ($op === 'LIKE') {
@@ -523,15 +601,15 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
                     } elseif ($op === 'days_within_past') {
                         $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND DATE(value) <= CURDATE())";
                         $params[] = $fieldId;
-                        $params[] = (int)$val;
+                        $params[] = (int) $val;
                     } elseif ($op === 'days_older') {
                         $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) <= DATE_SUB(CURDATE(), INTERVAL ? DAY))";
                         $params[] = $fieldId;
-                        $params[] = (int)$val;
+                        $params[] = (int) $val;
                     } elseif ($op === 'days_within_future') {
                         $baseSql .= " AND r.id IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND DATE(value) >= CURDATE() AND DATE(value) <= DATE_ADD(CURDATE(), INTERVAL ? DAY))";
                         $params[] = $fieldId;
-                        $params[] = (int)$val;
+                        $params[] = (int) $val;
                     } elseif ($op === 'empty') {
                         $baseSql .= " AND r.id NOT IN (SELECT record_id FROM {$p}module_record_values WHERE field_id = ? AND value IS NOT NULL AND TRIM(value) != '')";
                         $params[] = $fieldId;
@@ -575,25 +653,25 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
     $orderBy = "r.created_at DESC";
     if ($sortBy) {
         $sortOrder = strtoupper($sortOrder) === 'ASC' ? 'ASC' : 'DESC';
-        
+
         $sysFields = [
             'created_at' => 'r.created_at',
             'created_by' => 'r.created_by',
             'updated_at' => 'r.updated_at',
             'updated_by' => 'r.updated_by',
-            'id'         => 'r.id',
-            'created'    => 'r.created_at'
+            'id' => 'r.id',
+            'created' => 'r.created_at'
         ];
-        
+
         if (isset($sysFields[$sortBy])) {
             $orderBy = $sysFields[$sortBy] . " " . $sortOrder;
         } else {
-            $sortFieldId = (int)$sortBy;
+            $sortFieldId = (int) $sortBy;
             if ($sortFieldId > 0) {
                 $sfStmt = $conn->prepare("SELECT field_type FROM {$p}module_fields WHERE id = ? LIMIT 1");
                 $sfStmt->execute([$sortFieldId]);
                 $sortFieldType = $sfStmt->fetchColumn();
-                
+
                 if ($sortFieldType === 'sys_created_at') {
                     $orderBy = "r.created_at " . $sortOrder;
                 } elseif ($sortFieldType === 'sys_created_by') {
@@ -673,7 +751,7 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
             $rec['values'][$sysFieldMap['sys_updated_by']] = $userMap[$rec['updated_by']] ?? ($rec['updated_by'] ? "User #" . $rec['updated_by'] : "");
         if (isset($sysFieldMap['sys_updated_at']))
             $rec['values'][$sysFieldMap['sys_updated_at']] = $rec['updated_at'];
-            
+
         $rec['can_edit'] = dm_can_edit_record($conn, $p, $module, $rec['created_by'], $currentUserId, $currentUserRole, $isAdmin);
         $rec['can_delete'] = dm_can_delete_record($conn, $p, $module, $rec['created_by'], $currentUserId, $currentUserRole, $isAdmin);
     }
@@ -1035,25 +1113,26 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
     $fields = dm_fetch_module_fields($conn, $p, $moduleId);
     $fieldMap = []; // field_id => field details
     foreach ($fields as $f) {
-        $fieldMap[(int)$f['id']] = $f;
+        $fieldMap[(int) $f['id']] = $f;
     }
 
     // Fetch all current record values to replace template variables
     $recStmt = $conn->prepare("SELECT created_at, created_by, updated_at, updated_by FROM {$p}module_records WHERE id = ?");
     $recStmt->execute([$recordId]);
     $recordRow = $recStmt->fetch(PDO::FETCH_ASSOC);
-    if (!$recordRow) return;
+    if (!$recordRow)
+        return;
 
     $allCurrentValues = [];
     $valStmt = $conn->prepare("SELECT field_id, value FROM {$p}module_record_values WHERE record_id = ?");
     $valStmt->execute([$recordId]);
     foreach ($valStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $allCurrentValues[(int)$row['field_id']] = $row['value'];
+        $allCurrentValues[(int) $row['field_id']] = $row['value'];
     }
 
     // Inject system fields into $allCurrentValues and potentially $newValues/$oldValues
     foreach ($fields as $f) {
-        $fid = (int)$f['id'];
+        $fid = (int) $f['id'];
         $fType = $f['field_type'];
         if ($fType === 'sys_created_by') {
             $allCurrentValues[$fid] = $recordRow['created_by'];
@@ -1099,7 +1178,7 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
     foreach ($workflows as $w) {
         $triggerEvent = $w['trigger_event'] ?? 'create_or_edit';
         $condType = $w['condition_type'] ?? 'field_value';
-        $triggerFieldId = $w['trigger_field_id'] ? (int)$w['trigger_field_id'] : null;
+        $triggerFieldId = $w['trigger_field_id'] ? (int) $w['trigger_field_id'] : null;
         $triggerValue = $w['trigger_value'] !== null ? trim($w['trigger_value']) : '';
 
         // 1. Check trigger event matches
@@ -1119,11 +1198,11 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
         if ($condType === 'always') {
             $isTriggered = true;
         } elseif ($condType === 'field_value' && $triggerFieldId !== null) {
-            $newValue = isset($newValues[$triggerFieldId]) ? trim((string)$newValues[$triggerFieldId]) : null;
-            $oldValue = isset($oldValues[$triggerFieldId]) ? trim((string)$oldValues[$triggerFieldId]) : null;
+            $newValue = isset($newValues[$triggerFieldId]) ? trim((string) $newValues[$triggerFieldId]) : null;
+            $oldValue = isset($oldValues[$triggerFieldId]) ? trim((string) $oldValues[$triggerFieldId]) : null;
 
             if ($newValue === null && isset($allCurrentValues[$triggerFieldId])) {
-                $newValue = trim((string)$allCurrentValues[$triggerFieldId]);
+                $newValue = trim((string) $allCurrentValues[$triggerFieldId]);
             }
 
             if ($isCreate) {
@@ -1136,8 +1215,8 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
                 }
             }
         } elseif ($condType === 'field_changed' && $triggerFieldId !== null) {
-            $newValue = isset($newValues[$triggerFieldId]) ? trim((string)$newValues[$triggerFieldId]) : null;
-            $oldValue = isset($oldValues[$triggerFieldId]) ? trim((string)$oldValues[$triggerFieldId]) : null;
+            $newValue = isset($newValues[$triggerFieldId]) ? trim((string) $newValues[$triggerFieldId]) : null;
+            $oldValue = isset($oldValues[$triggerFieldId]) ? trim((string) $oldValues[$triggerFieldId]) : null;
 
             if ($isCreate) {
                 if ($newValue !== null && $newValue !== '') {
@@ -1157,13 +1236,13 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
         // 1. Resolve Recipient
         $recipient = '';
         if ($w['recipient_field_id']) {
-            $recFieldId = (int)$w['recipient_field_id'];
+            $recFieldId = (int) $w['recipient_field_id'];
             $recipientValue = $allCurrentValues[$recFieldId] ?? '';
-            
+
             // If the recipient field is a user type (e.g. assigned_to or created_by)
             $fType = $fieldMap[$recFieldId]['field_type'] ?? '';
             if (($fType === 'user' || $fType === 'assigned_to' || $fType === 'sys_created_by' || $fType === 'sys_updated_by') && $recipientValue) {
-                $uid = (int)$recipientValue;
+                $uid = (int) $recipientValue;
                 if ($w['action_type'] === 'email') {
                     $recipient = $userMap[$uid]['email'] ?? '';
                 } elseif ($w['action_type'] === 'whatsapp') {
@@ -1175,7 +1254,7 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
                 $recipient = $recipientValue;
             }
         }
-        
+
         if (empty($recipient) && $w['recipient_custom']) {
             $recipient = $w['recipient_custom'];
         }
@@ -1196,24 +1275,24 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
 
         // Replace custom field placeholders
         foreach ($fields as $f) {
-            $val = $allCurrentValues[(int)$f['id']] ?? '';
-            
+            $val = $allCurrentValues[(int) $f['id']] ?? '';
+
             // Format duration/checkbox/user fields nicely in templates
             if ($f['field_type'] === 'checkbox') {
                 $val = $val ? 'Yes' : 'No';
             } elseif ($f['field_type'] === 'user' || $f['field_type'] === 'assigned_to' || $f['field_type'] === 'sys_created_by' || $f['field_type'] === 'sys_updated_by') {
-                $val = $userMap[(int)$val]['name'] ?? "User #$val";
+                $val = $userMap[(int) $val]['name'] ?? "User #$val";
             }
-            
+
             $placeholder = '{' . $f['label'] . '}';
             $subject = str_ireplace($placeholder, $val, $subject);
             $body = str_ireplace($placeholder, $val, $body);
         }
 
         // Replace system placeholder values
-        $createdByName = $userMap[(int)$recordRow['created_by']]['name'] ?? '';
-        $updatedByName = $userMap[(int)$recordRow['updated_by']]['name'] ?? '';
-        
+        $createdByName = $userMap[(int) $recordRow['created_by']]['name'] ?? '';
+        $updatedByName = $userMap[(int) $recordRow['updated_by']]['name'] ?? '';
+
         $sysPlaceholders = [
             '{Created By}' => $createdByName,
             '{Created On}' => $recordRow['created_at'],
@@ -1251,13 +1330,13 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
 
             if ($configData) {
                 $smtpHost = $configData['smtp_host'] ?? '';
-                $smtpPort = (int)($configData['smtp_port'] ?? 0);
+                $smtpPort = (int) ($configData['smtp_port'] ?? 0);
                 $smtpUser = $configData['smtp_user'] ?? '';
                 $smtpPass = $configData['smtp_pass'] ?? '';
                 $smtpFromEmail = $configData['smtp_from_email'] ?? '';
                 $smtpFromName = $configData['smtp_from_name'] ?? '';
                 $smtpEnc = $configData['smtp_encryption'] ?? 'none';
-                
+
                 try {
                     dm_send_smtp_email($smtpHost, $smtpPort, $smtpUser, $smtpPass, $smtpFromEmail, $smtpFromName, $recipient, $subject, $body, $smtpEnc);
                 } catch (Throwable $e) {
@@ -1269,7 +1348,7 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
                 $headers = "MIME-Version: 1.0\r\n";
                 $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
                 $headers .= "From: VY-AI CRM Automation <no-reply@vygroups.com>\r\n";
-                
+
                 $mailSent = @mail($recipient, $subject, nl2br($body), $headers);
                 if (!$mailSent) {
                     $status = 'failed';
@@ -1341,7 +1420,7 @@ function dm_trigger_workflows(PDO $conn, string $p, int $moduleId, int $recordId
 function dm_send_smtp_email(string $host, int $port, string $user, string $pass, string $fromEmail, string $fromName, string $to, string $subject, string $body, string $encryption = 'none', string $ccEmail = '', array $attachments = [], string $bccEmail = ''): bool
 {
     // Inline paragraph styles to prevent email clients from adding large margins
-    $body = preg_replace_callback('/<p(\b[^>]*)>/i', function($matches) {
+    $body = preg_replace_callback('/<p(\b[^>]*)>/i', function ($matches) {
         $attrs = $matches[1];
         if (preg_match('/style=["\']([^"\']*)["\']/i', $attrs, $styleMatch)) {
             $existingStyle = rtrim(trim($styleMatch[1]), ';');
@@ -1359,7 +1438,7 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
         throw new Exception("Could not connect to SMTP server $host:$port: $errstr ($errno)");
     }
 
-    $read = function($socket) {
+    $read = function ($socket) {
         $response = '';
         while (($str = fgets($socket, 515)) !== false) {
             $response .= $str;
@@ -1370,7 +1449,7 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
         return $response;
     };
 
-    $send = function($socket, $cmd) use ($read) {
+    $send = function ($socket, $cmd) use ($read) {
         fwrite($socket, $cmd . "\r\n");
         return $read($socket);
     };
@@ -1448,7 +1527,7 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
 
     // Headers & Message
     $boundary = md5(time() . uniqid());
-    
+
     $headers = [
         "MIME-Version: 1.0",
         "From: " . ($fromName ? '"' . $fromName . '" <' . $fromEmail . '>' : $fromEmail),
@@ -1461,7 +1540,7 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
     if ($ccEmail) {
         $headers[] = "Cc: " . $ccEmail;
     }
-    
+
     // SMTP standard usually hides BCC from headers, but some systems prefer omitting it entirely
     // Usually we don't add "Bcc: " header in the message payload, so the recipients don't see each other.
     // However, if we do add it, SMTP servers often strip it before delivery.
@@ -1472,13 +1551,13 @@ function dm_send_smtp_email(string $host, int $port, string $user, string $pass,
         $message = implode("\r\n", $headers) . "\r\n\r\n" . $body . "\r\n.";
     } else {
         $headers[] = "Content-Type: multipart/mixed; boundary=\"$boundary\"";
-        
+
         $message = implode("\r\n", $headers) . "\r\n\r\n";
         $message .= "--$boundary\r\n";
         $message .= "Content-Type: text/html; charset=UTF-8\r\n";
         $message .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
         $message .= $body . "\r\n\r\n";
-        
+
         foreach ($attachments as $att) {
             $message .= "--$boundary\r\n";
             $message .= "Content-Type: " . ($att['mime'] ?? 'application/octet-stream') . "; name=\"" . $att['name'] . "\"\r\n";
@@ -1551,13 +1630,13 @@ function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, str
     curl_setopt($ch, CURLOPT_URL, $apiUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
-    
+
     $headers = [
         "Authorization: Bearer " . $token,
         "Content-Type: application/json"
     ];
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
+
     if ($templateName) {
         $payloadArr = [
             "messaging_product" => "whatsapp",
@@ -1592,15 +1671,15 @@ function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, str
             ]
         ];
     }
-    
+
     $payload = json_encode($payloadArr);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-    
+
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err = curl_error($ch);
     curl_close($ch);
-    
+
     if ($err) {
         throw new Exception("Curl error: " . $err);
     }
@@ -1610,40 +1689,47 @@ function dm_send_whatsapp_message(string $apiUrl, string $token, string $to, str
     return true;
 }
 
-function dm_can_edit_record($conn, $p, $module, $recordOwnerId, $userId, $userRoleId, $isAdmin = false) {
-    if ($isAdmin) return true;
+function dm_can_edit_record($conn, $p, $module, $recordOwnerId, $userId, $userRoleId, $isAdmin = false)
+{
+    if ($isAdmin)
+        return true;
     $rule = $module['edit_rule'] ?? 'all';
-    if ($rule === 'all') return true;
+    if ($rule === 'all')
+        return true;
     if ($rule === 'specific_roles') {
         $rolesStr = $module['edit_roles'] ?? '';
         $roles = array_filter(array_map('trim', explode(',', $rolesStr)));
-        return in_array((string)$userRoleId, $roles, true);
+        return in_array((string) $userRoleId, $roles, true);
     }
     $allowedIds = dm_get_visible_user_ids($conn, $p, $userId, $userRoleId, $rule);
-    return in_array((int)$recordOwnerId, $allowedIds, true);
+    return in_array((int) $recordOwnerId, $allowedIds, true);
 }
 
-function dm_can_delete_record($conn, $p, $module, $recordOwnerId, $userId, $userRoleId, $isAdmin = false) {
-    if ($isAdmin) return true;
+function dm_can_delete_record($conn, $p, $module, $recordOwnerId, $userId, $userRoleId, $isAdmin = false)
+{
+    if ($isAdmin)
+        return true;
     $rule = $module['delete_rule'] ?? 'all';
-    
-    if ($rule === 'admin_only') return false;
-    
-    if ($rule === 'all') return true;
+
+    if ($rule === 'admin_only')
+        return false;
+
+    if ($rule === 'all')
+        return true;
     if ($rule === 'specific_roles') {
         $rolesStr = $module['delete_roles'] ?? '';
         $roles = array_filter(array_map('trim', explode(',', $rolesStr)));
-        return in_array((string)$userRoleId, $roles, true);
+        return in_array((string) $userRoleId, $roles, true);
     }
-    
+
     if ($rule === 'upper_role_only') {
         // Can only delete if record is owned by a lower role, and user is not the owner
         $allowedIds = dm_get_visible_user_ids($conn, $p, $userId, $userRoleId, 'role_down');
-        return in_array((int)$recordOwnerId, $allowedIds, true) && ((int)$recordOwnerId !== (int)$userId);
+        return in_array((int) $recordOwnerId, $allowedIds, true) && ((int) $recordOwnerId !== (int) $userId);
     }
-    
+
     $allowedIds = dm_get_visible_user_ids($conn, $p, $userId, $userRoleId, $rule);
-    return in_array((int)$recordOwnerId, $allowedIds, true);
+    return in_array((int) $recordOwnerId, $allowedIds, true);
 }
 
 /**
@@ -1655,15 +1741,15 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
     $dbValStmt = $conn->prepare("SELECT field_id, value FROM {$p}module_record_values WHERE record_id = ?");
     $dbValStmt->execute([$recordId]);
     $fullValues = $dbValStmt->fetchAll(PDO::FETCH_KEY_PAIR);
-    
+
     foreach ($values as $fid => $v) {
-        $fullValues[(int)$fid] = $v;
+        $fullValues[(int) $fid] = $v;
     }
     $values = $fullValues;
 
     // Fetch all fields for current module
     $currentFields = dm_fetch_module_fields($conn, $p, $moduleId);
-    
+
     // Find all date/datetime fields in current module
     $currentDateFields = [];
     foreach ($currentFields as $f) {
@@ -1671,39 +1757,41 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
             $currentDateFields[] = $f;
         }
     }
-    if (empty($currentDateFields)) return;
+    if (empty($currentDateFields))
+        return;
 
     // Find linked parent module pickers or company text fields
     foreach ($currentFields as $f) {
-        $fId = (int)$f['id'];
+        $fId = (int) $f['id'];
         $fType = $f['field_type'];
         $cfg = is_array($f['config']) ? $f['config'] : (json_decode($f['config'] ?: '{}', true) ?: []);
-        
+
         $linkedModuleId = 0;
         $parentRecordId = 0;
         $companyNameStr = '';
 
         if ($fType === 'api_call_picker' && !empty($cfg['linked_module_id'])) {
-            $linkedModuleId = (int)$cfg['linked_module_id'];
-            $val = trim((string)($values[$fId] ?? ''));
+            $linkedModuleId = (int) $cfg['linked_module_id'];
+            $val = trim((string) ($values[$fId] ?? ''));
             if (ctype_digit($val)) {
-                $parentRecordId = (int)$val;
+                $parentRecordId = (int) $val;
             } else if ($val !== '') {
                 $companyNameStr = $val;
             }
         } else if (in_array(strtolower(trim($f['label'] ?? '')), ['company', 'company name', 'companies'])) {
             // Text or dropdown company field
-            $val = trim((string)($values[$fId] ?? ''));
+            $val = trim((string) ($values[$fId] ?? ''));
             if ($val !== '') {
                 $companyNameStr = $val;
                 // Find Companies module ID
                 $cModStmt = $conn->prepare("SELECT id FROM {$p}modules WHERE LOWER(name) IN ('companies', 'company') LIMIT 1");
                 $cModStmt->execute();
-                $linkedModuleId = (int)$cModStmt->fetchColumn();
+                $linkedModuleId = (int) $cModStmt->fetchColumn();
             }
         }
 
-        if (!$linkedModuleId) continue;
+        if (!$linkedModuleId)
+            continue;
 
         // If parentRecordId not numeric, resolve by matching company name in parent module
         if (!$parentRecordId && $companyNameStr !== '') {
@@ -1718,8 +1806,8 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
                 LIMIT 1
             ");
             $findParentStmt->execute([$linkedModuleId, $companyNameStr]);
-            $parentRecordId = (int)$findParentStmt->fetchColumn();
-            
+            $parentRecordId = (int) $findParentStmt->fetchColumn();
+
             if (!$parentRecordId) {
                 // Try matching title field in parent module
                 $findTitleStmt = $conn->prepare("
@@ -1730,11 +1818,12 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
                     LIMIT 1
                 ");
                 $findTitleStmt->execute([$linkedModuleId, $companyNameStr]);
-                $parentRecordId = (int)$findTitleStmt->fetchColumn();
+                $parentRecordId = (int) $findTitleStmt->fetchColumn();
             }
         }
 
-        if (!$parentRecordId) continue;
+        if (!$parentRecordId)
+            continue;
 
         // Fetch fields of parent module to find matching date field
         $parentFields = dm_fetch_module_fields($conn, $p, $linkedModuleId);
@@ -1744,32 +1833,35 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
                 $parentDateFields[] = $pf;
             }
         }
-        if (empty($parentDateFields)) continue;
+        if (empty($parentDateFields))
+            continue;
 
         // Check explicit Field Rules configured on fields in this module for update_other_module
         foreach ($currentFields as $cf) {
             $rawRules = $cf['rules'] ?? '[]';
             $cfRules = is_array($rawRules) ? $rawRules : (json_decode($rawRules ?: '[]', true) ?: []);
-            if (!is_array($cfRules)) continue;
+            if (!is_array($cfRules))
+                continue;
             foreach ($cfRules as $r) {
-                if (!is_array($r)) continue;
+                if (!is_array($r))
+                    continue;
                 if (($r['action'] ?? '') === 'update_other_module' || !empty($r['config']['target_module_id'])) {
-                    $tModId = (int)($r['config']['target_module_id'] ?? 0);
-                    $tFldId = (int)($r['config']['target_field_id'] ?? 0);
+                    $tModId = (int) ($r['config']['target_module_id'] ?? 0);
+                    $tFldId = (int) ($r['config']['target_field_id'] ?? 0);
                     $valMode = $r['config']['value_mode'] ?? 'copy_value';
-                    
+
                     if ($tModId && $tFldId && $linkedModuleId == $tModId) {
                         $newVal = '';
                         if ($valMode === 'today') {
                             $newVal = date('Y-m-d');
                         } else if (strpos($valMode, 'field_') === 0) {
-                            $copyFid = (int)str_replace('field_', '', $valMode);
-                            $newVal = trim((string)($values[$copyFid] ?? ''));
+                            $copyFid = (int) str_replace('field_', '', $valMode);
+                            $newVal = trim((string) ($values[$copyFid] ?? ''));
                         } else if ($valMode === 'copy_value') {
-                            $srcFid = (int)($r['source_field_id'] ?? $cf['id']);
-                            $newVal = trim((string)($values[$srcFid] ?? ''));
+                            $srcFid = (int) ($r['source_field_id'] ?? $cf['id']);
+                            $newVal = trim((string) ($values[$srcFid] ?? ''));
                         } else {
-                            $newVal = trim((string)($r['action_value'] ?? $r['config']['action_value'] ?? ''));
+                            $newVal = trim((string) ($r['action_value'] ?? $r['config']['action_value'] ?? ''));
                         }
 
                         if ($newVal !== '') {
@@ -1778,7 +1870,7 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
                                 VALUES (?, ?, ?)
                                 ON DUPLICATE KEY UPDATE value = VALUES(value)
                             ")->execute([$parentRecordId, $tFldId, $newVal]);
-                            
+
                             $conn->prepare("UPDATE {$p}module_records SET updated_at = NOW() WHERE id = ?")->execute([$parentRecordId]);
                         }
                     }
@@ -1788,8 +1880,9 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
 
         // For each date field in current record, find target date field in parent record (default fallback)
         foreach ($currentDateFields as $cdf) {
-            $cDateVal = trim((string)($values[(int)$cdf['id']] ?? ''));
-            if ($cDateVal === '') continue;
+            $cDateVal = trim((string) ($values[(int) $cdf['id']] ?? ''));
+            if ($cDateVal === '')
+                continue;
 
             $cdfLabelNorm = preg_replace('/[^a-z0-9]/', '', strtolower($cdf['label'] ?? ''));
 
@@ -1820,8 +1913,8 @@ function dm_sync_linked_parent_records(PDO $conn, string $p, int $moduleId, int 
             }
 
             if ($targetParentDateField) {
-                $pdfId = (int)$targetParentDateField['id'];
-                
+                $pdfId = (int) $targetParentDateField['id'];
+
                 // Update parent record date value
                 $updParentValueStmt = $conn->prepare("
                     INSERT INTO {$p}module_record_values (record_id, field_id, value)

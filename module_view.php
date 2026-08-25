@@ -377,27 +377,6 @@ if (!$hasUpdatedAt) {
                             $callsStats['duration'] = $totalSecs;
                         }
 
-                        // Fallback check from calls table if dynamic module is 0
-                        if ($callsStats['total'] === 0) {
-                            $st = $conn->query("
-                                SELECT 
-                                    COUNT(*) as total_calls,
-                                    SUM(CASE WHEN call_type = 'incoming' THEN 1 ELSE 0 END) as incoming_calls,
-                                    SUM(CASE WHEN call_type = 'outgoing' THEN 1 ELSE 0 END) as outgoing_calls,
-                                    SUM(CASE WHEN call_type IN ('missed', 'rejected', 'blocked') THEN 1 ELSE 0 END) as missed_calls,
-                                    SUM(duration) as total_duration,
-                                    SUM(CASE WHEN recording_file_url IS NOT NULL AND recording_file_url != '' THEN 1 ELSE 0 END) as recording_calls
-                                FROM {$prefix}calls
-                            ")->fetch(PDO::FETCH_ASSOC);
-                            if ($st && $st['total_calls'] > 0) {
-                                $callsStats['total'] = (int)($st['total_calls'] ?? 0);
-                                $callsStats['incoming'] = (int)($st['incoming_calls'] ?? 0);
-                                $callsStats['outgoing'] = (int)($st['outgoing_calls'] ?? 0);
-                                $callsStats['missed'] = (int)($st['missed_calls'] ?? 0);
-                                $callsStats['duration'] = (int)($st['total_duration'] ?? 0);
-                                $callsStats['recordings'] = (int)($st['recording_calls'] ?? 0);
-                            }
-                        }
                     } catch (Exception $e) {}
 
                     $mins = floor($callsStats['duration'] / 60);
@@ -1143,29 +1122,54 @@ function togglePickerQuickCreate(show) {
     }
 }
 
+window.CRM_CURRENT_USER = <?= json_encode([
+    'id' => $_SESSION['user_id'] ?? null,
+    'name' => trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? '')) ?: ($_SESSION['username'] ?? 'User'),
+    'username' => $_SESSION['username'] ?? '',
+    'email' => $_SESSION['email'] ?? ''
+]) ?>;
+
 function resolveDynamicDefaultValue(defaultVal, fieldType = 'text') {
     if (!defaultVal) return '';
     const lower = defaultVal.toString().trim().toLowerCase();
+    const user = window.CRM_CURRENT_USER || {};
     
-    if (['date', 'datetime', 'time'].includes(fieldType)) {
+    // Dynamic user & creator tokens
+    if (['current_user', '{current_user}', 'creator', '{creator}', 'current_user_name', '{current_user_name}', 'me', '{me}', 'logged_in_user'].includes(lower)) {
+        if (['assigned_to', 'user', 'owner'].includes(fieldType)) {
+            return user.id || user.name || '';
+        }
+        return user.name || user.username || '';
+    }
+    if (['current_user_id', '{current_user_id}', 'creator_id', '{creator_id}', 'user_id', '{user_id}'].includes(lower)) {
+        return user.id || '';
+    }
+    if (['current_user_email', '{current_user_email}', 'creator_email', '{creator_email}'].includes(lower)) {
+        return user.email || '';
+    }
+    if (['current_user_username', '{current_user_username}'].includes(lower)) {
+        return user.username || '';
+    }
+
+    if (['date', 'datetime', 'time'].includes(fieldType) || ['today', 'tomorrow', 'yesterday', 'now', '{today}', '{now}'].includes(lower)) {
         const pad = n => String(n).padStart(2, '0');
         const formatDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
         const formatTime = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
         const formatDateTime = d => `${formatDate(d)} ${formatTime(d)}`;
 
         let target = new Date();
-        if (['today', 'current_date', 'current_day'].includes(lower)) {
+        if (['today', '{today}', 'current_date', '{current_date}', 'current_day'].includes(lower)) {
             return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
         }
-        if (['tomorrow', '+1_day', '+1 day'].includes(lower)) {
+        if (['tomorrow', '{tomorrow}', '+1_day', '+1 day'].includes(lower)) {
             target.setDate(target.getDate() + 1);
             return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
         }
-        if (['yesterday', '-1_day', '-1 day'].includes(lower)) {
+        if (['yesterday', '{yesterday}', '-1_day', '-1 day'].includes(lower)) {
             target.setDate(target.getDate() - 1);
             return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
         }
-        if (['+7_days', '+7 days', 'next_week'].includes(lower)) {
+        if (['+7_days', '+7 days', 'next_week', '{next_week}'].includes(lower)) {
             target.setDate(target.getDate() + 7);
             return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
         }
@@ -1173,7 +1177,7 @@ function resolveDynamicDefaultValue(defaultVal, fieldType = 'text') {
             target.setDate(target.getDate() + 14);
             return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
         }
-        if (['+30_days', '+30 days', 'next_month'].includes(lower)) {
+        if (['+30_days', '+30 days', 'next_month', '{next_month}'].includes(lower)) {
             target.setDate(target.getDate() + 30);
             return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
         }
@@ -1189,7 +1193,7 @@ function resolveDynamicDefaultValue(defaultVal, fieldType = 'text') {
             target.setDate(target.getDate() - 30);
             return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
         }
-        if (['now', 'current_time', 'current_datetime'].includes(lower)) {
+        if (['now', '{now}', 'current_time', '{current_time}', 'current_datetime', '{current_datetime}'].includes(lower)) {
             if (fieldType === 'time') return formatTime(target);
             if (fieldType === 'datetime') return formatDateTime(target);
             return formatDate(target);

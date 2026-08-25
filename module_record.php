@@ -1389,6 +1389,86 @@ function togglePickerQuickCreate(show) {
     }
 }
 
+window.CRM_CURRENT_USER = <?= json_encode([
+    'id' => $_SESSION['user_id'] ?? null,
+    'name' => trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? '')) ?: ($_SESSION['username'] ?? 'User'),
+    'username' => $_SESSION['username'] ?? '',
+    'email' => $_SESSION['email'] ?? ''
+]) ?>;
+
+function resolveDynamicDefaultValue(defaultVal, fieldType = 'text') {
+    if (!defaultVal) return '';
+    const lower = defaultVal.toString().trim().toLowerCase();
+    const user = window.CRM_CURRENT_USER || {};
+    
+    // Dynamic user & creator tokens
+    if (['current_user', '{current_user}', 'creator', '{creator}', 'current_user_name', '{current_user_name}', 'me', '{me}', 'logged_in_user'].includes(lower)) {
+        if (['assigned_to', 'user', 'owner'].includes(fieldType)) {
+            return user.id || user.name || '';
+        }
+        return user.name || user.username || '';
+    }
+    if (['current_user_id', '{current_user_id}', 'creator_id', '{creator_id}', 'user_id', '{user_id}'].includes(lower)) {
+        return user.id || '';
+    }
+    if (['current_user_email', '{current_user_email}', 'creator_email', '{creator_email}'].includes(lower)) {
+        return user.email || '';
+    }
+    if (['current_user_username', '{current_user_username}'].includes(lower)) {
+        return user.username || '';
+    }
+
+    if (['date', 'datetime', 'time'].includes(fieldType) || ['today', 'tomorrow', 'yesterday', 'now', '{today}', '{now}'].includes(lower)) {
+        const pad = n => String(n).padStart(2, '0');
+        const formatDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const formatTime = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        const formatDateTime = d => `${formatDate(d)} ${formatTime(d)}`;
+
+        let target = new Date();
+        if (['today', '{today}', 'current_date', '{current_date}', 'current_day'].includes(lower)) {
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['tomorrow', '{tomorrow}', '+1_day', '+1 day'].includes(lower)) {
+            target.setDate(target.getDate() + 1);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['yesterday', '{yesterday}', '-1_day', '-1 day'].includes(lower)) {
+            target.setDate(target.getDate() - 1);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['+7_days', '+7 days', 'next_week', '{next_week}'].includes(lower)) {
+            target.setDate(target.getDate() + 7);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['+14_days', '+14 days'].includes(lower)) {
+            target.setDate(target.getDate() + 14);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['+30_days', '+30 days', 'next_month', '{next_month}'].includes(lower)) {
+            target.setDate(target.getDate() + 30);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['-7_days', '-7 days'].includes(lower)) {
+            target.setDate(target.getDate() - 7);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['-14_days', '-14 days'].includes(lower)) {
+            target.setDate(target.getDate() - 14);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['-30_days', '-30 days'].includes(lower)) {
+            target.setDate(target.getDate() - 30);
+            return fieldType === 'datetime' ? formatDateTime(target) : formatDate(target);
+        }
+        if (['now', '{now}', 'current_time', '{current_time}', 'current_datetime', '{current_datetime}'].includes(lower)) {
+            if (fieldType === 'time') return formatTime(target);
+            if (fieldType === 'datetime') return formatDateTime(target);
+            return formatDate(target);
+        }
+    }
+    return defaultVal;
+}
+
 function renderPickerQcFields() {
     const grid = document.getElementById('rpQuickCreateFieldsGrid');
     if (!grid) return;
@@ -1398,7 +1478,7 @@ function renderPickerQcFields() {
         const fid = field.id;
         const type = field.field_type;
         const label = field.label;
-        const val = field.default_value || '';
+        const val = resolveDynamicDefaultValue(field.default_value || '', type);
         const isRequired = !!field.is_required;
         const reqStar = isRequired ? '<span style="color:#ef4444;">*</span>' : '';
         const fullWidth = ['textarea', 'attachment', 'name', 'address'].includes(type);

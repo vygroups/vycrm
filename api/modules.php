@@ -725,6 +725,13 @@ try {
 
             $conn->beginTransaction();
             try {
+                $callsModuleId = 0;
+                try {
+                    $cmStmt = $conn->prepare("SELECT id FROM {$prefix}modules WHERE module_key = 'calls' LIMIT 1");
+                    $cmStmt->execute();
+                    $callsModuleId = (int)$cmStmt->fetchColumn();
+                } catch (Throwable $e) {}
+
                 foreach ($ids as $id) {
                     $id = (int)$id;
                     $recStmt = $conn->prepare("SELECT module_id, created_by FROM {$prefix}module_records WHERE id = ?");
@@ -734,6 +741,23 @@ try {
                         $moduleInfo = dm_fetch_module_full($conn, $prefix, $recInfo['module_id']);
                         if (!dm_can_delete_record($conn, $prefix, $moduleInfo, $recInfo['created_by'], $userId, $userRole, $isAdmin)) {
                             throw new RuntimeException("You do not have permission to delete record #$id.");
+                        }
+
+                        if ($callsModuleId && (int)$recInfo['module_id'] === $callsModuleId) {
+                            try {
+                                $valStmt = $conn->prepare("
+                                    SELECT f.field_key, v.value 
+                                    FROM {$prefix}module_record_values v
+                                    JOIN {$prefix}module_fields f ON f.id = v.field_id
+                                    WHERE v.record_id = ? AND f.field_key IN ('caller_number', 'call_start_time')
+                                ");
+                                $valStmt->execute([$id]);
+                                $kvals = $valStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+                                if (!empty($kvals['caller_number']) && !empty($kvals['call_start_time'])) {
+                                    $conn->prepare("DELETE FROM {$prefix}calls WHERE caller_number = ? AND call_start_time LIKE ? LIMIT 1")
+                                         ->execute([$kvals['caller_number'], substr($kvals['call_start_time'], 0, 16) . '%']);
+                                }
+                            } catch (Throwable $e) {}
                         }
                     }
                     $conn->prepare("DELETE FROM {$prefix}module_records WHERE id = ?")->execute([$id]);

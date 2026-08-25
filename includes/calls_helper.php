@@ -145,7 +145,7 @@ function calls_ensure_dynamic_module(PDO $conn, string $p): int
         }
 
         $fieldStmt->execute([$block1Id, $moduleId, 'call_start_time', 'Call Start Time', 'datetime', '', 'now', 1, 0, 1, 1, 1, 1, 4]);
-        $fieldStmt->execute([$block1Id, $moduleId, 'call_end_time', 'Call End Time', 'datetime', '', '', 0, 0, 0, 0, 0, 0, 5]);
+        $fieldStmt->execute([$block1Id, $moduleId, 'call_end_time', 'Call End Time', 'datetime', '', '', 0, 0, 1, 1, 1, 0, 5]);
         $fieldStmt->execute([$block1Id, $moduleId, 'duration_formatted', 'Call Duration (MM:SS)', 'text', 'e.g. 03:45', '', 0, 0, 1, 1, 0, 1, 6]);
 
         // Fields for Block 2 (Number & Device / SIM Details)
@@ -198,6 +198,10 @@ function calls_ensure_dynamic_module(PDO $conn, string $p): int
         $fieldStmt->execute([$block4Id, $moduleId, 'call_notes', 'Call Notes / Conversation Remarks', 'textarea', 'Enter discussion points and follow-up notes...', '', 0, 0, 1, 0, 1, 0, 16]);
         $fieldStmt->execute([$block4Id, $moduleId, 'assigned_agent', 'Assigned Agent / Rep', 'text', 'e.g. Agent Name', '', 0, 0, 1, 1, 0, 1, 17]);
 
+        try {
+            $conn->exec("UPDATE {$p}module_fields SET is_list_visible = 1, is_searchable = 1 WHERE module_id = {$moduleId} AND field_key = 'call_end_time'");
+        } catch (Throwable $e) {}
+
         return $moduleId;
     } catch (Throwable $e) {
         return 0;
@@ -213,14 +217,21 @@ function calls_sync_to_dynamic_module_record(PDO $conn, string $p, array $callDa
         $moduleId = calls_ensure_dynamic_module($conn, $p);
         if (!$moduleId) return;
 
-        // Fetch field map for calls module
-        $fStmt = $conn->prepare("SELECT id, field_key FROM {$p}module_fields WHERE module_id = ?");
+        // Fetch field map and types for calls module
+        $fStmt = $conn->prepare("SELECT field_key, id, field_type FROM {$p}module_fields WHERE module_id = ?");
         $fStmt->execute([$moduleId]);
-        $fields = $fStmt->fetchAll(PDO::FETCH_KEY_PAIR); // field_key => id
+        $rawFields = $fStmt->fetchAll(PDO::FETCH_ASSOC);
+        $fields = [];
+        $fieldTypes = [];
+        foreach ($rawFields as $rf) {
+            $fields[$rf['field_key']] = (int)$rf['id'];
+            $fieldTypes[$rf['field_key']] = $rf['field_type'];
+        }
         if (empty($fields)) return;
 
         $callerNumber = $callData['caller_number'] ?? '';
         $startTime = $callData['call_start_time'] ?? date('Y-m-d H:i:s');
+        $effectiveUserId = !empty($callData['user_id']) ? (int)$callData['user_id'] : ($userId ?: 1);
 
         // Check if dynamic record exists (by start time + caller number in record_values)
         $numFieldId = $fields['caller_number'] ?? 0;
@@ -240,9 +251,15 @@ function calls_sync_to_dynamic_module_record(PDO $conn, string $p, array $callDa
 
         if (!$recId) {
             $rStmt = $conn->prepare("INSERT INTO {$p}module_records (module_id, created_by, created_at) VALUES (?, ?, ?)");
-            $rStmt->execute([$moduleId, $userId ?: 1, $startTime]);
+            $rStmt->execute([$moduleId, $effectiveUserId, $startTime]);
             $recId = (int)$conn->lastInsertId();
         }
+
+        $agentUid = (string)$effectiveUserId;
+        $agentUname = !empty($callData['user_name']) ? (string)$callData['user_name'] : '';
+        $agentFieldKey = isset($fields['assigned_agent']) ? 'assigned_agent' : (isset($fields['assigned_to']) ? 'assigned_to' : null);
+        $agentFieldType = $agentFieldKey ? ($fieldTypes[$agentFieldKey] ?? 'text') : 'text';
+        $resolvedAgentVal = ($agentFieldType === 'assigned_to' || $agentFieldType === 'user') ? $agentUid : ($agentUname ?: $agentUid);
 
         // Map values
         $valMap = [
@@ -252,8 +269,8 @@ function calls_sync_to_dynamic_module_record(PDO $conn, string $p, array $callDa
             'call_start_time' => $startTime,
             'call_end_time' => $callData['call_end_time'] ?? '',
             'duration_formatted' => calls_format_duration((int)($callData['duration'] ?? 0)),
-            'from_number' => $callData['from_number'] ?? $callerNumber,
-            'to_number' => $callData['to_number'] ?? '',
+            'from_number' => (!empty($callData['from_number']) && $callData['from_number'] !== 'My Phone' && !str_starts_with($callData['from_number'], 'SIM ')) ? $callData['from_number'] : (($callData['call_type'] ?? '') === 'incoming' ? $callerNumber : ''),
+            'to_number' => (!empty($callData['to_number']) && $callData['to_number'] !== 'My Phone' && !str_starts_with($callData['to_number'], 'SIM ')) ? $callData['to_number'] : (($callData['call_type'] ?? '') === 'outgoing' ? $callerNumber : ''),
             'sim_slot' => $callData['sim_slot'] ?? 'SIM 1',
             'sim_carrier' => $callData['sim_carrier'] ?? '',
             'device_model' => $callData['device_model'] ?? '',
@@ -262,7 +279,8 @@ function calls_sync_to_dynamic_module_record(PDO $conn, string $p, array $callDa
             'recording_storage_provider' => $callData['recording_storage_type'] ?? 'google_drive',
             'call_outcome' => $callData['outcome'] ?? '',
             'call_notes' => $callData['notes'] ?? '',
-            'assigned_agent' => $callData['user_name'] ?? '',
+            'assigned_agent' => $resolvedAgentVal,
+            'assigned_to' => $resolvedAgentVal,
         ];
 
         $insValStmt = $conn->prepare("INSERT INTO {$p}module_record_values (record_id, field_id, value) VALUES (?, ?, ?)

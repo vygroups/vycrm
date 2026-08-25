@@ -248,10 +248,19 @@ try {
                 }
 
                 $contactName = trim($item['contact_name'] ?? $item['name'] ?? '');
-                $fromNumber = trim($item['from_number'] ?? ($callType === 'outgoing' ? 'My Phone' : $cleanPhone));
-                $toNumber = trim($item['to_number'] ?? ($callType === 'outgoing' ? $cleanPhone : 'My Phone'));
                 $simSlot = trim($item['sim_slot'] ?? $item['sim'] ?? 'SIM 1');
                 $simCarrier = trim($item['sim_carrier'] ?? '');
+                $simIdentifier = !empty($simCarrier) ? "{$simSlot} ({$simCarrier})" : $simSlot;
+
+                $fromNumber = trim($item['from_number'] ?? '');
+                if ($fromNumber === 'My Phone' || str_starts_with($fromNumber, 'SIM ')) {
+                    $fromNumber = ($callType === 'incoming') ? $cleanPhone : '';
+                }
+
+                $toNumber = trim($item['to_number'] ?? '');
+                if ($toNumber === 'My Phone' || str_starts_with($toNumber, 'SIM ')) {
+                    $toNumber = ($callType === 'outgoing') ? $cleanPhone : '';
+                }
                 $deviceModel = trim($item['device_model'] ?? '');
                 $deviceId = trim($item['device_id'] ?? '');
                 $location = trim($item['location'] ?? '');
@@ -277,7 +286,8 @@ try {
 
                 // Check for existing record to avoid duplicate entries
                 $findExistingStmt->execute([$cleanPhone, $startTime, $userId]);
-                $existing = $findExistingStmt->fetch(PDO::FETCH_ASSOC);
+                $resolvedCallUserId = !empty($item['user_id']) ? (int)$item['user_id'] : ($userId ?: 1);
+                $resolvedCallUserName = !empty($item['user_name']) ? trim($item['user_name']) : $username;
 
                 $callRecordSyncData = [
                     'caller_number' => $cleanPhone,
@@ -296,7 +306,8 @@ try {
                     'recording_storage_type' => $storageType,
                     'notes' => $notes,
                     'outcome' => $outcome,
-                    'user_name' => $username,
+                    'user_id' => $resolvedCallUserId,
+                    'user_name' => $resolvedCallUserName,
                 ];
 
                 if ($existing) {
@@ -383,6 +394,31 @@ try {
                 'user_id' => $userId
             ];
 
+            // If call_id not provided, match by caller_number and/or call_start_time
+            if ($callId <= 0 && (!empty($callerNumber) || !empty($callStartTime))) {
+                $cleanNum = preg_replace('/[^\d+]/', '', $callerNumber);
+                $cParams = [];
+                $cWhere = ["1=1"];
+                if ($cleanNum) {
+                    $cWhere[] = "(caller_number = ? OR caller_number LIKE ?)";
+                    $cParams[] = $cleanNum;
+                    $cParams[] = "%{$cleanNum}%";
+                }
+                if ($callStartTime) {
+                    $cWhere[] = "call_start_time LIKE ?";
+                    $cParams[] = substr(date('Y-m-d H:i:s', strtotime($callStartTime)), 0, 16) . '%';
+                }
+                $cWhereSql = implode(' AND ', $cWhere);
+                $findCallStmt = $conn->prepare("SELECT id, caller_number, call_start_time FROM {$prefix}calls WHERE {$cWhereSql} ORDER BY call_start_time DESC LIMIT 1");
+                $findCallStmt->execute($cParams);
+                $cFound = $findCallStmt->fetch(PDO::FETCH_ASSOC);
+                if ($cFound) {
+                    $callId = (int)$cFound['id'];
+                    $callMeta['caller_number'] = $cFound['caller_number'];
+                    $callMeta['call_start_time'] = $cFound['call_start_time'];
+                }
+            }
+
             // If call_id provided, fetch its metadata
             if ($callId > 0) {
                 $stmt = $conn->prepare("SELECT * FROM {$prefix}calls WHERE id = ?");
@@ -412,6 +448,23 @@ try {
                         $uploadResult['file_size'] ?? 0,
                         $callId
                     ]);
+
+                    // Sync updated recording URL to the dynamic module record
+                    $cRowStmt = $conn->prepare("SELECT * FROM {$prefix}calls WHERE id = ?");
+                    $cRowStmt->execute([$callId]);
+                    $fullCallRow = $cRowStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($fullCallRow) {
+                        calls_sync_to_dynamic_module_record($conn, $prefix, $fullCallRow, $userId);
+                    }
+                } else if (!empty($callerNumber)) {
+                    // Update dynamic module record directly even if calls table record wasn't found
+                    $directSyncData = [
+                        'caller_number' => $callerNumber,
+                        'call_start_time' => $callStartTime ?: date('Y-m-d H:i:s'),
+                        'recording_file_url' => $uploadResult['file_url'],
+                        'recording_storage_type' => $uploadResult['storage_type'] ?? 'google_drive',
+                    ];
+                    calls_sync_to_dynamic_module_record($conn, $prefix, $directSyncData, $userId);
                 }
 
                 commerce_json_response([
