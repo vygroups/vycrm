@@ -386,6 +386,11 @@ function calls_sync_to_dynamic_module_record(PDO $conn, string $p, array $callDa
     } catch (Throwable $e) {}
 }
 
+function calls_sync_to_dynamic_module(PDO $conn, array $callData, string $p = '', ?int $userId = null): void
+{
+    calls_sync_to_dynamic_module_record($conn, $p, $callData, $userId);
+}
+
 /**
  * Format call source / sync mode with label, color, background, and icon
  */

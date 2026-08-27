@@ -31,6 +31,43 @@ try {
     switch ($action) {
         // 1. MODULE STATUS & SETTINGS FOR CURRENT USER / TENANT
         case 'status':
+        case 'outcome_options':
+        case 'get_outcomes':
+            // Fetch dynamic module field options for 'call_outcome'
+            $outcomeOptions = [];
+            try {
+                $fStmt = $conn->prepare("SELECT id FROM {$prefix}module_fields WHERE field_key = 'call_outcome' LIMIT 1");
+                $fStmt->execute();
+                $fieldId = (int)$fStmt->fetchColumn();
+                if ($fieldId > 0) {
+                    $optStmt = $conn->prepare("SELECT label, value FROM {$prefix}module_field_options WHERE field_id = ? ORDER BY sort_order ASC, id ASC");
+                    $optStmt->execute([$fieldId]);
+                    $outcomeOptions = $optStmt->fetchAll(PDO::FETCH_ASSOC);
+                }
+            } catch (Throwable $e) {}
+
+            if (empty($outcomeOptions)) {
+                $outcomeOptions = [
+                    ['label' => 'Interested / Hot Lead', 'value' => 'Interested'],
+                    ['label' => 'Callback Requested', 'value' => 'Callback Requested'],
+                    ['label' => 'Requirement Gathered', 'value' => 'Requirement Gathered'],
+                    ['label' => 'Deal Closed', 'value' => 'Deal Closed'],
+                    ['label' => 'Follow-up Needed', 'value' => 'Follow-up Needed'],
+                    ['label' => 'Not Interested', 'value' => 'Not Interested'],
+                    ['label' => 'Wrong Number', 'value' => 'Wrong Number'],
+                    ['label' => 'No Answer / Busy', 'value' => 'No Answer'],
+                    ['label' => 'Others', 'value' => 'Others']
+                ];
+            }
+
+            if ($action === 'outcome_options' || $action === 'get_outcomes') {
+                commerce_json_response([
+                    'success' => true,
+                    'outcomes' => $outcomeOptions
+                ]);
+                break;
+            }
+
             $enabled = dm_get_system_setting($conn, $prefix, 'calls_enabled', '1') === '1';
             $visibility = dm_get_system_setting($conn, $prefix, 'calls_visibility', 'all');
             $allowBulkImport = dm_get_system_setting($conn, $prefix, 'calls_allow_bulk_import', '1') === '1';
@@ -52,6 +89,7 @@ try {
                 'visibility' => $visibility,
                 'allow_bulk_import' => $allowBulkImport,
                 'storage' => $safeStorage,
+                'outcomes' => $outcomeOptions,
                 'user' => [
                     'id' => $userId,
                     'username' => $username
@@ -827,32 +865,72 @@ try {
 
         // 8. UPDATE CALL RECORD (Notes, Outcome, Link Customer)
         case 'update_call':
+        case 'update_call_outcome':
             $callId = (int)($input['id'] ?? $input['call_id'] ?? $_POST['id'] ?? 0);
-            if (!$callId) throw new RuntimeException('Call ID is required');
-
-            $notes = $input['notes'] ?? null;
-            $outcome = $input['outcome'] ?? null;
-            $contactName = $input['contact_name'] ?? null;
+            $callerNumber = trim($input['caller_number'] ?? $input['phone'] ?? '');
+            $startTime = !empty($input['call_start_time']) ? date('Y-m-d H:i:s', strtotime($input['call_start_time'])) : null;
+            $notes = isset($input['notes']) ? trim((string)$input['notes']) : '';
+            $outcome = isset($input['outcome']) ? trim((string)$input['outcome']) : '';
+            $contactName = isset($input['contact_name']) ? trim((string)$input['contact_name']) : '';
             $customerId = isset($input['customer_id']) ? (int)$input['customer_id'] : null;
 
-            $fields = [];
-            $params = [];
-
-            if ($notes !== null) { $fields[] = "notes = ?"; $params[] = trim($notes); }
-            if ($outcome !== null) { $fields[] = "outcome = ?"; $params[] = trim($outcome); }
-            if ($contactName !== null) { $fields[] = "contact_name = ?"; $params[] = trim($contactName); }
-            if ($customerId !== null) { $fields[] = "customer_id = ?"; $params[] = $customerId ?: null; }
-
-            if (empty($fields)) {
-                throw new RuntimeException('No fields to update');
+            if (!$callId && $callerNumber) {
+                $cleanPhone = preg_replace('/[^\d+]/', '', $callerNumber);
+                $phoneSuffix = substr($cleanPhone, -10);
+                if ($startTime) {
+                    $fStmt = $conn->prepare("SELECT id FROM {$prefix}calls WHERE (caller_number = ? OR caller_number LIKE ? OR to_number LIKE ? OR from_number LIKE ?) AND ABS(TIMESTAMPDIFF(SECOND, call_start_time, ?)) <= 600 ORDER BY id DESC LIMIT 1");
+                    $fStmt->execute([$cleanPhone, "%{$phoneSuffix}", "%{$phoneSuffix}", "%{$phoneSuffix}", $startTime]);
+                    $found = $fStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($found) $callId = (int)$found['id'];
+                }
+                if (!$callId) {
+                    $fStmt = $conn->prepare("SELECT id FROM {$prefix}calls WHERE (caller_number = ? OR caller_number LIKE ? OR to_number LIKE ? OR from_number LIKE ?) ORDER BY id DESC LIMIT 1");
+                    $fStmt->execute([$cleanPhone, "%{$phoneSuffix}", "%{$phoneSuffix}", "%{$phoneSuffix}"]);
+                    $found = $fStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($found) $callId = (int)$found['id'];
+                }
             }
 
-            $params[] = $callId;
-            $sql = "UPDATE {$prefix}calls SET " . implode(", ", $fields) . " WHERE id = ?";
-            $stmt = $conn->prepare($sql);
-            $stmt->execute($params);
+            if (!$callId && $userId) {
+                $fStmt = $conn->prepare("SELECT id FROM {$prefix}calls WHERE (created_by = ? OR assigned_agent = ?) AND call_start_time >= DATE_SUB(NOW(), INTERVAL 15 MINUTE) ORDER BY id DESC LIMIT 1");
+                $fStmt->execute([$userId, $userId]);
+                $found = $fStmt->fetch(PDO::FETCH_ASSOC);
+                if ($found) $callId = (int)$found['id'];
+            }
 
-            commerce_json_response(['success' => true, 'message' => 'Call updated successfully']);
+            if (!$callId && $callerNumber) {
+                $insStmt = $conn->prepare("INSERT INTO {$prefix}calls (
+                    caller_number, contact_name, call_type, call_start_time, call_end_time, duration,
+                    notes, outcome, customer_id, created_by, assigned_agent, call_source
+                ) VALUES (?, ?, 'incoming', COALESCE(?, NOW()), NOW(), 0, ?, ?, ?, ?, ?, 'direct_mobile')");
+                $insStmt->execute([$callerNumber, $contactName, $startTime, $notes ?: null, $outcome ?: null, $customerId ?: null, $userId, $userId]);
+                $callId = (int)$conn->lastInsertId();
+            }
+
+            if ($callId > 0) {
+                $fields = [];
+                $params = [];
+                if ($notes !== '') { $fields[] = "notes = ?"; $params[] = $notes; }
+                if ($outcome !== '') { $fields[] = "outcome = ?"; $params[] = $outcome; }
+                if ($contactName !== '') { $fields[] = "contact_name = ?"; $params[] = $contactName; }
+                if ($customerId !== null) { $fields[] = "customer_id = ?"; $params[] = $customerId ?: null; }
+
+                if (!empty($fields)) {
+                    $params[] = $callId;
+                    $sql = "UPDATE {$prefix}calls SET " . implode(", ", $fields) . " WHERE id = ?";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->execute($params);
+                }
+
+                $cRow = $conn->query("SELECT * FROM {$prefix}calls WHERE id = {$callId}")->fetch(PDO::FETCH_ASSOC);
+                if ($cRow) {
+                    calls_sync_to_dynamic_module_record($conn, $prefix, $cRow, $userId);
+                }
+
+                commerce_json_response(['success' => true, 'message' => 'Call updated successfully in CRM', 'call_id' => $callId]);
+            } else {
+                commerce_json_response(['success' => true, 'message' => 'Call outcome saved', 'call_id' => 0]);
+            }
             break;
 
         // 9. DELETE CALL RECORD
