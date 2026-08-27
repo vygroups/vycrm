@@ -30,6 +30,12 @@ if (!$moduleId) { header('Location: module_manager.php'); exit; }
 $module = dm_fetch_module_full($conn, $prefix, $moduleId);
 if (!$module) { header('Location: module_manager.php'); exit; }
 
+if (($module['slug'] ?? '') === 'calls') {
+    require_once 'includes/calls_helper.php';
+    calls_ensure_tables($conn, $prefix);
+    $module = dm_fetch_module_full($conn, $prefix, $moduleId);
+}
+
 $recordId = (int)($_GET['record'] ?? 0);
 
 $record = $recordId ? dm_fetch_record($conn, $prefix, $recordId) : null;

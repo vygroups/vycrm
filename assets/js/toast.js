@@ -105,3 +105,12 @@ class VyToast {
 window.vyToast = function(message, type = 'success') {
     VyToast.show(message, type);
 };
+
+// Some settings pages use the older Toast.show(...) interface. Keep that
+// interface available so a notification failure never interrupts the action
+// that just completed (for example, selecting a Google Drive folder).
+window.Toast = window.Toast || {
+    show(message, type = 'success') {
+        VyToast.show(message, type);
+    }
+};

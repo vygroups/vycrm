@@ -41,7 +41,7 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
     <link rel="icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link rel="shortcut icon" href="<?= htmlspecialchars(brand_favicon_url()) ?>">
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
-    <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
+    <script src="/assets/js/toast.js?v=<?= $v ?>&folder_picker_fix=20260826"></script>
     <style>
         .settings-grid {
             display: grid;
@@ -565,7 +565,7 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                 <div style="display: flex; gap: 8px;">
                     <input type="text" id="newFolderNameInput" class="form-control-custom" placeholder="Folder Name (e.g. Call Recordings)" style="height: 36px; padding: 4px 12px; font-size: 13px;">
                     <button type="button" class="btn-primary" onclick="submitCreateFolder()" style="padding: 6px 14px; font-size: 12.5px; border-radius: 8px; white-space: nowrap;">
-                        Create & Select
+                        Create Folder
                     </button>
                 </div>
             </div>
@@ -601,6 +601,19 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
         let currentFolderNavId = 'root';
         let currentFolderNavName = 'My Drive';
         let folderListRequestId = 0;
+
+        // Folder selection must never depend on an optional notification script.
+        // A missing toast library previously stopped the success handler before
+        // the selected folder could be saved and reflected in the page.
+        function showPickerMessage(message, type = 'success') {
+            if (window.Toast && typeof window.Toast.show === 'function') {
+                window.Toast.show(message, type);
+            } else if (typeof window.vyToast === 'function') {
+                window.vyToast(message, type);
+            } else {
+                console[type === 'error' ? 'error' : 'log'](message);
+            }
+        }
 
         function encodeFolderActionValue(value) {
             return encodeURIComponent(String(value)).replace(/'/g, '%27');
@@ -909,7 +922,7 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
         async function submitCreateFolder() {
             const folderName = document.getElementById('newFolderNameInput').value.trim();
             if (!folderName) {
-                Toast.show('Please enter a folder name', 'error');
+                showPickerMessage('Please enter a folder name', 'error');
                 return;
             }
 
@@ -926,10 +939,12 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                 const data = await res.json();
                 if (!data.success || !data.folder) throw new Error(data.error || 'Failed to create folder');
 
-                Toast.show(`Folder "${folderName}" created and selected!`, 'success');
-                await setTargetFolder(data.folder.id, data.folder.name);
+                document.getElementById('newFolderNameInput').value = '';
+                document.getElementById('newFolderContainer').style.display = 'none';
+                await navigateToFolder(currentFolderNavId, currentFolderNavName, false);
+                showPickerMessage(`Folder "${data.folder.name}" created`, 'success');
             } catch (err) {
-                Toast.show(err.message, 'error');
+                showPickerMessage(err.message, 'error');
             }
         }
 
@@ -949,7 +964,7 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
 
                 await setTargetFolder(data.folder.id, data.folder.name);
             } catch (err) {
-                Toast.show(err.message, 'error');
+                showPickerMessage(err.message, 'error');
             }
         }
 
@@ -971,12 +986,12 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                 const data = await res.json();
                 if (!data.success) throw new Error(data.error || 'Failed to set target folder');
 
-                Toast.show(`Target folder set to "${folderName}"`, 'success');
                 closeFolderNavigator();
                 document.getElementById('displayFolderName').textContent = folderName;
                 document.getElementById('displayFolderId').textContent = 'Folder ID: ' + (folderId === 'root' ? 'Root Drive' : folderId);
+                showPickerMessage(`Target folder set to "${folderName}"`, 'success');
             } catch (err) {
-                Toast.show(err.message, 'error');
+                showPickerMessage(err.message, 'error');
             }
         }
 

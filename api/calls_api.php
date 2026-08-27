@@ -136,6 +136,8 @@ try {
             // Format rows
             foreach ($calls as &$call) {
                 $call['duration_formatted'] = calls_format_duration((int)$call['duration']);
+                $call['call_source'] = $call['call_source'] ?? 'direct_mobile';
+                $call['call_source_meta'] = calls_format_source($call['call_source']);
                 $call['raw_data'] = json_decode($call['raw_data'] ?? '{}', true) ?: [];
                 if (!empty($call['matched_customer_name']) && empty($call['contact_name'])) {
                     $call['contact_name'] = $call['matched_customer_name'];
@@ -166,7 +168,9 @@ try {
                 SUM(CASE WHEN call_type = 'missed' THEN 1 ELSE 0 END) as missed_calls,
                 SUM(CASE WHEN call_type = 'rejected' THEN 1 ELSE 0 END) as rejected_calls,
                 SUM(duration) as total_duration_seconds,
-                SUM(CASE WHEN recording_file_url IS NOT NULL AND recording_file_url != '' THEN 1 ELSE 0 END) as recorded_calls
+                SUM(CASE WHEN recording_file_url IS NOT NULL AND recording_file_url != '' THEN 1 ELSE 0 END) as recorded_calls,
+                SUM(CASE WHEN call_source = 'direct_mobile' THEN 1 ELSE 0 END) as direct_mobile_calls,
+                SUM(CASE WHEN call_source IN ('mobile_offline', 'offline') THEN 1 ELSE 0 END) as offline_synced_calls
                 FROM {$prefix}calls 
                 WHERE call_start_time >= ? AND call_start_time <= ?");
             $stmt->execute([$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59']);
@@ -180,11 +184,13 @@ try {
             $stats['total_duration_seconds'] = (int)($stats['total_duration_seconds'] ?? 0);
             $stats['total_duration_formatted'] = calls_format_duration($stats['total_duration_seconds']);
             $stats['recorded_calls'] = (int)($stats['recorded_calls'] ?? 0);
+            $stats['direct_mobile_calls'] = (int)($stats['direct_mobile_calls'] ?? 0);
+            $stats['offline_synced_calls'] = (int)($stats['offline_synced_calls'] ?? 0);
 
             commerce_json_response(['success' => true, 'stats' => $stats]);
             break;
 
-        // 4. BATCH SYNC CALL LOGS FROM MOBILE APP
+        // 4. BATCH SYNC CALL LOGS FROM MOBILE APP (Idempotent & Deduplicated)
         case 'sync_calls':
             $callsData = $input['calls'] ?? [];
             if (is_string($callsData)) {
@@ -195,22 +201,26 @@ try {
                 throw new RuntimeException('No call records provided in request');
             }
 
+            $defaultBatchSource = trim($input['call_source'] ?? $input['sync_source'] ?? 'direct_mobile');
             $syncedCount = 0;
             $updatedCount = 0;
             $skippedCount = 0;
             $syncedIds = [];
 
-            // Prepare lookup queries for customer auto-matching
+            // Prepare lookup queries for customer auto-matching & deduplication
             $customerStmt = $conn->prepare("SELECT id, name FROM {$prefix}customers WHERE phone = ? OR phone LIKE ? LIMIT 1");
-            $findExistingStmt = $conn->prepare("SELECT id, recording_file_url FROM {$prefix}calls WHERE caller_number = ? AND call_start_time = ? AND (user_id = ? OR user_id IS NULL) LIMIT 1");
+            $findExistingStmt = $conn->prepare("SELECT id, recording_file_url, call_source FROM {$prefix}calls 
+                WHERE (caller_number = ? AND call_start_time = ? AND (user_id = ? OR user_id IS NULL))
+                   OR (native_id IS NOT NULL AND native_id != '' AND native_id = ? AND (user_id = ? OR user_id IS NULL))
+                LIMIT 1");
             
             $insertStmt = $conn->prepare("INSERT INTO {$prefix}calls (
                 user_id, user_name, contact_name, customer_id, caller_number,
                 from_number, to_number, call_type, call_start_time, call_end_time,
                 duration, sim_slot, sim_carrier, device_model, device_id,
-                location, recording_file_url, recording_storage_type, notes,
+                location, call_source, native_id, recording_file_url, recording_storage_type, notes,
                 outcome, status, raw_data
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
             $updateStmt = $conn->prepare("UPDATE {$prefix}calls SET
                 contact_name = COALESCE(NULLIF(?, ''), contact_name),
@@ -222,6 +232,9 @@ try {
                 sim_carrier = COALESCE(NULLIF(?, ''), sim_carrier),
                 device_model = COALESCE(NULLIF(?, ''), device_model),
                 location = COALESCE(NULLIF(?, ''), location),
+                call_source = COALESCE(NULLIF(?, ''), call_source),
+                recording_file_url = COALESCE(NULLIF(?, ''), recording_file_url),
+                recording_storage_type = COALESCE(NULLIF(?, ''), recording_storage_type),
                 notes = COALESCE(NULLIF(?, ''), notes),
                 outcome = COALESCE(NULLIF(?, ''), outcome),
                 raw_data = COALESCE(?, raw_data)
@@ -238,6 +251,7 @@ try {
                 $cleanPhone = preg_replace('/[^\d+]/', '', $callerNumber);
                 $startTime = date('Y-m-d H:i:s', strtotime($item['call_start_time'] ?? $item['timestamp'] ?? 'now'));
                 $duration = (int)($item['duration'] ?? 0);
+                $nativeId = trim((string)($item['native_id'] ?? $item['id'] ?? ''));
                 
                 $endTime = !empty($item['call_end_time']) 
                     ? date('Y-m-d H:i:s', strtotime($item['call_end_time']))
@@ -248,10 +262,12 @@ try {
                     $callType = 'incoming';
                 }
 
+                $itemCallSource = trim($item['call_source'] ?? $item['sync_source'] ?? $defaultBatchSource);
+                if (empty($itemCallSource)) $itemCallSource = 'direct_mobile';
+
                 $contactName = trim($item['contact_name'] ?? $item['name'] ?? '');
                 $simSlot = trim($item['sim_slot'] ?? $item['sim'] ?? 'SIM 1');
                 $simCarrier = trim($item['sim_carrier'] ?? '');
-                $simIdentifier = !empty($simCarrier) ? "{$simSlot} ({$simCarrier})" : $simSlot;
 
                 $fromNumber = trim($item['from_number'] ?? '');
                 if ($fromNumber === 'My Phone' || str_starts_with($fromNumber, 'SIM ')) {
@@ -268,7 +284,7 @@ try {
                 $notes = trim($item['notes'] ?? '');
                 $outcome = trim($item['outcome'] ?? '');
                 $recordingUrl = trim($item['recording_file_url'] ?? $item['recording_url'] ?? '');
-                $storageType = trim($item['recording_storage_type'] ?? 'local');
+                $storageType = trim($item['recording_storage_type'] ?? 'google_drive');
                 $rawData = json_encode($item['raw_data'] ?? $item);
 
                 // Auto-match customer in CRM if contact name is empty
@@ -285,10 +301,12 @@ try {
                     }
                 }
 
-                // Check for existing record to avoid duplicate entries
-                $findExistingStmt->execute([$cleanPhone, $startTime, $userId]);
                 $resolvedCallUserId = !empty($item['user_id']) ? (int)$item['user_id'] : ($userId ?: 1);
                 $resolvedCallUserName = !empty($item['user_name']) ? trim($item['user_name']) : $username;
+
+                // Check for existing record to avoid duplicate entries
+                $findExistingStmt->execute([$cleanPhone, $startTime, $userId, $nativeId ?: 'NONE', $userId]);
+                $existing = $findExistingStmt->fetch(PDO::FETCH_ASSOC);
 
                 $callRecordSyncData = [
                     'caller_number' => $cleanPhone,
@@ -303,6 +321,7 @@ try {
                     'sim_carrier' => $simCarrier,
                     'device_model' => $deviceModel,
                     'location' => $location,
+                    'call_source' => $itemCallSource,
                     'recording_file_url' => $recordingUrl,
                     'recording_storage_type' => $storageType,
                     'notes' => $notes,
@@ -323,6 +342,9 @@ try {
                         $simCarrier,
                         $deviceModel,
                         $location,
+                        $itemCallSource,
+                        $recordingUrl ?: null,
+                        $storageType,
                         $notes,
                         $outcome,
                         $rawData,
@@ -348,6 +370,8 @@ try {
                         $deviceModel ?: null,
                         $deviceId ?: null,
                         $location ?: null,
+                        $itemCallSource,
+                        $nativeId ?: null,
                         $recordingUrl ?: null,
                         $storageType,
                         $notes ?: null,
@@ -360,13 +384,14 @@ try {
                     $syncedIds[] = $callId;
                 }
 
-                // Sync to dynamic module record as well
+                // Sync to dynamic module record
+                $callRecordSyncData['id'] = $callId;
                 calls_sync_to_dynamic_module_record($conn, $prefix, $callRecordSyncData, $userId);
             }
 
             commerce_json_response([
                 'success' => true,
-                'message' => "Successfully synced {$syncedCount} new calls and updated {$updatedCount} calls.",
+                'message' => "Successfully synced {$syncedCount} new calls ({$updatedCount} updated, {$skippedCount} skipped)",
                 'synced_count' => $syncedCount,
                 'updated_count' => $updatedCount,
                 'skipped_count' => $skippedCount,
@@ -525,8 +550,8 @@ try {
             $stmt = $conn->prepare("INSERT INTO {$prefix}calls (
                 user_id, user_name, contact_name, customer_id, caller_number,
                 from_number, to_number, call_type, call_start_time, call_end_time,
-                duration, sim_slot, notes, outcome, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                duration, sim_slot, call_source, notes, outcome, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'web_manual', ?, ?, ?)");
 
             $stmt->execute([
                 $userId,
@@ -549,6 +574,7 @@ try {
             $newCallId = (int)$conn->lastInsertId();
 
             calls_sync_to_dynamic_module_record($conn, $prefix, [
+                'id' => $newCallId,
                 'caller_number' => $cleanPhone,
                 'contact_name' => $contactName,
                 'call_type' => $callType,
@@ -558,8 +584,10 @@ try {
                 'from_number' => $fromNumber,
                 'to_number' => $toNumber,
                 'sim_slot' => $simSlot,
+                'call_source' => 'web_manual',
                 'notes' => $notes,
                 'outcome' => $outcome,
+                'user_id' => $userId,
                 'user_name' => $username,
             ], $userId);
 
@@ -570,7 +598,175 @@ try {
             ]);
             break;
 
-        // 7. CONVERT CALL TO LEAD / CUSTOMER
+        // 7. BULK CSV UPLOAD FOR CALLS
+        case 'bulk_csv_upload':
+            $csvContent = '';
+            if (!empty($_FILES['csv_file']['tmp_name']) && is_uploaded_file($_FILES['csv_file']['tmp_name'])) {
+                $csvContent = file_get_contents($_FILES['csv_file']['tmp_name']);
+            } else if (!empty($_POST['csv_data'])) {
+                $csvContent = $_POST['csv_data'];
+            } else if (!empty($input['csv_data'])) {
+                $csvContent = $input['csv_data'];
+            }
+
+            if (empty($csvContent)) {
+                throw new RuntimeException('No CSV file or data provided');
+            }
+
+            // Parse lines
+            $lines = preg_split('/\r\n|\r|\n/', trim($csvContent));
+            if (count($lines) < 2) {
+                throw new RuntimeException('CSV must contain a header row and at least one data row');
+            }
+
+            // Extract and normalize header
+            $header = str_getcsv(array_shift($lines));
+            $headerMap = [];
+            foreach ($header as $idx => $h) {
+                $norm = strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', str_replace(' ', '_', trim($h))));
+                $headerMap[$norm] = $idx;
+            }
+
+            $getCol = function(array $row, array $keys, $default = '') use ($headerMap) {
+                foreach ($keys as $k) {
+                    if (isset($headerMap[$k]) && isset($row[$headerMap[$k]])) {
+                        $val = trim($row[$headerMap[$k]]);
+                        if ($val !== '') return $val;
+                    }
+                }
+                return $default;
+            };
+
+            $insertedCount = 0;
+            $updatedCount = 0;
+            $skippedCount = 0;
+
+            $customerStmt = $conn->prepare("SELECT id, name FROM {$prefix}customers WHERE phone = ? OR phone LIKE ? LIMIT 1");
+            $findExistingStmt = $conn->prepare("SELECT id FROM {$prefix}calls WHERE caller_number = ? AND call_start_time = ? AND (user_id = ? OR user_id IS NULL) LIMIT 1");
+            
+            $insertStmt = $conn->prepare("INSERT INTO {$prefix}calls (
+                user_id, user_name, contact_name, customer_id, caller_number,
+                from_number, to_number, call_type, call_start_time, call_end_time,
+                duration, sim_slot, location, call_source, notes, outcome, status, raw_data
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'bulk_upload', ?, ?, 'synced', ?)");
+
+            $updateStmt = $conn->prepare("UPDATE {$prefix}calls SET
+                contact_name = COALESCE(NULLIF(?, ''), contact_name),
+                duration = COALESCE(NULLIF(?, 0), duration),
+                notes = COALESCE(NULLIF(?, ''), notes),
+                outcome = COALESCE(NULLIF(?, ''), outcome)
+                WHERE id = ?");
+
+            foreach ($lines as $line) {
+                if (trim($line) === '') continue;
+                $row = str_getcsv($line);
+                if (empty($row) || (count($row) === 1 && empty($row[0]))) continue;
+
+                $rawPhone = $getCol($row, ['caller_number', 'phone_number', 'phone', 'number', 'mobile', 'caller']);
+                $cleanPhone = preg_replace('/[^\d+]/', '', $rawPhone);
+                if (!$cleanPhone) {
+                    $skippedCount++;
+                    continue;
+                }
+
+                $contactName = $getCol($row, ['contact_name', 'name', 'customer_name', 'client_name', 'contact']);
+                $callType = strtolower($getCol($row, ['call_type', 'type', 'direction'], 'incoming'));
+                if (!in_array($callType, ['incoming', 'outgoing', 'missed', 'rejected', 'blocked'])) {
+                    $callType = 'incoming';
+                }
+
+                $dateRaw = $getCol($row, ['call_start_time', 'start_time', 'date_time', 'datetime', 'date', 'time', 'timestamp']);
+                $startTime = !empty($dateRaw) ? date('Y-m-d H:i:s', strtotime($dateRaw)) : date('Y-m-d H:i:s');
+
+                $durRaw = $getCol($row, ['duration', 'duration_seconds', 'duration_sec', 'length', 'call_duration'], '0');
+                $duration = 0;
+                if (strpos($durRaw, ':') !== false) {
+                    $parts = explode(':', $durRaw);
+                    if (count($parts) === 2) $duration = ((int)$parts[0] * 60) + (int)$parts[1];
+                    else if (count($parts) === 3) $duration = ((int)$parts[0] * 3600) + ((int)$parts[1] * 60) + (int)$parts[2];
+                } else {
+                    $duration = (int)$durRaw;
+                }
+
+                $endTime = date('Y-m-d H:i:s', strtotime($startTime) + $duration);
+                $simSlot = $getCol($row, ['sim_slot', 'sim', 'slot'], 'SIM 1');
+                $location = $getCol($row, ['location', 'city', 'region', 'area']);
+                $notes = $getCol($row, ['notes', 'remarks', 'comment', 'description', 'summary']);
+                $outcome = $getCol($row, ['outcome', 'status', 'lead_status', 'result', 'call_outcome']);
+                $fromNumber = ($callType === 'outgoing') ? 'My Phone' : $cleanPhone;
+                $toNumber = ($callType === 'outgoing') ? $cleanPhone : 'My Phone';
+
+                // Match customer
+                $phoneSuffix = substr($cleanPhone, -10);
+                $customerStmt->execute([$cleanPhone, "%{$phoneSuffix}"]);
+                $cust = $customerStmt->fetch(PDO::FETCH_ASSOC);
+                $customerId = null;
+                if ($cust) {
+                    $customerId = (int)$cust['id'];
+                    if (empty($contactName)) $contactName = $cust['name'];
+                }
+
+                // Check existing for deduplication
+                $findExistingStmt->execute([$cleanPhone, $startTime, $userId]);
+                $existingId = $findExistingStmt->fetchColumn();
+
+                if ($existingId) {
+                    $updateStmt->execute([$contactName, $duration, $notes, $outcome, $existingId]);
+                    $updatedCount++;
+                    $callId = (int)$existingId;
+                } else {
+                    $insertStmt->execute([
+                        $userId,
+                        $username,
+                        $contactName ?: null,
+                        $customerId,
+                        $cleanPhone,
+                        $fromNumber,
+                        $toNumber,
+                        $callType,
+                        $startTime,
+                        $endTime,
+                        $duration,
+                        $simSlot,
+                        $location ?: null,
+                        $notes ?: null,
+                        $outcome ?: null,
+                        json_encode(['imported_via' => 'bulk_csv_upload'])
+                    ]);
+                    $callId = (int)$conn->lastInsertId();
+                    $insertedCount++;
+                }
+
+                // Sync to dynamic module record
+                calls_sync_to_dynamic_module_record($conn, $prefix, [
+                    'id' => $callId,
+                    'caller_number' => $cleanPhone,
+                    'contact_name' => $contactName,
+                    'call_type' => $callType,
+                    'call_start_time' => $startTime,
+                    'call_end_time' => $endTime,
+                    'duration' => $duration,
+                    'from_number' => $fromNumber,
+                    'to_number' => $toNumber,
+                    'sim_slot' => $simSlot,
+                    'call_source' => 'bulk_upload',
+                    'notes' => $notes,
+                    'outcome' => $outcome,
+                    'user_id' => $userId,
+                    'user_name' => $username,
+                ], $userId);
+            }
+
+            commerce_json_response([
+                'success' => true,
+                'message' => "Bulk upload completed: {$insertedCount} calls imported, {$updatedCount} updated, {$skippedCount} skipped.",
+                'inserted_count' => $insertedCount,
+                'updated_count' => $updatedCount,
+                'skipped_count' => $skippedCount
+            ]);
+            break;
+
+        // 8. CONVERT CALL TO LEAD / CUSTOMER
         case 'convert_to_customer':
         case 'convert_to_lead':
             $callId = (int)($input['call_id'] ?? $input['id'] ?? 0);

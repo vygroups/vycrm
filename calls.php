@@ -345,6 +345,9 @@ $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <button class="hero-btn hero-btn-primary" onclick="openCreateCallModal()">
                             <i class="fa-solid fa-plus"></i> + Manually Log Call
                         </button>
+                        <button class="hero-btn" style="background: rgba(16, 185, 129, 0.15); color: #059669; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600;" onclick="openBulkUploadModal()">
+                            <i class="fa-solid fa-file-csv"></i> Bulk Upload Calls (CSV)
+                        </button>
                         <button class="hero-btn hero-btn-secondary" onclick="openUploadModal()">
                             <i class="fa-solid fa-arrow-up-from-bracket"></i> Upload Recording
                         </button>
@@ -507,6 +510,7 @@ $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <option value="Not Interested">Not Interested</option>
                         <option value="Wrong Number">Wrong Number / Invalid</option>
                         <option value="No Answer">No Answer / Busy</option>
+                        <option value="Others">Others</option>
                     </select>
                 </div>
                 <div style="margin-bottom: 18px;">
@@ -621,6 +625,7 @@ $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <option value="Not Interested">Not Interested</option>
                         <option value="Wrong Number">Wrong Number / Invalid</option>
                         <option value="No Answer">No Answer / Busy</option>
+                        <option value="Others">Others</option>
                     </select>
                 </div>
 
@@ -685,6 +690,43 @@ $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    <!-- Bulk Upload Calls Modal -->
+    <div class="modal-overlay" id="bulkUploadModal">
+        <div class="modal-box" style="max-width: 580px;">
+            <div class="modal-header">
+                <h4 class="modal-title"><i class="fa-solid fa-file-csv" style="color: #059669;"></i> Bulk Upload Calls (CSV)</h4>
+                <button class="modal-close" onclick="closeModal('bulkUploadModal')">&times;</button>
+            </div>
+            <form id="bulkUploadForm" onsubmit="submitBulkUpload(event)">
+                <div style="background: var(--surface-muted, #f8fafc); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; font-size: 12.5px; border: 1px dashed var(--border);">
+                    <div style="font-weight: 700; color: var(--text); margin-bottom: 4px;">CSV Columns Supported:</div>
+                    <div style="color: var(--text-muted); line-height: 1.5;">
+                        <code>caller_number</code> (required), <code>contact_name</code>, <code>call_type</code> (incoming/outgoing/missed), <code>call_start_time</code> (YYYY-MM-DD HH:MM), <code>duration</code> (seconds or MM:SS), <code>notes</code>, <code>outcome</code>, <code>sim_slot</code>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <button type="button" class="btn-secondary" onclick="downloadSampleCsv()" style="padding: 5px 12px; font-size: 11.5px; border-radius: 6px;">
+                            <i class="fa-solid fa-download"></i> Download Sample CSV Template
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 18px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px;">Choose CSV File *</label>
+                    <input type="file" id="bulkCsvFile" accept=".csv,text/csv" class="filter-input" style="width: 100%; box-sizing: border-box;" required>
+                </div>
+
+                <div id="bulkUploadResult" style="display: none; margin-bottom: 14px; padding: 12px; border-radius: 10px; font-size: 13px;"></div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="closeModal('bulkUploadModal')">Cancel</button>
+                    <button type="submit" id="btnBulkUploadSubmit" class="btn-primary" style="padding: 10px 20px; border-radius: 10px; background: #059669; border-color: #059669;">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> Upload & Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Mobile Sync Instructions Modal -->
     <div class="modal-overlay" id="syncInfoModal">
         <div class="modal-box" style="width: 620px;">
@@ -717,6 +759,86 @@ $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
         let currentPage = 1;
         let activeAudio = null;
         let activePlayBtn = null;
+
+        function openBulkUploadModal() {
+            document.getElementById('bulkCsvFile').value = '';
+            const resEl = document.getElementById('bulkUploadResult');
+            if (resEl) {
+                resEl.style.display = 'none';
+                resEl.innerHTML = '';
+            }
+            openModal('bulkUploadModal');
+        }
+
+        function downloadSampleCsv() {
+            const csvContent = "caller_number,contact_name,call_type,call_start_time,duration,sim_slot,outcome,notes\n" +
+                "+919876543210,John Doe,incoming,2026-08-27 10:30:00,120,SIM 1,Interested,Discussed enterprise CRM setup\n" +
+                "+919123456789,Jane Smith,outgoing,2026-08-27 11:15:00,03:45,SIM 2,Callback Requested,Follow up tomorrow at 3 PM\n" +
+                "+919988776655,Acme Corp,missed,2026-08-27 12:00:00,0,SIM 1,No Answer,Missed incoming inquiry call";
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'sample_calls_import_template.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        async function submitBulkUpload(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('bulkCsvFile');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                Toast.show('Please select a CSV file to upload', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btnBulkUploadSubmit');
+            const resEl = document.getElementById('bulkUploadResult');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing CSV...';
+
+            const formData = new FormData();
+            formData.append('action', 'bulk_csv_upload');
+            formData.append('csv_file', fileInput.files[0]);
+
+            try {
+                const res = await fetch('/api/calls_api.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed to process bulk upload');
+
+                Toast.show(data.message, 'success');
+                if (resEl) {
+                    resEl.style.display = 'block';
+                    resEl.style.background = 'rgba(16, 185, 129, 0.12)';
+                    resEl.style.color = '#059669';
+                    resEl.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                    resEl.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Import Successful!</strong><br>${data.message}`;
+                }
+
+                setTimeout(() => {
+                    closeModal('bulkUploadModal');
+                    loadCalls(1);
+                    loadStats();
+                }, 1500);
+            } catch (err) {
+                Toast.show(err.message, 'error');
+                if (resEl) {
+                    resEl.style.display = 'block';
+                    resEl.style.background = 'rgba(239, 68, 68, 0.12)';
+                    resEl.style.color = '#dc2626';
+                    resEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                    resEl.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(err.message)}`;
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Import';
+            }
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             initDatePresets();
@@ -870,6 +992,19 @@ $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     ? `<a href="customers.php?search=${encodeURIComponent(call.caller_number)}" target="_blank" style="font-size: 10.5px; background: rgba(99,102,241,0.12); color: #6366f1; padding: 2px 8px; border-radius: 6px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;"><i class="fa-solid fa-user-check"></i> Customer: ${escapeHtml(call.matched_customer_name || 'Linked')}</a>`
                     : `<button type="button" onclick="openConvertLeadModal(${call.id})" style="font-size: 10.5px; background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.25); padding: 2px 8px; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;"><i class="fa-solid fa-user-plus"></i> Convert to Lead</button>`;
 
+                const sourceMeta = call.call_source_meta || {
+                    label: 'Direct Mobile Sync',
+                    color: '#0284c7',
+                    bg: 'rgba(2, 132, 199, 0.12)',
+                    border: 'rgba(2, 132, 199, 0.3)',
+                    icon: 'fa-solid fa-mobile-screen-button'
+                };
+                const sourceBadge = `<div style="margin-top: 4px;">
+                    <span style="font-size: 10.5px; font-weight: 700; background: ${sourceMeta.bg}; color: ${sourceMeta.color}; border: 1px solid ${sourceMeta.border}; padding: 2px 7px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                        <i class="${sourceMeta.icon}" style="font-size: 9.5px;"></i> ${escapeHtml(sourceMeta.label)}
+                    </span>
+                </div>`;
+
                 html += `
                     <tr>
                         <td style="padding: 14px 18px;">
@@ -880,6 +1015,7 @@ $agents = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <span class="call-badge ${typeClass}">
                                 ${typeIcon} ${capitalize(call.call_type)}
                             </span>
+                            ${sourceBadge}
                         </td>
                         <td>
                             <div style="font-size: 13px; font-weight: 600; color: var(--text);">

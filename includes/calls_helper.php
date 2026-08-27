@@ -47,6 +47,10 @@ function calls_ensure_tables(PDO $conn, string $p): void
     try { @$conn->exec("ALTER TABLE {$p}calls ADD COLUMN sim_carrier VARCHAR(100) NULL AFTER sim_slot"); } catch (Throwable $e) {}
     try { @$conn->exec("ALTER TABLE {$p}calls ADD COLUMN device_model VARCHAR(150) NULL AFTER sim_carrier"); } catch (Throwable $e) {}
     try { @$conn->exec("ALTER TABLE {$p}calls ADD COLUMN location VARCHAR(150) NULL AFTER device_id"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}calls ADD COLUMN call_source VARCHAR(50) NOT NULL DEFAULT 'direct_mobile' AFTER location"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}calls ADD COLUMN native_id VARCHAR(100) NULL AFTER call_source"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}calls ADD INDEX idx_calls_source (call_source)"); } catch (Throwable $e) {}
+    try { @$conn->exec("ALTER TABLE {$p}calls ADD INDEX idx_calls_identity (user_id, caller_number, call_start_time)"); } catch (Throwable $e) {}
 
     try {
         $conn->exec("CREATE TABLE IF NOT EXISTS {$p}call_storage_configs (
@@ -82,6 +86,7 @@ function calls_ensure_dynamic_module(PDO $conn, string $p): int
             if ($existing['status'] !== 'active') {
                 $conn->prepare("UPDATE {$p}modules SET status = 'active' WHERE id = ?")->execute([$moduleId]);
             }
+            calls_ensure_dynamic_module_fields($conn, $p, $moduleId);
             return $moduleId;
         }
 
@@ -190,6 +195,7 @@ function calls_ensure_dynamic_module(PDO $conn, string $p): int
             ['Not Interested', 'Not Interested'],
             ['Wrong Number', 'Wrong Number'],
             ['No Answer / Busy', 'No Answer'],
+            ['Others', 'Others'],
         ];
         foreach ($outcomes as $idx => $oc) {
             $optStmt->execute([$outcomeFieldId, $oc[0], $oc[1], $idx + 1]);
@@ -202,10 +208,91 @@ function calls_ensure_dynamic_module(PDO $conn, string $p): int
             $conn->exec("UPDATE {$p}module_fields SET is_list_visible = 1, is_searchable = 1 WHERE module_id = {$moduleId} AND field_key = 'call_end_time'");
         } catch (Throwable $e) {}
 
+        calls_ensure_dynamic_module_fields($conn, $p, $moduleId);
+
         return $moduleId;
     } catch (Throwable $e) {
         return 0;
     }
+}
+
+/**
+ * Ensure newly added fields (such as call_source) and all options are synced to existing Calls module
+ */
+function calls_ensure_dynamic_module_fields(PDO $conn, string $p, int $moduleId): void
+{
+    try {
+        // 1. Check if call_source field exists
+        $fStmt = $conn->prepare("SELECT id FROM {$p}module_fields WHERE module_id = ? AND field_key = 'call_source' LIMIT 1");
+        $fStmt->execute([$moduleId]);
+        $existingField = $fStmt->fetch(PDO::FETCH_ASSOC);
+
+        $fieldId = 0;
+        if (!$existingField) {
+            // Find Block 1 (Call Information) or first block
+            $bStmt = $conn->prepare("SELECT id FROM {$p}module_blocks WHERE module_id = ? ORDER BY sort_order ASC LIMIT 1");
+            $bStmt->execute([$moduleId]);
+            $blockId = (int)$bStmt->fetchColumn();
+            if (!$blockId) return;
+
+            $insStmt = $conn->prepare("INSERT INTO {$p}module_fields (
+                block_id, module_id, field_key, label, field_type, placeholder, default_value,
+                is_required, is_unique, is_searchable, is_list_visible, is_quick_create, is_mobile_list_visible, sort_order
+            ) VALUES (?, ?, 'call_source', 'Call Source / Sync Mode', 'dropdown', '', 'direct_mobile', 0, 0, 1, 1, 1, 1, 18)");
+            $insStmt->execute([$blockId, $moduleId]);
+            $fieldId = (int)$conn->lastInsertId();
+        } else {
+            $fieldId = (int)$existingField['id'];
+        }
+
+        if ($fieldId > 0) {
+            // Ensure all options are present for call_source
+            $options = [
+                ['Direct Mobile Sync', 'direct_mobile'],
+                ['Mobile Call (Offline Synced)', 'mobile_offline'],
+                ['Mobile Manual Log', 'mobile_manual'],
+                ['Web Manual Log', 'web_manual'],
+                ['Manual Mobile Import', 'manual_import'],
+                ['Bulk CSV/File Upload', 'bulk_upload'],
+                ['Others', 'others'],
+            ];
+
+            $checkOptStmt = $conn->prepare("SELECT id FROM {$p}module_field_options WHERE field_id = ? AND value = ? LIMIT 1");
+            $insOptStmt = $conn->prepare("INSERT INTO {$p}module_field_options (field_id, label, value, sort_order) VALUES (?, ?, ?, ?)");
+            foreach ($options as $idx => $opt) {
+                $checkOptStmt->execute([$fieldId, $opt[1]]);
+                if (!$checkOptStmt->fetchColumn()) {
+                    $insOptStmt->execute([$fieldId, $opt[0], $opt[1], $idx + 1]);
+                }
+            }
+        }
+
+        // 2. Also ensure call_outcome options are complete in existing module
+        $oStmt = $conn->prepare("SELECT id FROM {$p}module_fields WHERE module_id = ? AND field_key = 'call_outcome' LIMIT 1");
+        $oStmt->execute([$moduleId]);
+        $outcomeFieldId = (int)$oStmt->fetchColumn();
+        if ($outcomeFieldId > 0) {
+            $outcomes = [
+                ['Interested / Hot Lead', 'Interested'],
+                ['Callback Requested', 'Callback Requested'],
+                ['Requirement Gathered', 'Requirement Gathered'],
+                ['Deal Closed', 'Deal Closed'],
+                ['Follow-up Needed', 'Follow-up Needed'],
+                ['Not Interested', 'Not Interested'],
+                ['Wrong Number', 'Wrong Number'],
+                ['No Answer / Busy', 'No Answer'],
+                ['Others', 'Others'],
+            ];
+            $checkOptStmt = $conn->prepare("SELECT id FROM {$p}module_field_options WHERE field_id = ? AND value = ? LIMIT 1");
+            $insOptStmt = $conn->prepare("INSERT INTO {$p}module_field_options (field_id, label, value, sort_order) VALUES (?, ?, ?, ?)");
+            foreach ($outcomes as $idx => $oc) {
+                $checkOptStmt->execute([$outcomeFieldId, $oc[1]]);
+                if (!$checkOptStmt->fetchColumn()) {
+                    $insOptStmt->execute([$outcomeFieldId, $oc[0], $oc[1], $idx + 1]);
+                }
+            }
+        }
+    } catch (Throwable $e) {}
 }
 
 /**
@@ -277,6 +364,7 @@ function calls_sync_to_dynamic_module_record(PDO $conn, string $p, array $callDa
             'call_location' => $callData['location'] ?? '',
             'recording_file_url' => $callData['recording_file_url'] ?? '',
             'recording_storage_provider' => $callData['recording_storage_type'] ?? 'google_drive',
+            'call_source' => $callData['call_source'] ?? 'direct_mobile',
             'call_outcome' => $callData['outcome'] ?? '',
             'call_notes' => $callData['notes'] ?? '',
             'assigned_agent' => $resolvedAgentVal,
@@ -292,6 +380,87 @@ function calls_sync_to_dynamic_module_record(PDO $conn, string $p, array $callDa
             }
         }
     } catch (Throwable $e) {}
+}
+
+/**
+ * Format call source / sync mode with label, color, background, and icon
+ */
+function calls_format_source(string $source): array
+{
+    $s = strtolower(trim($source));
+    switch ($s) {
+        case 'mobile_offline':
+        case 'offline':
+        case 'mobile_offline_sync':
+            return [
+                'code' => 'mobile_offline',
+                'label' => 'Mobile (Offline Synced)',
+                'color' => '#d97706',
+                'bg' => 'rgba(245, 158, 11, 0.12)',
+                'border' => 'rgba(245, 158, 11, 0.3)',
+                'icon' => 'fa-solid fa-cloud-arrow-up'
+            ];
+        case 'mobile_manual':
+        case 'mobile_custom':
+            return [
+                'code' => 'mobile_manual',
+                'label' => 'Mobile Manual Log',
+                'color' => '#0d9488',
+                'bg' => 'rgba(13, 148, 136, 0.12)',
+                'border' => 'rgba(13, 148, 136, 0.3)',
+                'icon' => 'fa-solid fa-mobile-retro'
+            ];
+        case 'manual_import':
+            return [
+                'code' => 'manual_import',
+                'label' => 'Manual Mobile Import',
+                'color' => '#4f46e5',
+                'bg' => 'rgba(79, 70, 229, 0.12)',
+                'border' => 'rgba(79, 70, 229, 0.3)',
+                'icon' => 'fa-solid fa-file-import'
+            ];
+        case 'bulk_upload':
+        case 'bulk_import':
+        case 'csv_upload':
+            return [
+                'code' => 'bulk_upload',
+                'label' => 'Bulk CSV/File Upload',
+                'color' => '#059669',
+                'bg' => 'rgba(5, 150, 105, 0.12)',
+                'border' => 'rgba(5, 150, 105, 0.3)',
+                'icon' => 'fa-solid fa-file-csv'
+            ];
+        case 'web_manual':
+        case 'web':
+            return [
+                'code' => 'web_manual',
+                'label' => 'Web Manual Log',
+                'color' => '#7c3aed',
+                'bg' => 'rgba(124, 58, 237, 0.12)',
+                'border' => 'rgba(124, 58, 237, 0.3)',
+                'icon' => 'fa-solid fa-laptop'
+            ];
+        case 'others':
+        case 'other':
+            return [
+                'code' => 'others',
+                'label' => 'Others',
+                'color' => '#64748b',
+                'bg' => 'rgba(100, 116, 139, 0.12)',
+                'border' => 'rgba(100, 116, 139, 0.3)',
+                'icon' => 'fa-solid fa-ellipsis'
+            ];
+        case 'direct_mobile':
+        default:
+            return [
+                'code' => 'direct_mobile',
+                'label' => 'Direct Mobile Sync',
+                'color' => '#0284c7',
+                'bg' => 'rgba(2, 132, 199, 0.12)',
+                'border' => 'rgba(2, 132, 199, 0.3)',
+                'icon' => 'fa-solid fa-mobile-screen-button'
+            ];
+    }
 }
 
 /**
