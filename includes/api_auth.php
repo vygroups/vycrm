@@ -12,11 +12,17 @@ function api_ensure_token_table(PDO $masterConn, string $masterPrefix): void
             tenant_slug VARCHAR(150) NOT NULL,
             tenant_db VARCHAR(150) NOT NULL,
             tenant_prefix VARCHAR(150) NOT NULL DEFAULT '',
-            expires_at DATETIME NOT NULL,
+            expires_at DATETIME DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_api_tokens_expires_at (expires_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+
+    try {
+        $masterConn->exec("ALTER TABLE {$masterPrefix}api_tokens MODIFY COLUMN expires_at DATETIME DEFAULT NULL");
+        // Backfill existing mobile app tokens to never expire (2099)
+        $masterConn->exec("UPDATE {$masterPrefix}api_tokens SET expires_at = '2099-12-31 23:59:59' WHERE expires_at IS NOT NULL AND expires_at < '2099-01-01'");
+    } catch (Throwable $e) {}
 }
 
 function api_extract_bearer_token(): ?string
@@ -37,7 +43,8 @@ function api_issue_token(array $user, string $tenantSlug, string $tenantDb, stri
 
     $plainToken = bin2hex(random_bytes(32));
     $tokenHash = hash('sha256', $plainToken);
-    $expiresAt = date('Y-m-d H:i:s', time() + (30 * 24 * 3600));
+    // Permanent non-expiring token for mobile app (Year 2099)
+    $expiresAt = '2099-12-31 23:59:59';
 
     $stmt = $masterConn->prepare("
         INSERT INTO {$masterPrefix}api_tokens (
@@ -94,8 +101,15 @@ function api_require_context(): array
     $stmt->execute([hash('sha256', $token)]);
     $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$tokenRow || strtotime($tokenRow['expires_at']) < time()) {
-        throw new RuntimeException('Unauthorized');
+    if (!$tokenRow) {
+        throw new RuntimeException('Unauthorized: Invalid token');
+    }
+
+    // Only reject if an explicit past expiry date is set
+    if (!empty($tokenRow['expires_at']) && $tokenRow['expires_at'] !== '0000-00-00 00:00:00') {
+        if (strtotime($tokenRow['expires_at']) < time()) {
+            throw new RuntimeException('Unauthorized: Token expired');
+        }
     }
 
     $conn = Database::getTenantConn($tokenRow['tenant_db']);

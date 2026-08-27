@@ -356,8 +356,12 @@ function calls_sync_to_dynamic_module_record(PDO $conn, string $p, array $callDa
             'call_start_time' => $startTime,
             'call_end_time' => $callData['call_end_time'] ?? '',
             'duration_formatted' => calls_format_duration((int)($callData['duration'] ?? 0)),
-            'from_number' => (!empty($callData['from_number']) && $callData['from_number'] !== 'My Phone' && !str_starts_with($callData['from_number'], 'SIM ')) ? $callData['from_number'] : (($callData['call_type'] ?? '') === 'incoming' ? $callerNumber : ''),
-            'to_number' => (!empty($callData['to_number']) && $callData['to_number'] !== 'My Phone' && !str_starts_with($callData['to_number'], 'SIM ')) ? $callData['to_number'] : (($callData['call_type'] ?? '') === 'outgoing' ? $callerNumber : ''),
+            'from_number' => !empty($callData['from_number']) && $callData['from_number'] !== 'My Phone'
+                ? $callData['from_number']
+                : ((in_array($callData['call_type'] ?? 'incoming', ['incoming', 'missed', 'rejected', 'blocked'])) ? $callerNumber : ($callData['sim_slot'] ?? 'SIM 1')),
+            'to_number' => !empty($callData['to_number']) && $callData['to_number'] !== 'My Phone'
+                ? $callData['to_number']
+                : (($callData['call_type'] ?? '') === 'outgoing' ? $callerNumber : ($callData['sim_slot'] ?? 'SIM 1')),
             'sim_slot' => $callData['sim_slot'] ?? 'SIM 1',
             'sim_carrier' => $callData['sim_carrier'] ?? '',
             'device_model' => $callData['device_model'] ?? '',

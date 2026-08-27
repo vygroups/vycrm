@@ -267,16 +267,23 @@ try {
 
                 $contactName = trim($item['contact_name'] ?? $item['name'] ?? '');
                 $simSlot = trim($item['sim_slot'] ?? $item['sim'] ?? 'SIM 1');
-                $simCarrier = trim($item['sim_carrier'] ?? '');
-
                 $fromNumber = trim($item['from_number'] ?? '');
-                if ($fromNumber === 'My Phone' || str_starts_with($fromNumber, 'SIM ')) {
-                    $fromNumber = ($callType === 'incoming') ? $cleanPhone : '';
-                }
-
                 $toNumber = trim($item['to_number'] ?? '');
-                if ($toNumber === 'My Phone' || str_starts_with($toNumber, 'SIM ')) {
-                    $toNumber = ($callType === 'outgoing') ? $cleanPhone : '';
+
+                if (in_array($callType, ['incoming', 'missed', 'rejected', 'blocked'])) {
+                    if (empty($fromNumber) || $fromNumber === 'My Phone') {
+                        $fromNumber = $cleanPhone;
+                    }
+                    if (empty($toNumber) || $toNumber === 'My Phone') {
+                        $toNumber = $simSlot ?: 'SIM 1';
+                    }
+                } else { // outgoing
+                    if (empty($toNumber) || $toNumber === 'My Phone') {
+                        $toNumber = $cleanPhone;
+                    }
+                    if (empty($fromNumber) || $fromNumber === 'My Phone') {
+                        $fromNumber = $simSlot ?: 'SIM 1';
+                    }
                 }
                 $deviceModel = trim($item['device_model'] ?? '');
                 $deviceId = trim($item['device_id'] ?? '');
@@ -544,8 +551,8 @@ try {
                 }
             }
 
-            $fromNumber = $callType === 'outgoing' ? 'My Phone' : $cleanPhone;
-            $toNumber = $callType === 'outgoing' ? $cleanPhone : 'My Phone';
+            $fromNumber = $callType === 'outgoing' ? ($simSlot ?: 'SIM 1') : $cleanPhone;
+            $toNumber = $callType === 'outgoing' ? $cleanPhone : ($simSlot ?: 'SIM 1');
 
             $stmt = $conn->prepare("INSERT INTO {$prefix}calls (
                 user_id, user_name, contact_name, customer_id, caller_number,
