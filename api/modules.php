@@ -93,14 +93,12 @@ try {
                 $todayRes = dm_fetch_records($conn, $prefix, (int)$m['id'], null, 1, 0, $todayRules);
                 $today = $todayRes['total'];
 
-                // Saved Filters
-                $filtersStmt = $conn->prepare("SELECT id, name, filter_rules, is_default FROM {$prefix}module_saved_filters WHERE user_id = ? AND module_id = ? ORDER BY name ASC");
-                $filtersStmt->execute([$userId, $m['id']]);
-                $savedFiltersList = $filtersStmt->fetchAll(PDO::FETCH_ASSOC);
+                // Saved Filters (Accessible based on role hierarchy & visibility)
+                $savedFiltersList = dm_fetch_accessible_saved_filters($conn, $prefix, (int)$m['id'], $userId);
 
                 $moduleFilters = [];
                 foreach ($savedFiltersList as $filterRow) {
-                    $filterRules = json_decode($filterRow['filter_rules'], true);
+                    $filterRules = $filterRow['filter_rules'];
                     $filterCount = 0;
                     try {
                         $res = dm_fetch_records($conn, $prefix, $m['id'], null, 1, 0, $filterRules);
@@ -112,6 +110,9 @@ try {
                         'name' => $filterRow['name'],
                         'filter_rules' => $filterRules,
                         'is_default' => (int)$filterRow['is_default'],
+                        'visibility' => $filterRow['visibility'] ?? 'only_me',
+                        'is_owner' => !empty($filterRow['is_owner']),
+                        'creator_name' => $filterRow['creator_name'] ?? null,
                         'count' => $filterCount
                     ];
                 }
@@ -518,11 +519,12 @@ try {
             } else {
                 $filterId = (int)($input['filter_id'] ?? $_GET['filter_id'] ?? 0);
                 if ($filterId) {
-                    $fStmt = $conn->prepare("SELECT filter_rules FROM {$prefix}module_saved_filters WHERE id = ? AND user_id = ?");
-                    $fStmt->execute([$filterId, $userId]);
-                    $rulesJson = $fStmt->fetchColumn();
-                    if ($rulesJson) {
-                        $filterRules = json_decode($rulesJson, true);
+                    $accessibleFilters = dm_fetch_accessible_saved_filters($conn, $prefix, $moduleId, $userId);
+                    foreach ($accessibleFilters as $af) {
+                        if ($af['id'] === $filterId) {
+                            $filterRules = $af['filter_rules'];
+                            break;
+                        }
                     }
                 }
             }
@@ -1155,16 +1157,27 @@ try {
         /* ════════════════ SAVED FILTERS ACTIONS ════════════════ */
 
         case 'save_filter':
+            dm_ensure_saved_filters_table($conn, $prefix);
             $filterModuleId = (int)($input['module_id'] ?? 0);
             $filterName = trim($input['name'] ?? '');
-            $rules = $input['filter_rules'] ?? []; // Array/object of filter rules
+            $rules = $input['filter_rules'] ?? $input['rules'] ?? []; // Array/object of filter rules
             $isDefault = !empty($input['is_default']) ? 1 : 0;
+            $visibility = trim((string)($input['visibility'] ?? 'only_me'));
+            if (!in_array($visibility, ['only_me', 'upper_roles', 'role_down', 'specific_roles', 'public', 'all'], true)) {
+                $visibility = 'only_me';
+            }
+            $visibilityRolesInput = $input['visibility_roles'] ?? '';
+            if (is_array($visibilityRolesInput)) {
+                $visibilityRoles = implode(',', array_filter(array_map('intval', $visibilityRolesInput)));
+            } else {
+                $visibilityRoles = trim((string)$visibilityRolesInput);
+            }
             $filterId = (int)($input['id'] ?? 0);
 
             if (!$filterModuleId) throw new RuntimeException('Module ID is required');
             if (empty($filterName)) throw new RuntimeException('Filter name is required');
 
-            $rulesJson = json_encode($rules);
+            $rulesJson = is_string($rules) ? $rules : json_encode($rules);
 
             if ($isDefault) {
                 // Remove default flag from all other filters of this user and module
@@ -1172,57 +1185,86 @@ try {
                 $stmt->execute([$userId, $filterModuleId]);
             }
 
+            $uAdminStmt = $conn->prepare("SELECT is_admin FROM {$prefix}users WHERE id = ?");
+            $uAdminStmt->execute([$userId]);
+            $isUserAdmin = (bool)$uAdminStmt->fetchColumn() || !empty($_SESSION['is_admin']);
+
             if ($filterId > 0) {
-                // Update existing
+                // Check permissions to update existing filter (owner or admin)
+                $chkStmt = $conn->prepare("SELECT user_id FROM {$prefix}module_saved_filters WHERE id = ?");
+                $chkStmt->execute([$filterId]);
+                $ownerId = (int)$chkStmt->fetchColumn();
+                if (!$ownerId) {
+                    throw new RuntimeException('Filter not found');
+                }
+                if ($ownerId !== $userId && !$isUserAdmin) {
+                    throw new RuntimeException('Permission denied: Only the filter creator or admin can modify this filter');
+                }
+
                 $stmt = $conn->prepare("
                     UPDATE {$prefix}module_saved_filters 
-                    SET name = ?, filter_rules = ?, is_default = ? 
-                    WHERE id = ? AND user_id = ?
+                    SET name = ?, filter_rules = ?, is_default = ?, visibility = ?, visibility_roles = ? 
+                    WHERE id = ?
                 ");
-                $stmt->execute([$filterName, $rulesJson, $isDefault, $filterId, $userId]);
+                $stmt->execute([$filterName, $rulesJson, $isDefault, $visibility, $visibilityRoles, $filterId]);
                 $savedId = $filterId;
             } else {
                 // Insert new
                 $stmt = $conn->prepare("
-                    INSERT INTO {$prefix}module_saved_filters (user_id, module_id, name, filter_rules, is_default)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO {$prefix}module_saved_filters (user_id, module_id, name, filter_rules, is_default, visibility, visibility_roles)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmt->execute([$userId, $filterModuleId, $filterName, $rulesJson, $isDefault]);
+                $stmt->execute([$userId, $filterModuleId, $filterName, $rulesJson, $isDefault, $visibility, $visibilityRoles]);
                 $savedId = $conn->lastInsertId();
             }
 
-            commerce_json_response(['success' => true, 'id' => (int)$savedId, 'message' => 'Filter saved successfully']);
+            commerce_json_response([
+                'success' => true, 
+                'id' => (int)$savedId, 
+                'visibility' => $visibility,
+                'visibility_roles' => $visibilityRoles,
+                'message' => 'Filter saved successfully'
+            ]);
 
         case 'list_filters':
             $filterModuleId = (int)($input['module_id'] ?? $_GET['module_id'] ?? 0);
             if (!$filterModuleId) throw new RuntimeException('Module ID is required');
 
-            $stmt = $conn->prepare("
-                SELECT id, name, filter_rules, is_default 
-                FROM {$prefix}module_saved_filters 
-                WHERE user_id = ? AND module_id = ? 
-                ORDER BY name ASC
-            ");
-            $stmt->execute([$userId, $filterModuleId]);
-            $filters = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Decode filter rules JSON for response
-            foreach ($filters as &$f) {
-                $f['filter_rules'] = json_decode($f['filter_rules'], true) ?: [];
-                $f['is_default'] = (int)$f['is_default'];
-            }
-            unset($f);
+            $filters = dm_fetch_accessible_saved_filters($conn, $prefix, $filterModuleId, $userId);
 
             commerce_json_response(['success' => true, 'filters' => $filters]);
 
         case 'delete_filter':
-            $filterId = (int)($input['id'] ?? 0);
+            $filterId = (int)($input['id'] ?? $_GET['id'] ?? 0);
             if (!$filterId) throw new RuntimeException('Filter ID is required');
 
-            $stmt = $conn->prepare("DELETE FROM {$prefix}module_saved_filters WHERE id = ? AND user_id = ?");
-            $stmt->execute([$filterId, $userId]);
+            $uAdminStmt = $conn->prepare("SELECT is_admin FROM {$prefix}users WHERE id = ?");
+            $uAdminStmt->execute([$userId]);
+            $isUserAdmin = (bool)$uAdminStmt->fetchColumn() || !empty($_SESSION['is_admin']);
+
+            $chkStmt = $conn->prepare("SELECT user_id FROM {$prefix}module_saved_filters WHERE id = ?");
+            $chkStmt->execute([$filterId]);
+            $ownerId = (int)$chkStmt->fetchColumn();
+            if (!$ownerId) {
+                throw new RuntimeException('Filter not found');
+            }
+            if ($ownerId !== $userId && !$isUserAdmin) {
+                throw new RuntimeException('Permission denied: Only the filter creator or admin can delete this filter');
+            }
+
+            $stmt = $conn->prepare("DELETE FROM {$prefix}module_saved_filters WHERE id = ?");
+            $stmt->execute([$filterId]);
 
             commerce_json_response(['success' => true, 'message' => 'Filter deleted successfully']);
+
+        case 'get_roles':
+            $stmt = $conn->query("SELECT id, name FROM {$prefix}roles ORDER BY name ASC");
+            $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($roles as &$r) {
+                $r['id'] = (int)$r['id'];
+            }
+            unset($r);
+            commerce_json_response(['success' => true, 'roles' => $roles]);
 
         /* ════════════════ LOOKUP: Records of another module (for API Call Picker) ════════════════ */
 

@@ -59,6 +59,13 @@ if (!empty($quickCreateFields)) {
     } catch (Exception $e) {}
 }
 
+// Fetch roles for visibility sharing
+$allRoles = [];
+try {
+    $rStmt = $conn->query("SELECT id, name FROM {$prefix}roles ORDER BY name ASC");
+    $allRoles = $rStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
+
 $search = $_GET['search'] ?? '';
 
 // Saved Filters logic
@@ -66,25 +73,27 @@ $activeFilterId = (int)($_GET['filter_id'] ?? 0);
 $activeFilterRules = null;
 $activeFilterName = '';
 
+$accessibleFilters = dm_fetch_accessible_saved_filters($conn, $prefix, $moduleId, (int)$_SESSION['user_id']);
+
 if ($activeFilterId) {
-    $fStmt = $conn->prepare("SELECT filter_rules, name FROM {$prefix}module_saved_filters WHERE id = ? AND user_id = ?");
-    $fStmt->execute([$activeFilterId, $_SESSION['user_id']]);
-    $filterRow = $fStmt->fetch(PDO::FETCH_ASSOC);
-    if ($filterRow) {
-        $activeFilterRules = json_decode($filterRow['filter_rules'], true);
-        $activeFilterName = $filterRow['name'];
+    foreach ($accessibleFilters as $af) {
+        if ($af['id'] === $activeFilterId) {
+            $activeFilterRules = $af['filter_rules'];
+            $activeFilterName = $af['name'];
+            break;
+        }
     }
 } elseif (isset($_GET['filter_rules'])) {
     $activeFilterRules = json_decode($_GET['filter_rules'], true);
 } else {
     // Check if there is a default filter for this module and user
-    $fStmt = $conn->prepare("SELECT id, filter_rules, name FROM {$prefix}module_saved_filters WHERE user_id = ? AND module_id = ? AND is_default = 1 LIMIT 1");
-    $fStmt->execute([$_SESSION['user_id'], $moduleId]);
-    $filterRow = $fStmt->fetch(PDO::FETCH_ASSOC);
-    if ($filterRow) {
-        $activeFilterId = (int)$filterRow['id'];
-        $activeFilterRules = json_decode($filterRow['filter_rules'], true);
-        $activeFilterName = $filterRow['name'];
+    foreach ($accessibleFilters as $af) {
+        if (!empty($af['is_default'])) {
+            $activeFilterId = (int)$af['id'];
+            $activeFilterRules = $af['filter_rules'];
+            $activeFilterName = $af['name'];
+            break;
+        }
     }
 }
 
@@ -528,7 +537,7 @@ if (!$hasUpdatedAt) {
                 </div>
 
                 <!-- Filters Configuring Expanding Panel -->
-                <div id="filterPanel" class="crm-card" style="margin-bottom: 20px; padding: 20px; display: none;">
+                <div id="filterPanel" class="crm-card" style="margin-bottom: 20px; padding: 20px; display: none; overflow: visible !important; position: relative; z-index: 1000; transform: none !important;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px; flex-wrap: wrap; gap: 10px;">
                         <h4 style="margin: 0; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 8px; font-size:15px;">
                             <i class="fa-solid fa-filter" style="color: var(--primary);"></i> Configure Filters
@@ -547,8 +556,8 @@ if (!$hasUpdatedAt) {
                         <!-- Dynamic rules rows -->
                     </div>
 
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                        <div style="display: flex; gap: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; gap: 8px; align-items: center;">
                             <button class="mm-btn mm-btn-sm mm-btn-outline" style="border-radius: 8px; font-size:13px; padding: 6px 12px;" onclick="createFilterRuleRow()">
                                 <i class="fa-solid fa-plus"></i> Add Condition
                             </button>
@@ -557,17 +566,50 @@ if (!$hasUpdatedAt) {
                             </button>
                         </div>
                         
-                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                            <div id="saveFilterSection" style="display: flex; gap: 8px; align-items: center;">
-                                <input type="text" id="filterSaveName" placeholder="Filter Name..." class="form-control" style="width: 180px; height: 32px; font-size: 13px; border-radius: 8px; border: 1.5px solid var(--border); padding: 4px 10px; background:#fff;">
-                                <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; color: var(--text-muted); font-weight: 600; user-select: none; margin:0;">
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <div id="saveFilterSection" style="display: flex; gap: 8px; align-items: center; flex-wrap: nowrap;">
+                                <!-- Visibility Selector on the LEFT of Filter Name -->
+                                <div style="position: relative; display: inline-flex; align-items: center; flex-shrink: 0;">
+                                    <select id="filterVisibility" class="form-control" style="width: 140px !important; height: 32px; font-size: 12px; font-weight: 600; border-radius: 8px; border: 1.5px solid var(--border); padding: 2px 8px; background: #fff; cursor: pointer; color: var(--text-dark);" onchange="onFilterVisibilityChange()" title="Filter Visibility / Role Sharing">
+                                        <option value="only_me">🔒 Only Me</option>
+                                        <option value="upper_roles">👥 Upper Roles</option>
+                                        <option value="role_down">🔻 Subordinates</option>
+                                        <option value="specific_roles">🎯 Specific Roles...</option>
+                                        <option value="public">🌐 Everyone</option>
+                                    </select>
+
+                                    <!-- Specific Roles Dropdown Popup (same as Module Manager) -->
+                                    <div id="filterRolesDropdownPopup" style="display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 100000; min-width: 230px; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 35px rgba(0,0,0,0.25); padding: 12px 14px;">
+                                        <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                            <span>Select Roles</span>
+                                            <span style="cursor: pointer; color: var(--primary); font-size: 11.5px; font-weight: bold;" onclick="closeRolesDropdown()">Done ✓</span>
+                                        </div>
+                                        <div id="filterRolesCheckboxList">
+                                            <?php if (!empty($allRoles)): ?>
+                                                <?php foreach ($allRoles as $r): ?>
+                                                    <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer; font-size: 12.5px; color: var(--text-dark); user-select: none;">
+                                                        <input type="checkbox" class="filter-role-cb" value="<?php echo (int)$r['id']; ?>" style="accent-color: var(--primary); width: 14px; height: 14px; cursor: pointer;">
+                                                        <span><?php echo htmlspecialchars($r['name']); ?></span>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <div style="color: var(--text-muted); font-size: 11px;">No roles available.</div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Filter Name Input -->
+                                <input type="text" id="filterSaveName" placeholder="Filter Name..." class="form-control" style="width: 140px !important; height: 32px; font-size: 13px; border-radius: 8px; border: 1.5px solid var(--border); padding: 4px 10px; background:#fff; flex-shrink: 0;">
+
+                                <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; color: var(--text-muted); font-weight: 600; user-select: none; margin:0; white-space: nowrap; flex-shrink: 0;">
                                     <input type="checkbox" id="filterSetDefault" style="accent-color: var(--primary); width: 15px; height: 15px; cursor:pointer;"> Default
                                 </label>
-                                <button class="mm-btn mm-btn-sm mm-btn-outline" style="border-radius: 8px; font-size:13px; padding: 6px 12px;" onclick="saveCurrentFilter()">
+                                <button class="mm-btn mm-btn-sm mm-btn-outline" style="border-radius: 8px; font-size:12.5px; padding: 6px 12px; white-space: nowrap; flex-shrink: 0;" onclick="saveCurrentFilter()">
                                     <i class="fa-solid fa-floppy-disk"></i> Save & Apply
                                 </button>
                             </div>
-                            <button class="mm-btn mm-btn-sm" style="background: var(--primary); color: #fff; border-radius: 8px; font-size:13px; padding: 6px 16px;" onclick="applyCurrentFilters()">
+                            <button class="mm-btn mm-btn-sm" style="background: var(--primary); color: #fff; border-radius: 8px; font-size:12.5px; padding: 6px 14px; white-space: nowrap; flex-shrink: 0;" onclick="applyCurrentFilters()">
                                 <i class="fa-solid fa-check"></i> Apply Only
                             </button>
                         </div>
@@ -1865,6 +1907,33 @@ function getCurrentFilterRules() {
     return rules;
 }
 
+function onFilterVisibilityChange() {
+    const vis = document.getElementById('filterVisibility') ? document.getElementById('filterVisibility').value : 'only_me';
+    const popup = document.getElementById('filterRolesDropdownPopup');
+    if (popup) {
+        if (vis === 'specific_roles') {
+            popup.style.display = 'block';
+        } else {
+            popup.style.display = 'none';
+        }
+    }
+}
+
+function closeRolesDropdown() {
+    const popup = document.getElementById('filterRolesDropdownPopup');
+    if (popup) popup.style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+    const popup = document.getElementById('filterRolesDropdownPopup');
+    const visSelect = document.getElementById('filterVisibility');
+    if (popup && popup.style.display === 'block') {
+        if (!popup.contains(e.target) && e.target !== visSelect) {
+            popup.style.display = 'none';
+        }
+    }
+});
+
 async function loadSavedFiltersList() {
     try {
         const res = await fetch(`/api/modules.php?action=list_filters&module_id=${MODULE_ID}`);
@@ -1873,11 +1942,21 @@ async function loadSavedFiltersList() {
             savedFiltersList = data.filters;
             const dropdown = document.getElementById('savedFiltersDropdown');
             dropdown.innerHTML = `<option value="">-- Apply Saved Filter --</option>` + 
-                savedFiltersList.map(f => `
-                    <option value="${f.id}" ${activeFilterId == f.id ? 'selected' : ''}>
-                        ${escapeHtml(f.name)} ${f.is_default ? '(Default)' : ''}
-                    </option>
-                `).join('');
+                savedFiltersList.map(f => {
+                    let visIcon = '🔒';
+                    if (f.visibility === 'upper_roles') visIcon = '👥';
+                    else if (f.visibility === 'role_down') visIcon = '🔻';
+                    else if (f.visibility === 'specific_roles') visIcon = '🎯';
+                    else if (f.visibility === 'public' || f.visibility === 'all') visIcon = '🌐';
+                    
+                    const ownerLabel = f.is_owner ? '' : (f.creator_name ? ` (by ${f.creator_name})` : '');
+                    const defaultLabel = f.is_default ? ' (Default)' : '';
+                    return `
+                        <option value="${f.id}" ${activeFilterId == f.id ? 'selected' : ''}>
+                            ${visIcon} ${escapeHtml(f.name)}${ownerLabel}${defaultLabel}
+                        </option>
+                    `;
+                }).join('');
             
             updateFilterControlUI();
             renderQuickFilterPills();
@@ -1905,11 +1984,31 @@ function renderQuickFilterPills() {
     
     savedFiltersList.forEach(f => {
         const isActive = activeFilterId == f.id;
+        let visIcon = 'fa-lock';
+        let visTitle = 'Private to you';
+        if (f.visibility === 'upper_roles') {
+            visIcon = 'fa-user-tie';
+            visTitle = 'Shared with Upper Roles';
+        } else if (f.visibility === 'role_down') {
+            visIcon = 'fa-users-line';
+            visTitle = 'Shared with Subordinates';
+        } else if (f.visibility === 'specific_roles') {
+            visIcon = 'fa-bullseye';
+            visTitle = 'Shared with Specific Roles';
+        } else if (f.visibility === 'public' || f.visibility === 'all') {
+            visIcon = 'fa-earth-americas';
+            visTitle = 'Public to Everyone';
+        }
+        
+        const ownerTag = (!f.is_owner && f.creator_name) ? `<span style="font-size:9.5px; opacity:0.75; font-weight:normal;">(${escapeHtml(f.creator_name)})</span>` : '';
+        const defaultTag = f.is_default ? `<span style="font-size:9px; opacity:0.8; font-weight:normal;">(Default)</span>` : '';
+
         html += `
-            <button class="quick-filter-pill ${isActive ? 'active' : ''}" onclick="applyQuickFilter(${f.id})">
-                <i class="fa-solid fa-filter" style="font-size:11px;"></i>
-                ${escapeHtml(f.name)}
-                ${f.is_default ? '<span style="font-size:9px; opacity:0.8; font-weight:normal;">(Default)</span>' : ''}
+            <button class="quick-filter-pill ${isActive ? 'active' : ''}" onclick="applyQuickFilter(${f.id})" title="${visTitle}">
+                <i class="fa-solid ${visIcon}" style="font-size:10px; opacity:0.85;"></i>
+                <span>${escapeHtml(f.name)}</span>
+                ${ownerTag}
+                ${defaultTag}
             </button>
         `;
     });
@@ -1953,16 +2052,29 @@ function updateFilterControlUI() {
     const delBtn = document.getElementById('btnDeleteFilter');
     const saveNameInput = document.getElementById('filterSaveName');
     const setDefaultCheckbox = document.getElementById('filterSetDefault');
+    const visibilitySelect = document.getElementById('filterVisibility');
     
     if (activeFilterId > 0) {
-        delBtn.style.display = 'inline-flex';
         saveNameInput.value = activeFilterName;
         const currentFilter = savedFiltersList.find(f => f.id == activeFilterId);
         if (currentFilter) {
             setDefaultCheckbox.checked = !!currentFilter.is_default;
+            if (visibilitySelect) {
+                visibilitySelect.value = currentFilter.visibility || 'only_me';
+                if (currentFilter.visibility !== 'specific_roles') {
+                    closeRolesDropdown();
+                }
+            }
+            const rolesArr = (currentFilter.visibility_roles || '').toString().split(',').map(s => s.trim());
+            document.querySelectorAll('.filter-role-cb').forEach(cb => {
+                cb.checked = rolesArr.includes(cb.value);
+            });
+            if (delBtn) {
+                delBtn.style.display = (currentFilter.is_owner || <?php echo !empty($_SESSION['is_admin']) ? 'true' : 'false'; ?>) ? 'inline-flex' : 'none';
+            }
         }
     } else {
-        delBtn.style.display = 'none';
+        if (delBtn) delBtn.style.display = 'none';
     }
 }
 
@@ -2006,6 +2118,14 @@ async function clearFiltersAjax(event) {
     if (saveNameInput) saveNameInput.value = '';
     const setDefaultCheckbox = document.getElementById('filterSetDefault');
     if (setDefaultCheckbox) setDefaultCheckbox.checked = false;
+    const visibilitySelect = document.getElementById('filterVisibility');
+    if (visibilitySelect) {
+        visibilitySelect.value = 'only_me';
+    }
+    closeRolesDropdown();
+    document.querySelectorAll('.filter-role-cb').forEach(cb => {
+        cb.checked = false;
+    });
     
     const dropdown = document.getElementById('savedFiltersDropdown');
     if (dropdown) dropdown.value = '';
@@ -2020,6 +2140,14 @@ function clearAllFilters() {
     document.getElementById('filterRulesContainer').innerHTML = '';
     document.getElementById('filterSaveName').value = '';
     document.getElementById('filterSetDefault').checked = false;
+    const visibilitySelect = document.getElementById('filterVisibility');
+    if (visibilitySelect) {
+        visibilitySelect.value = 'only_me';
+    }
+    closeRolesDropdown();
+    document.querySelectorAll('.filter-role-cb').forEach(cb => {
+        cb.checked = false;
+    });
     createFilterRuleRow();
 }
 
@@ -2042,6 +2170,19 @@ function toggleFilterPanel() {
 async function saveCurrentFilter() {
     const name = document.getElementById('filterSaveName').value.trim();
     const isDefault = document.getElementById('filterSetDefault').checked ? 1 : 0;
+    const visibility = document.getElementById('filterVisibility') ? document.getElementById('filterVisibility').value : 'only_me';
+    let visibilityRoles = '';
+    if (visibility === 'specific_roles') {
+        const checkedCbs = document.querySelectorAll('.filter-role-cb:checked');
+        const selected = Array.from(checkedCbs).map(cb => cb.value);
+        visibilityRoles = selected.join(',');
+        if (!visibilityRoles) {
+            vyToast('Please select at least one role to share this filter with.', 'error');
+            const popup = document.getElementById('filterRolesDropdownPopup');
+            if (popup) popup.style.display = 'block';
+            return;
+        }
+    }
     const rules = getCurrentFilterRules();
     
     if (!name) {
@@ -2058,7 +2199,9 @@ async function saveCurrentFilter() {
         module_id: MODULE_ID,
         name: name,
         filter_rules: rules,
-        is_default: isDefault
+        is_default: isDefault,
+        visibility: visibility,
+        visibility_roles: visibilityRoles
     };
     
     if (activeFilterId > 0 && name === activeFilterName) {
@@ -2118,6 +2261,8 @@ async function deleteActiveFilter() {
             if (saveNameInput) saveNameInput.value = '';
             const setDefaultCheckbox = document.getElementById('filterSetDefault');
             if (setDefaultCheckbox) setDefaultCheckbox.checked = false;
+            const visibilitySelect = document.getElementById('filterVisibility');
+            if (visibilitySelect) visibilitySelect.value = 'only_me';
             
             await loadSavedFiltersList();
             await fetchAndRenderRecords(null, 0);

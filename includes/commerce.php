@@ -433,11 +433,14 @@ function commerce_ensure_tables(PDO $conn, string $prefix): void
             name VARCHAR(150) NOT NULL,
             filter_rules TEXT NOT NULL, -- JSON formatted array of filter rules
             is_default TINYINT(1) DEFAULT 0,
+            visibility VARCHAR(50) DEFAULT 'only_me',
+            visibility_roles TEXT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY (module_id) REFERENCES {$prefix}modules(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES {$prefix}users(id) ON DELETE CASCADE,
-            INDEX idx_filters_user_module (user_id, module_id)
+            INDEX idx_filters_user_module (user_id, module_id),
+            INDEX idx_filters_visibility (visibility)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 

@@ -137,23 +137,24 @@ try {
             }
         }
 
-        // Fetch custom saved filters
-        $filtersStmt = $conn->prepare("SELECT id, name, filter_rules FROM {$prefix}module_saved_filters WHERE user_id = ? AND module_id = ? ORDER BY name ASC");
-        $filtersStmt->execute([$user_id, $dm['id']]);
-        $savedFiltersList = $filtersStmt->fetchAll(PDO::FETCH_ASSOC);
+        // Fetch custom saved filters (accessible based on role hierarchy & visibility)
+        $savedFiltersList = dm_fetch_accessible_saved_filters($conn, $prefix, (int)$dm['id'], (int)$user_id);
 
         $moduleFilters = [];
         foreach ($savedFiltersList as $filterRow) {
-            $filterRules = json_decode($filterRow['filter_rules'], true);
+            $filterRules = is_string($filterRow['filter_rules']) ? json_decode($filterRow['filter_rules'], true) : $filterRow['filter_rules'];
             $filterCount = 0;
             try {
-                $res = dm_fetch_records($conn, $prefix, $dm['id'], null, 1, 0, $filterRules);
+                $res = dm_fetch_records($conn, $prefix, (int)$dm['id'], null, 1, 0, $filterRules);
                 $filterCount = $res['total'];
             } catch (Exception $ex) {}
             
             $moduleFilters[] = [
-                'id' => $filterRow['id'],
+                'id' => (int)$filterRow['id'],
                 'name' => $filterRow['name'],
+                'visibility' => $filterRow['visibility'] ?? 'only_me',
+                'is_owner' => !empty($filterRow['is_owner']),
+                'creator_name' => $filterRow['creator_name'] ?? null,
                 'count' => $filterCount
             ];
         }
@@ -661,11 +662,12 @@ try {
                                 <!-- Custom Saved Filters -->
                                 <?php foreach ($filters as $index => $filter): 
                                     $color = $colorsList[($index + 2) % count($colorsList)];
+                                    $ownerTag = (!empty($filter['creator_name']) && empty($filter['is_owner'])) ? ' <span style="font-size:11px; opacity:0.75; font-weight:normal;">(' . htmlspecialchars($filter['creator_name']) . ')</span>' : '';
                                 ?>
                                     <a href="module_view.php?module=<?= $mId ?>&filter_id=<?= $filter['id'] ?>" class="scrollable-card" style="border-left: 5px solid <?= $color ?>;" onmouseover="this.style.borderColor='<?= $color ?>'; this.style.transform='translateY(-5px)';" onmouseout="this.style.borderColor='rgba(123,94,240,0.06)'; this.style.transform='none';">
                                         <div class="card-header-flex">
                                             <div style="flex:1; min-width:0;">
-                                                <div class="card-title-text" title="<?= htmlspecialchars($filter['name']) ?>"><?= htmlspecialchars($filter['name']) ?></div>
+                                                <div class="card-title-text" title="<?= htmlspecialchars($filter['name']) ?>"><?= htmlspecialchars($filter['name']) ?><?= $ownerTag ?></div>
                                                 <div class="card-val-text"><?= number_format((int)$filter['count']) ?></div>
                                             </div>
                                             <div class="card-icon-box" style="background: <?= $color ?>12; color: <?= $color ?>; box-shadow: 0 6px 14px -4px <?= $color ?>;">

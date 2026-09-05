@@ -1979,3 +1979,157 @@ function dm_set_global_setting(string $key, $value): bool
         return false;
     }
 }
+
+/**
+ * Ensure module_saved_filters table exists and has visibility columns
+ */
+function dm_ensure_saved_filters_table(PDO $conn, string $p): void
+{
+    try {
+        $conn->exec("CREATE TABLE IF NOT EXISTS {$p}module_saved_filters (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            module_id INT NOT NULL,
+            name VARCHAR(150) NOT NULL,
+            filter_rules TEXT NOT NULL,
+            is_default TINYINT(1) DEFAULT 0,
+            visibility VARCHAR(50) DEFAULT 'only_me',
+            visibility_roles TEXT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_filters_user_module (user_id, module_id),
+            INDEX idx_filters_visibility (visibility)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $cols = $conn->query("SHOW COLUMNS FROM {$p}module_saved_filters LIKE 'visibility'")->fetch();
+        if (!$cols) {
+            $conn->exec("ALTER TABLE {$p}module_saved_filters ADD COLUMN visibility VARCHAR(50) DEFAULT 'only_me' AFTER is_default");
+        }
+        $colsRoles = $conn->query("SHOW COLUMNS FROM {$p}module_saved_filters LIKE 'visibility_roles'")->fetch();
+        if (!$colsRoles) {
+            $conn->exec("ALTER TABLE {$p}module_saved_filters ADD COLUMN visibility_roles TEXT NULL AFTER visibility");
+        }
+    } catch (Throwable $e) {}
+}
+
+/**
+ * Fetch all saved filters accessible to a user for a module based on visibility & role hierarchy
+ */
+function dm_fetch_accessible_saved_filters(PDO $conn, string $p, int $moduleId, int $userId): array
+{
+    dm_ensure_saved_filters_table($conn, $p);
+
+    $uStmt = $conn->prepare("SELECT id, role_id, is_admin FROM {$p}users WHERE id = ?");
+    $uStmt->execute([$userId]);
+    $currUser = $uStmt->fetch(PDO::FETCH_ASSOC);
+    $userRoleId = (int)($currUser['role_id'] ?? 0);
+    $isAdmin = !empty($currUser['is_admin']) || !empty($_SESSION['is_admin']);
+
+    // Recursively collect child roles (subordinates) of current user
+    $subordinateRoles = [];
+    if ($userRoleId > 0) {
+        $queue = [$userRoleId];
+        $visited = [];
+        while (!empty($queue)) {
+            $curr = array_shift($queue);
+            if (isset($visited[$curr])) continue;
+            $visited[$curr] = true;
+            try {
+                $stmt = $conn->prepare("SELECT child_role_id FROM {$p}role_hierarchy WHERE parent_role_id = ?");
+                $stmt->execute([$curr]);
+                $children = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                foreach ($children as $cId) {
+                    $cId = (int)$cId;
+                    if (!isset($visited[$cId])) {
+                        $subordinateRoles[] = $cId;
+                        $queue[] = $cId;
+                    }
+                }
+            } catch (Throwable $e) {}
+        }
+        $subordinateRoles = array_unique($subordinateRoles);
+    }
+
+    // Recursively collect parent roles (superiors) of current user
+    $superiorRoles = [];
+    if ($userRoleId > 0) {
+        $queue = [$userRoleId];
+        $visited = [];
+        while (!empty($queue)) {
+            $curr = array_shift($queue);
+            if (isset($visited[$curr])) continue;
+            $visited[$curr] = true;
+            try {
+                $stmt = $conn->prepare("SELECT parent_role_id FROM {$p}role_hierarchy WHERE child_role_id = ?");
+                $stmt->execute([$curr]);
+                $parents = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                foreach ($parents as $prId) {
+                    $prId = (int)$prId;
+                    if (!isset($visited[$prId])) {
+                        $superiorRoles[] = $prId;
+                        $queue[] = $prId;
+                    }
+                }
+            } catch (Throwable $e) {}
+        }
+        $superiorRoles = array_unique($superiorRoles);
+    }
+
+    // Build accessible filter conditions
+    $whereOr = ["f.user_id = {$userId}"];
+    $whereOr[] = "f.visibility IN ('public', 'all')";
+
+    if ($isAdmin) {
+        $whereOr[] = "f.visibility = 'upper_roles'";
+    } elseif (!empty($subordinateRoles)) {
+        $subRolesIn = implode(',', array_map('intval', $subordinateRoles));
+        $whereOr[] = "(f.visibility = 'upper_roles' AND u.role_id IN ({$subRolesIn}))";
+    }
+
+    if (!empty($superiorRoles)) {
+        $supRolesIn = implode(',', array_map('intval', $superiorRoles));
+        $whereOr[] = "(f.visibility = 'role_down' AND (u.role_id IN ({$supRolesIn}) OR u.is_admin = 1))";
+    }
+
+    if ($isAdmin) {
+        $whereOr[] = "f.visibility = 'specific_roles'";
+    } elseif ($userRoleId > 0) {
+        $whereOr[] = "(f.visibility = 'specific_roles' AND (FIND_IN_SET({$userRoleId}, f.visibility_roles) > 0 OR f.visibility_roles LIKE '%,{$userRoleId},%' OR f.visibility_roles = '{$userRoleId}'))";
+    }
+
+    $whereClause = "(" . implode(" OR ", $whereOr) . ")";
+
+    $sql = "
+        SELECT f.id, f.user_id, f.module_id, f.name, f.filter_rules, f.is_default, 
+               COALESCE(NULLIF(f.visibility, ''), 'only_me') AS visibility,
+               f.visibility_roles,
+               u.username AS creator_name,
+               r.name AS creator_role_name,
+               (f.user_id = {$userId}) AS is_owner
+        FROM {$p}module_saved_filters f
+        LEFT JOIN {$p}users u ON f.user_id = u.id
+        LEFT JOIN {$p}roles r ON u.role_id = r.id
+        WHERE f.module_id = ? AND {$whereClause}
+        ORDER BY f.is_default DESC, f.name ASC
+    ";
+
+    try {
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$moduleId]);
+        $filters = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        $filters = [];
+    }
+
+    foreach ($filters as &$f) {
+        $f['id'] = (int)$f['id'];
+        $f['user_id'] = (int)$f['user_id'];
+        $f['module_id'] = (int)$f['module_id'];
+        $f['is_default'] = (int)$f['is_default'];
+        $f['is_owner'] = (bool)$f['is_owner'];
+        $f['filter_rules'] = is_string($f['filter_rules']) ? (json_decode($f['filter_rules'], true) ?: []) : $f['filter_rules'];
+    }
+    unset($f);
+
+    return $filters;
+}
