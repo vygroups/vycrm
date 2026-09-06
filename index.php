@@ -168,13 +168,31 @@ if ($companySlug) {
             setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3500);
         }
 
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
+        async function getWebPushToken() {
+            try {
+                if (typeof window.requestPushNotificationPermission === 'function') {
+                    return await window.requestPushNotificationPermission();
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const btn = document.getElementById('loginBtn');
             const formData = new FormData(this);
             
             btn.disabled = true;
             btn.textContent = "Authenticating...";
+
+            // Request push notification permission & get web FCM token on login button click
+            const webFcmToken = await getWebPushToken();
+            if (webFcmToken) {
+                formData.append('fcm_token', webFcmToken);
+            } else {
+                formData.append('fcm_token', '');
+            }
+            formData.append('device_type', 'web');
 
             fetch('/api/login.php', {
                 method: 'POST',
@@ -212,12 +230,20 @@ if ($companySlug) {
             });
         });
 
-        document.getElementById('tfaForm').addEventListener('submit', function(e) {
+        document.getElementById('tfaForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const btn = document.getElementById('tfaSubmitBtn');
             btn.disabled = true;
             btn.textContent = "Verifying Code...";
             const formData = new FormData(this);
+
+            const webFcmToken = await getWebPushToken();
+            if (webFcmToken) {
+                formData.append('fcm_token', webFcmToken);
+            } else {
+                formData.append('fcm_token', '');
+            }
+            formData.append('device_type', 'web');
 
             fetch('/api/login.php', {
                 method: 'POST',
@@ -305,5 +331,6 @@ if ($companySlug) {
             this.classList.toggle('fa-eye-slash');
         });
     </script>
+    <script src="/assets/js/firebase-init.js"></script>
 </body>
 </html>

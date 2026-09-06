@@ -289,3 +289,4 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: is12h });
     }
 </script>
+<script src="/assets/js/firebase-init.js"></script>

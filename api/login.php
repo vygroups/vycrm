@@ -78,6 +78,37 @@ function mask_user_email($email) {
     return $maskedName . '@' . $parts[1];
 }
 
+function save_user_fcm_token($tenantConn, $tenantPrefix, $userId, $fcmToken, $deviceType = 'android') {
+    if (!isset($_POST['fcm_token']) && !isset($_GET['fcm_token'])) {
+        return; // Don't clear if parameter wasn't part of login request
+    }
+    try {
+        dm_ensure_tables($tenantConn, $tenantPrefix);
+        $deviceType = strtolower(trim($deviceType ?: 'android'));
+        if (!in_array($deviceType, ['android', 'ios', 'web'])) {
+            $deviceType = 'android';
+        }
+
+        if (!empty($fcmToken) && $fcmToken !== 'null' && $fcmToken !== 'clear') {
+            if ($deviceType === 'web') {
+                $stmt = $tenantConn->prepare("UPDATE {$tenantPrefix}users SET fcm_web_token = ?, fcm_updated_at = NOW() WHERE id = ?");
+                $stmt->execute([$fcmToken, $userId]);
+            } else {
+                $stmt = $tenantConn->prepare("UPDATE {$tenantPrefix}users SET fcm_token = ?, fcm_device_type = ?, fcm_updated_at = NOW() WHERE id = ?");
+                $stmt->execute([$fcmToken, $deviceType, $userId]);
+            }
+        } else {
+            if ($deviceType === 'web') {
+                $stmt = $tenantConn->prepare("UPDATE {$tenantPrefix}users SET fcm_web_token = NULL, fcm_updated_at = NOW() WHERE id = ?");
+                $stmt->execute([$userId]);
+            } else {
+                $stmt = $tenantConn->prepare("UPDATE {$tenantPrefix}users SET fcm_token = NULL, fcm_updated_at = NOW() WHERE id = ?");
+                $stmt->execute([$userId]);
+            }
+        }
+    } catch (Throwable $e) {}
+}
+
 try {
     $masterDb = Database::getMasterConn();
     $prefix = Database::getMasterPrefix();
@@ -180,6 +211,7 @@ try {
         if ($expiryHours <= 0) $expiryHours = 8;
         $_SESSION['expiry'] = time() + ($expiryHours * 3600);
         $apiToken = api_issue_token($user, $companySlug, $company['db_name'], $tenantPrefix);
+        save_user_fcm_token($tenantConn, $tenantPrefix, $user['id'], $_POST['fcm_token'] ?? null, $_POST['device_type'] ?? 'android');
 
         $roleName = !empty($user['role_name']) ? $user['role_name'] : (!empty($user['is_admin']) ? 'Administrator' : 'Team Member');
 
@@ -261,6 +293,7 @@ try {
         if ($expiryHours <= 0) $expiryHours = 8;
         $_SESSION['expiry'] = time() + ($expiryHours * 3600);
         $apiToken = api_issue_token($user, $companySlug, $company['db_name'], $tenantPrefix);
+        save_user_fcm_token($tenantConn, $tenantPrefix, $user['id'], $_POST['fcm_token'] ?? null, $_POST['device_type'] ?? 'android');
 
         $roleName = !empty($user['role_name']) ? $user['role_name'] : (!empty($user['is_admin']) ? 'Administrator' : 'Team Member');
 

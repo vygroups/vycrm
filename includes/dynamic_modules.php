@@ -98,6 +98,22 @@ function dm_ensure_tables(PDO $conn, string $p): void
         @$conn->exec("ALTER TABLE {$p}users ADD COLUMN two_factor_expires DATETIME DEFAULT NULL");
     } catch (Throwable $e) {
     }
+    try {
+        @$conn->exec("ALTER TABLE {$p}users ADD COLUMN fcm_token TEXT DEFAULT NULL");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}users ADD COLUMN fcm_web_token TEXT DEFAULT NULL");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}users ADD COLUMN fcm_device_type VARCHAR(50) DEFAULT NULL");
+    } catch (Throwable $e) {
+    }
+    try {
+        @$conn->exec("ALTER TABLE {$p}users ADD COLUMN fcm_updated_at DATETIME DEFAULT NULL");
+    } catch (Throwable $e) {
+    }
 }
 
 /* ──────────────────────────── HELPER FUNCTIONS ──────────────────────────── */

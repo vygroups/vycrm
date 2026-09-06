@@ -166,13 +166,35 @@ if (!empty($profile_picture)) {
                             </div>
 
                             <h3 class="mt-5 mb-3">Security Settings</h3>
-                            <div class="form-group" style="display:flex; gap:15px;">
+                            <div class="form-group" style="display:flex; gap:15px; flex-wrap:wrap;">
                                 <button type="button" class="btn-primary" style="background:#4b5563; width:auto;" onclick="openPasswordModal()">
                                     <i class="fa-solid fa-lock"></i> Change Password
                                 </button>
                                 <button type="button" class="btn-primary" style="background:#ef4444; width:auto;" onclick="openResetPasswordModal()">
                                     <i class="fa-solid fa-envelope"></i> Reset via Email
                                 </button>
+                            </div>
+
+                            <h3 class="mt-5 mb-3">Push Notifications (Web & Mobile)</h3>
+                            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:20px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; color:#1e293b;"><i class="fa-solid fa-bell" style="color:#7b5ef0; margin-right:6px;"></i> Web Browser Notifications</div>
+                                        <div style="font-size:12px; color:#64748b;" id="webPushStatusDesc">Status: Checking permission...</div>
+                                    </div>
+                                    <button type="button" class="btn-primary" id="btnEnableWebPush" style="width:auto; padding:8px 16px; font-size:13px;" onclick="enableWebPushNotifications()">
+                                        <i class="fa-solid fa-bell"></i> Enable Web Notifications
+                                    </button>
+                                </div>
+                                <div id="webTokenSection" style="display:none; margin-top:10px;">
+                                    <label class="form-label" style="font-size:12px;">Active Web FCM Token (for Firebase Console Testing)</label>
+                                    <div style="display:flex; gap:10px; align-items:center;">
+                                        <input type="text" id="webFcmTokenInput" class="form-control" readonly style="font-family:monospace; font-size:11px; background:#fff;">
+                                        <button type="button" class="btn-primary" style="width:auto; padding:8px 14px; font-size:12px; white-space:nowrap;" onclick="copyWebFcmToken()">
+                                            <i class="fa-solid fa-copy"></i> Copy
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="form-group mt-5 text-right">
@@ -408,6 +430,65 @@ if (!empty($profile_picture)) {
             btn.innerHTML = prevHtml;
             btn.disabled = false;
         }
+
+        function updatePushNotificationUI() {
+            const desc = document.getElementById('webPushStatusDesc');
+            const btn = document.getElementById('btnEnableWebPush');
+            const tokenSec = document.getElementById('webTokenSection');
+            const tokenInput = document.getElementById('webFcmTokenInput');
+            const token = localStorage.getItem('fcm_web_token') || window.webFcmToken;
+
+            if (!('Notification' in window)) {
+                if (desc) desc.innerHTML = '<span style="color:#ef4444;">Not supported by this browser.</span>';
+                if (btn) btn.style.display = 'none';
+                return;
+            }
+
+            if (Notification.permission === 'granted') {
+                if (desc) desc.innerHTML = '<span style="color:#10b981; font-weight:bold;">Active & Enabled</span>';
+                if (btn) {
+                    btn.innerHTML = '<i class="fa-solid fa-check"></i> Enabled';
+                    btn.style.background = '#10b981';
+                }
+                if (token && tokenSec && tokenInput) {
+                    tokenSec.style.display = 'block';
+                    tokenInput.value = token;
+                }
+            } else if (Notification.permission === 'denied') {
+                if (desc) desc.innerHTML = '<span style="color:#ef4444; font-weight:bold;">Blocked in Browser Settings</span>';
+                if (btn) btn.style.display = 'none';
+                if (tokenSec) tokenSec.style.display = 'none';
+            } else {
+                if (desc) desc.innerHTML = '<span style="color:#f59e0b; font-weight:bold;">Not enabled yet</span>';
+                if (tokenSec) tokenSec.style.display = 'none';
+            }
+        }
+
+        async function enableWebPushNotifications() {
+            if (typeof window.requestPushNotificationPermission === 'function') {
+                const token = await window.requestPushNotificationPermission();
+                if (token) {
+                    updatePushNotificationUI();
+                    alert('Web Push Notifications enabled! Active token generated.');
+                } else {
+                    updatePushNotificationUI();
+                }
+            } else {
+                alert('Firebase messaging is loading, please try again in a second.');
+            }
+        }
+
+        function copyWebFcmToken() {
+            const tokenInput = document.getElementById('webFcmTokenInput');
+            if (tokenInput && tokenInput.value) {
+                navigator.clipboard.writeText(tokenInput.value);
+                alert('Web FCM Token copied to clipboard!');
+            }
+        }
+
+        window.addEventListener('load', () => {
+            setTimeout(updatePushNotificationUI, 600);
+        });
     </script>
 </body>
 

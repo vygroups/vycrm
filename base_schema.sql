@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS users (
     profile_picture TEXT DEFAULT NULL,
     reset_otp VARCHAR(10) DEFAULT NULL,
     reset_otp_expires DATETIME DEFAULT NULL,
+    fcm_token TEXT DEFAULT NULL,
+    fcm_web_token TEXT DEFAULT NULL,
+    fcm_device_type VARCHAR(50) DEFAULT NULL,
+    fcm_updated_at DATETIME DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
