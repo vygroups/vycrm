@@ -81,6 +81,10 @@ function dm_ensure_tables(PDO $conn, string $p): void
         @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_mobile_list_visible TINYINT(1) DEFAULT 0 AFTER is_quick_create");
     } catch (Throwable $e) {
     }
+    try {
+        @$conn->exec("ALTER TABLE {$p}module_fields ADD COLUMN is_click_to_call TINYINT(1) DEFAULT 1 AFTER is_mobile_list_visible");
+    } catch (Throwable $e) {
+    }
     // Auto-migrate users controls
     try {
         @$conn->exec("ALTER TABLE {$p}users ADD COLUMN status VARCHAR(20) DEFAULT 'active'");
@@ -351,7 +355,7 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
 {
     // Get list-visible fields
     $fStmt = $conn->prepare("
-        SELECT id, field_key, label, field_type, is_list_visible, is_mobile_list_visible, sort_order, config 
+        SELECT id, field_key, label, field_type, is_list_visible, is_mobile_list_visible, is_click_to_call, sort_order, config 
         FROM {$p}module_fields 
         WHERE module_id = ? AND (is_list_visible = 1 OR is_mobile_list_visible = 1) 
         ORDER BY sort_order ASC
@@ -2146,6 +2150,240 @@ function dm_fetch_accessible_saved_filters(PDO $conn, string $p, int $moduleId, 
         $f['filter_rules'] = is_string($f['filter_rules']) ? (json_decode($f['filter_rules'], true) ?: []) : $f['filter_rules'];
     }
     unset($f);
-
     return $filters;
 }
+
+/**
+ * Generate Google OAuth2 Access Token using Service Account Private Key (RS256 JWT)
+ */
+function dm_get_google_oauth2_access_token($serviceAccount, string $scope = 'https://www.googleapis.com/auth/firebase.messaging'): ?string
+{
+    if (is_string($serviceAccount)) {
+        $serviceAccount = json_decode($serviceAccount, true);
+    }
+    if (!$serviceAccount || empty($serviceAccount['private_key']) || empty($serviceAccount['client_email'])) {
+        return null;
+    }
+
+    $cacheKey = 'g_oauth_' . md5($serviceAccount['client_email'] . $scope);
+    if (!empty($_SESSION[$cacheKey]) && !empty($_SESSION[$cacheKey . '_exp']) && $_SESSION[$cacheKey . '_exp'] > time() + 60) {
+        return $_SESSION[$cacheKey];
+    }
+
+    $header = json_encode(['alg' => 'RS256', 'typ' => 'JWT']);
+    $now = time();
+    $claims = json_encode([
+        'iss' => $serviceAccount['client_email'],
+        'scope' => $scope,
+        'aud' => 'https://oauth2.googleapis.com/token',
+        'exp' => $now + 3600,
+        'iat' => $now
+    ]);
+
+    $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
+    $base64UrlClaims = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($claims));
+    $dataToSign = $base64UrlHeader . '.' . $base64UrlClaims;
+
+    $privateKey = $serviceAccount['private_key'];
+    $signature = '';
+    $success = openssl_sign($dataToSign, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+    if (!$success) {
+        error_log("[FCM OAuth] Failed to sign JWT with service account private key.");
+        return null;
+    }
+
+    $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
+    $jwt = $dataToSign . '.' . $base64UrlSignature;
+
+    $ch = curl_init('https://oauth2.googleapis.com/token');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+        'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        'assertion' => $jwt
+    ]));
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode >= 200 && $httpCode < 300) {
+        $json = json_decode($response, true);
+        if (!empty($json['access_token'])) {
+            $_SESSION[$cacheKey] = $json['access_token'];
+            $_SESSION[$cacheKey . '_exp'] = $now + (int)($json['expires_in'] ?? 3600);
+            return $json['access_token'];
+        }
+    }
+
+    error_log("[FCM OAuth] OAuth2 token exchange failed: HTTP $httpCode: $response");
+    return null;
+}
+
+/**
+ * Dispatch an FCM Push Notification / Data Payload to a target device token using Firebase HTTP v1 API.
+ */
+function dm_send_fcm_notification(string $token, ?string $title, ?string $body, array $data = [], $serviceAccountOrKey = null, ?PDO $conn = null, ?string $prefix = null): array
+{
+    if (empty($token)) {
+        return ['success' => false, 'error' => 'Device token is empty'];
+    }
+
+    // Try finding service account from params, DB system settings, or config file
+    $sa = $serviceAccountOrKey;
+    if (empty($sa) && $conn && $prefix) {
+        $saRaw = dm_get_system_setting($conn, $prefix, 'firebase_service_account', '');
+        if (!empty($saRaw)) {
+            $sa = json_decode($saRaw, true) ?: $saRaw;
+        }
+    }
+    if (empty($sa)) {
+        $saFile = __DIR__ . '/../config/firebase_service_account.json';
+        if (file_exists($saFile)) {
+            $sa = json_decode(file_get_contents($saFile), true);
+        }
+    }
+
+    // Format all data payload items as string values for FCM compatibility
+    $strData = [];
+    foreach ($data as $k => $v) {
+        $strData[(string)$k] = (string)$v;
+    }
+
+    // 1. Send via Firebase Cloud Messaging HTTP v1 API if service account is available
+    if (!empty($sa)) {
+        $accessToken = dm_get_google_oauth2_access_token($sa, 'https://www.googleapis.com/auth/firebase.messaging');
+        $projectId = is_array($sa) ? ($sa['project_id'] ?? 'vy-crm') : 'vy-crm';
+
+        if ($accessToken) {
+            $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+
+            $message = [
+                'token' => $token,
+                'data' => $strData,
+                'android' => [
+                    'priority' => 'HIGH',
+                    'notification' => [
+                        'icon' => 'ic_notification',
+                        'color' => '#6366f1',
+                        'sound' => 'default',
+                        'channel_id' => 'vycrm_high_importance_channel'
+                    ]
+                ],
+                'apns' => [
+                    'headers' => [
+                        'apns-priority' => '10'
+                    ],
+                    'payload' => [
+                        'aps' => [
+                            'sound' => 'default',
+                            'badge' => 1,
+                            'content-available' => 1
+                        ]
+                    ]
+                ]
+            ];
+
+            if (!empty($title) || !empty($body)) {
+                $message['notification'] = [
+                    'title' => $title ?? 'VY CRM',
+                    'body' => $body ?? ''
+                ];
+            }
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json; charset=UTF-8'
+            ]);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['message' => $message]));
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+            $result = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            $json = json_decode($result, true);
+            $isSuccess = ($httpCode >= 200 && $httpCode < 300);
+
+            return [
+                'success' => $isSuccess,
+                'http_code' => $httpCode,
+                'mode' => 'fcm_v1',
+                'response' => $json ?: $result,
+                'error' => $isSuccess ? null : ($json['error']['message'] ?? (is_string($result) ? $result : json_encode($result)) ?? $error)
+            ];
+        } else {
+            return [
+                'success' => false,
+                'error' => 'Failed to generate Google OAuth2 access token from Firebase Service Account key. Please verify your private_key in Call Settings.'
+            ];
+        }
+    }
+
+    // 2. Legacy fallback
+    $serverKey = is_string($serviceAccountOrKey) ? $serviceAccountOrKey : (defined('FIREBASE_SERVER_KEY') ? FIREBASE_SERVER_KEY : '');
+    if (empty($serverKey) && $conn && $prefix) {
+        $serverKey = dm_get_system_setting($conn, $prefix, 'firebase_server_key', '');
+    }
+
+    if (empty($serverKey)) {
+        return [
+            'success' => false,
+            'error' => 'Firebase Service Account (HTTP v1) is not configured. Please open Call Settings > Click-to-Call and upload your Firebase Service Account JSON key.'
+        ];
+    }
+
+    $url = 'https://fcm.googleapis.com/fcm/send';
+    $payload = [
+        'to' => $token,
+        'priority' => 'high',
+        'data' => $strData,
+    ];
+
+    if (!empty($title) || !empty($body)) {
+        $payload['notification'] = [
+            'title' => $title ?? 'VY CRM',
+            'body' => $body ?? '',
+            'sound' => 'default',
+            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+            'icon' => 'ic_notification'
+        ];
+    }
+
+    $headers = [
+        'Content-Type: application/json',
+        'Authorization: key=' . $serverKey
+    ];
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+    $result = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    $json = json_decode($result, true);
+    $isSuccess = ($httpCode >= 200 && $httpCode < 300);
+
+    return [
+        'success' => $isSuccess,
+        'http_code' => $httpCode,
+        'mode' => 'fcm_legacy',
+        'response' => $json ?: $result,
+        'error' => $isSuccess ? null : ($json['results'][0]['error'] ?? $result ?? $error)
+    ];
+}
+

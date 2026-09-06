@@ -218,6 +218,27 @@ foreach ($module['blocks'] as $block) {
                 <?php endif; ?>
                 <a href="module_view.php?module=<?= $moduleId ?>" class="mm-btn"><i class="fa-solid fa-arrow-left"></i> Back</a>
                 <?php if($isViewOnly): ?>
+                    <?php
+                    $recPhones = [];
+                    if (!empty($record['values'])) {
+                        foreach ($module['blocks'] as $b) {
+                            foreach ($b['fields'] as $f) {
+                                $fClickToCall = !isset($f['is_click_to_call']) || (int)$f['is_click_to_call'] !== 0;
+                                if ($f['field_type'] === 'phone' && $fClickToCall && !empty($record['values'][$f['id']])) {
+                                    $recPhones[] = [
+                                        'label' => $f['label'],
+                                        'number' => $record['values'][$f['id']]
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                    if (!empty($recPhones)):
+                    ?>
+                    <button type="button" class="btn-primary" style="width:auto;padding:12px 20px;background:linear-gradient(135deg, #10b981, #059669);color:white;border-radius:10px;display:inline-flex;align-items:center;gap:8px;border:none;cursor:pointer;" onclick="vyOpenCallNumberPicker(<?= htmlspecialchars(json_encode($recPhones)) ?>, '<?= addslashes($record['title'] ?? 'Contact') ?>', '<?= (int)$recordId ?>', '<?= addslashes($module['slug'] ?? 'module') ?>')">
+                        <i class="fa-solid fa-phone"></i> Call <?= count($recPhones) > 1 ? '(' . count($recPhones) . ')' : '' ?>
+                    </button>
+                    <?php endif; ?>
                     <a href="module_record.php?module=<?= $moduleId ?>&duplicate_from=<?= $recordId ?>" class="mm-btn" style="color:var(--primary);"><i class="fa-solid fa-copy"></i> Duplicate</a>
                     <!-- Conversion actions -->
                     <?php
@@ -358,7 +379,20 @@ foreach ($module['blocks'] as $block) {
                                                 break;
                                             }
                                         }
+                                        if ($isViewOnly):
                                         ?>
+                                            <div style="display: flex; align-items: center; gap: 12px; padding: 6px 0;">
+                                                <span style="font-family: monospace; font-size: 15px; font-weight: 700; color: var(--text);"><?= htmlspecialchars($val ?: '-') ?></span>
+                                                <?php 
+                                                $isFieldClickToCall = !isset($field['is_click_to_call']) || (int)$field['is_click_to_call'] !== 0;
+                                                if (!empty($val) && $isFieldClickToCall): 
+                                                ?>
+                                                    <button type="button" class="btn-primary" style="width:auto; padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; border-radius:8px; background:linear-gradient(135deg, #10b981, #059669); border:none; cursor:pointer;" onclick="vyTriggerClickToCall('<?= addslashes($val) ?>', '<?= addslashes($record['title'] ?? 'Contact') ?>', '<?= (int)$recordId ?>', '<?= addslashes($module['slug'] ?? 'module') ?>', '<?= addslashes($field['label']) ?>')">
+                                                        <i class="fa-solid fa-phone"></i> Call
+                                                    </button>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php else: ?>
                                         <div class="phone-input-wrapper" style="display: flex; gap: 8px; width: 100%;">
                                             <select class="form-control phone-prefix-select dm-phone-prefix" data-field-id="<?= $fid ?>" style="width: 120px; flex-shrink: 0; padding: 12px 16px; border-radius: 12px; border: 1.5px solid var(--border); font-size: 14px; background: #fff; box-sizing: border-box;">
                                                 <?php foreach ($dialCodes as $cCode => $prefixCode): ?>
@@ -370,6 +404,7 @@ foreach ($module['blocks'] as $block) {
                                                    value="<?= htmlspecialchars($phoneNum) ?>"
                                                    <?= $field['is_required'] ? 'required' : '' ?> style="flex-grow: 1;">
                                         </div>
+                                        <?php endif; ?>
                                     <?php break; case 'textarea': ?>
                                         <textarea class="form-control dm-field" data-field-id="<?= $fid ?>" rows="3"
                                                   placeholder="<?= htmlspecialchars($field['placeholder'] ?? '') ?>"

@@ -666,6 +666,14 @@ if (!$hasUpdatedAt) {
                                         } elseif ($f['field_type'] === 'multi_picker') {
                                             $decoded = json_decode($val, true);
                                             echo is_array($decoded) ? htmlspecialchars(implode(', ', $decoded)) : htmlspecialchars($val);
+                                        } elseif ($f['field_type'] === 'phone' && $val) {
+                                            $cleanVal = htmlspecialchars($val);
+                                            $isClickToCall = !isset($f['is_click_to_call']) || (int)$f['is_click_to_call'] !== 0;
+                                            if ($isClickToCall) {
+                                                echo '<button type="button" class="btn-click-to-call" onclick="event.stopPropagation(); vyTriggerClickToCall(\'' . addslashes($val) . '\', \'' . addslashes($rec['title'] ?? 'Contact') . '\', \'' . (int)$rec['id'] . '\', \'' . addslashes($module['slug'] ?? 'module') . '\', \'' . addslashes($f['label']) . '\')" style="background:rgba(123,94,240,0.08); border:1.5px solid rgba(123,94,240,0.25); color:var(--primary, #7b5ef0); font-weight:700; font-size:12px; padding:3px 8px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; text-decoration:none; font-family:monospace;" title="Click to Call ' . $cleanVal . ' via Mobile App"><i class="fa-solid fa-phone" style="font-size:10px;"></i> ' . $cleanVal . '</button>';
+                                            } else {
+                                                echo '<span style="font-family:monospace; font-size:12px; font-weight:600; color:var(--text);">' . $cleanVal . '</span>';
+                                            }
                                         } elseif ($f['field_type'] === 'date' && $val) {
                                             $df = $_SESSION['date_format'] ?? 'd M, Y';
                                             echo htmlspecialchars(date($df, strtotime($val)));
@@ -1686,6 +1694,7 @@ function toggleSidebar() { document.getElementById('sidebar').classList.toggle('
 // Column Configurator Logic
 const USER_ID = <?= (int)($_SESSION['user_id'] ?? 0) ?>;
 const MODULE_ID = <?= $moduleId ?>;
+const MODULE_SLUG = <?= json_encode($module['slug'] ?? '') ?>;
 const STORAGE_KEY = `vycrm_col_vis_${USER_ID}_${MODULE_ID}`;
 const ORDER_KEY = `vycrm_col_order_${USER_ID}_${MODULE_ID}`;
 const CAN_MULTI_DELETE = <?= $canMultiDelete ? 'true' : 'false' ?>;
@@ -2491,7 +2500,7 @@ function renderPaginationButtons(total, limit, currentPage) {
                 cellStyle = 'style="white-space: normal; word-break: break-all; min-width: 220px; max-width: 400px;"';
             }
             
-            html += `<td data-field-id="${f.id}" ${cellStyle}>${formatFieldValue(val, f.field_type, f.options)}</td>`;
+            html += `<td data-field-id="${f.id}" ${cellStyle}>${formatFieldValue(val, f.field_type, f.options, rec, f)}</td>`;
         });
         
         const hasSysCreatedAt = fields.some(f => f.field_type === 'sys_created_at');
@@ -2523,7 +2532,7 @@ function renderPaginationButtons(total, limit, currentPage) {
     applyColumnOrder(orderList);
 }
 
-function formatFieldValue(val, fieldType, fieldOptions = []) {
+function formatFieldValue(val, fieldType, fieldOptions = [], rec = null, fieldObj = null) {
     if (val === null || val === undefined) return '-';
     
     if (fieldType === 'url' && val) {
@@ -2558,6 +2567,17 @@ function formatFieldValue(val, fieldType, fieldOptions = []) {
         } catch(e) {
             return escapeHtml(val);
         }
+    }
+    if (fieldType === 'phone' && val) {
+        const cleanVal = escapeHtml(val);
+        const isClickToCall = fieldObj ? (fieldObj.is_click_to_call === undefined || fieldObj.is_click_to_call === null || fieldObj.is_click_to_call == 1 || fieldObj.is_click_to_call === true || fieldObj.is_click_to_call === '1') : true;
+        if (!isClickToCall) {
+            return `<span style="font-family:monospace; font-size:12px; font-weight:600; color:var(--text);">${cleanVal}</span>`;
+        }
+        const contactName = escapeHtml((rec && (rec.title || rec.name)) ? (rec.title || rec.name) : 'Contact');
+        const recordId = escapeHtml(String((rec && rec.id) ? rec.id : ''));
+        const fieldLabel = escapeHtml((fieldObj && fieldObj.label) ? fieldObj.label : 'Phone');
+        return `<button type="button" class="btn-click-to-call" onclick="event.stopPropagation(); vyTriggerClickToCall('${escapeHtml(val)}', '${contactName}', '${recordId}', '${MODULE_SLUG}', '${fieldLabel}')" style="background:rgba(123,94,240,0.08); border:1.5px solid rgba(123,94,240,0.25); color:var(--primary, #7b5ef0); font-weight:700; font-size:12px; padding:3px 8px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; text-decoration:none; font-family:monospace;" title="Click to Call ${cleanVal} via Mobile App"><i class="fa-solid fa-phone" style="font-size:10px;"></i> ${cleanVal}</button>`;
     }
     if (fieldType === 'date' && val) {
         return escapeHtml(formatVyDate(val));

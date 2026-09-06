@@ -1052,6 +1052,7 @@ try {
                     <label><input type="checkbox" id="fieldListVisible" checked> Show in List</label>
                     <label><input type="checkbox" id="fieldMobileListVisible"> Show in Mobile List</label>
                     <label><input type="checkbox" id="fieldQuickCreate"> Quick Create</label>
+                    <label id="fieldClickToCallLabel"><input type="checkbox" id="fieldClickToCall" checked> Enable Click-to-Call</label>
                     <label><input type="checkbox" id="fieldIsTitle"> Title (Record Name)</label>
                 </div>
                 <!-- Options for dropdown/multi_picker/radio_group -->
@@ -1642,6 +1643,7 @@ try {
             document.getElementById('fieldListVisible').checked = editData ? !!editData.is_list_visible : true;
             document.getElementById('fieldMobileListVisible').checked = editData ? (editData.is_mobile_list_visible !== undefined ? (editData.is_mobile_list_visible == 1 || editData.is_mobile_list_visible === true) : false) : false;
             document.getElementById('fieldQuickCreate').checked = editData ? !!editData.is_quick_create : false;
+            document.getElementById('fieldClickToCall').checked = editData ? (editData.is_click_to_call !== undefined ? (editData.is_click_to_call == 1 || editData.is_click_to_call === true) : (editData.field_type === 'phone')) : true;
             
             let configObj = {};
             if (editData && editData.config) {
@@ -1826,6 +1828,7 @@ try {
                 is_list_visible: +document.getElementById('fieldListVisible').checked,
                 is_mobile_list_visible: +document.getElementById('fieldMobileListVisible').checked,
                 is_quick_create: +document.getElementById('fieldQuickCreate').checked,
+                is_click_to_call: +document.getElementById('fieldClickToCall').checked,
             };
             if (!data.label) return alert('Label is required');
             // Options

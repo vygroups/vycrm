@@ -117,7 +117,15 @@ $custFieldsConfig = commerce_get_customer_fields_config($conn, $prefix);
                                                 <div class="text-muted text-sm"><?= htmlspecialchars((string)($customer['customer_code'] ?? '-')) ?></div>
                                             </td>
                                             <td>
-                                                <div><?= htmlspecialchars((string)($customer['phone'] ?? '-')) ?></div>
+                                                <?php if (!empty($customer['phone'])): ?>
+                                                    <div>
+                                                        <button type="button" class="btn-click-to-call" onclick="vyTriggerClickToCall('<?= addslashes($customer['phone']) ?>', '<?= addslashes($customer['name']) ?>', '<?= (int)$customer['id'] ?>', 'customers', 'Phone')" style="background:rgba(123,94,240,0.08); border:1px solid rgba(123,94,240,0.25); color:var(--primary, #7b5ef0); font-weight:700; font-size:12px; padding:2px 8px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; text-decoration:none; font-family:monospace;" title="Click to Call <?= htmlspecialchars($customer['phone']) ?>">
+                                                            <i class="fa-solid fa-phone" style="font-size:10px;"></i> <?= htmlspecialchars($customer['phone']) ?>
+                                                        </button>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div>-</div>
+                                                <?php endif; ?>
                                                 <div class="text-muted text-sm"><?= htmlspecialchars((string)($customer['email'] ?? '-')) ?></div>
                                             </td>
                                             <td>

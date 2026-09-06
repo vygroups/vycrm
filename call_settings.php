@@ -261,6 +261,10 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                     <!-- Provider Nav -->
                     <div>
                         <div class="storage-nav">
+                            <div class="storage-nav-item" id="nav_click_to_call" onclick="switchTab('click_to_call')">
+                                <i class="fa-solid fa-phone-volume" style="color: #10b981; font-size: 16px;"></i>
+                                <span>Click-to-Call & Mobile</span>
+                            </div>
                             <div class="storage-nav-item <?= $provider === 'google_drive' ? 'active' : '' ?>" onclick="switchTab('google_drive')">
                                 <i class="fa-brands fa-google-drive" style="color: #4285f4; font-size: 16px;"></i>
                                 <span>Google Drive</span>
@@ -277,7 +281,7 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                                 <?php if ($provider === 'cloudflare_r2'): ?><span class="provider-badge-selected">ACTIVE</span><?php endif; ?>
                             </div>
                             <div class="storage-nav-item <?= $provider === 'local' ? 'active' : '' ?>" onclick="switchTab('local')">
-                                <i class="fa-solid fa-server" style="color: #10b981; font-size: 16px;"></i>
+                                <i class="fa-solid fa-server" style="color: #6366f1; font-size: 16px;"></i>
                                 <span>Local CRM Server</span>
                                 <?php if ($provider === 'local'): ?><span class="provider-badge-selected">ACTIVE</span><?php endif; ?>
                             </div>
@@ -304,6 +308,94 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
 
                     <!-- Config Forms -->
                     <div>
+                        <!-- 0. Click to Call & Telephony Settings -->
+                        <div class="storage-card" id="pane_click_to_call" style="display:none;">
+                            <div class="storage-title">
+                                <i class="fa-solid fa-phone-volume" style="color: #10b981;"></i> Click-to-Call & Telephony Settings
+                            </div>
+                            <div class="storage-desc">
+                                Configure how Click-to-Call requests are routed when clicking phone numbers on the Web CRM.
+                            </div>
+
+                            <?php
+                            $uStmt = $conn->prepare("SELECT fcm_token, fcm_device_type, fcm_updated_at FROM {$prefix}users WHERE id = ?");
+                            $uStmt->execute([$userId]);
+                            $currentUserFcm = $uStmt->fetch(PDO::FETCH_ASSOC);
+                            $hasConnectedMobile = !empty($currentUserFcm['fcm_token']);
+                            $currentTelephony = dm_get_system_setting($conn, $prefix, 'telephony_provider', 'mobile_bridge');
+                            ?>
+
+                            <!-- Mobile Device Connection Status -->
+                            <div style="background: <?= $hasConnectedMobile ? 'rgba(16, 185, 129, 0.05)' : 'rgba(245, 158, 11, 0.05)' ?>; border: 1.5px solid <?= $hasConnectedMobile ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)' ?>; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;">
+                                    <div style="display:flex; align-items:center; gap:14px;">
+                                        <div style="width:46px; height:46px; border-radius:14px; background:<?= $hasConnectedMobile ? '#10b981' : '#f59e0b' ?>; color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0;">
+                                            <i class="fa-solid <?= $hasConnectedMobile ? 'fa-mobile-screen-button' : 'fa-mobile-button' ?>"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-weight:800; font-size:15px; color:var(--text);">
+                                                <?= $hasConnectedMobile ? 'Mobile App Connected 📱' : 'Mobile App Not Connected' ?>
+                                            </div>
+                                            <div style="font-size:12.5px; color:var(--text-muted); margin-top:2px;">
+                                                <?= $hasConnectedMobile ? 'Active Device: ' . htmlspecialchars(ucfirst($currentUserFcm['fcm_device_type'] ?? 'Android')) . ' • Last synced: ' . ($currentUserFcm['fcm_updated_at'] ? date('d M Y, h:i A', strtotime($currentUserFcm['fcm_updated_at'])) : 'Recently') : 'Please sign in to the VY CRM mobile app with your account credentials to pair your phone.' ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span style="background:<?= $hasConnectedMobile ? '#10b981' : '#f59e0b' ?>; color:#fff; font-size:11px; font-weight:800; padding:4px 12px; border-radius:20px; text-transform:uppercase; letter-spacing:0.5px;">
+                                        <?= $hasConnectedMobile ? 'READY FOR CALLS' : 'ACTION REQUIRED' ?>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Calling Channel Selector -->
+                            <div class="form-group" style="margin-bottom: 24px;">
+                                <label style="font-size: 14px; font-weight: 700;">Default Calling Mode</label>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 10px;">
+                                    <label style="background: var(--surface-muted, #f8fafc); border: 2px solid <?= $currentTelephony === 'mobile_bridge' ? 'var(--primary, #7b5ef0)' : 'var(--border)' ?>; border-radius: 14px; padding: 16px; cursor: pointer; display: flex; gap: 12px; align-items: flex-start;">
+                                        <input type="radio" name="telephony_channel" value="mobile_bridge" <?= $currentTelephony === 'mobile_bridge' ? 'checked' : '' ?> onchange="onTelephonyChannelChange(this.value)" style="accent-color: var(--primary); margin-top: 3px;">
+                                        <div>
+                                            <div style="font-weight: 700; font-size: 13.5px; color: var(--text);"><i class="fa-solid fa-mobile-screen" style="color: #10b981; margin-right: 4px;"></i> Mobile App Bridge</div>
+                                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.4;">Pushes call directly to your phone. Respects your phone settings (confirm vs direct dial).</div>
+                                        </div>
+                                    </label>
+
+                                    <label style="background: var(--surface-muted, #f8fafc); border: 2px solid <?= $currentTelephony === 'browser_tel' ? 'var(--primary, #7b5ef0)' : 'var(--border)' ?>; border-radius: 14px; padding: 16px; cursor: pointer; display: flex; gap: 12px; align-items: flex-start;">
+                                        <input type="radio" name="telephony_channel" value="browser_tel" <?= $currentTelephony === 'browser_tel' ? 'checked' : '' ?> onchange="onTelephonyChannelChange(this.value)" style="accent-color: var(--primary); margin-top: 3px;">
+                                        <div>
+                                            <div style="font-weight: 700; font-size: 13.5px; color: var(--text);"><i class="fa-solid fa-laptop" style="color: #3b82f6; margin-right: 4px;"></i> Browser Native (tel:)</div>
+                                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.4;">Opens your computer's default calling app (FaceTime, Skype, Web Phone).</div>
+                                        </div>
+                                    </label>
+
+                                    <label style="background: var(--surface-muted, #f8fafc); border: 2px solid <?= $currentTelephony === 'cloud_pbx' ? 'var(--primary, #7b5ef0)' : 'var(--border)' ?>; border-radius: 14px; padding: 16px; cursor: pointer; display: flex; gap: 12px; align-items: flex-start;">
+                                        <input type="radio" name="telephony_channel" value="cloud_pbx" <?= $currentTelephony === 'cloud_pbx' ? 'checked' : '' ?> onchange="onTelephonyChannelChange(this.value)" style="accent-color: var(--primary); margin-top: 3px;">
+                                        <div>
+                                            <div style="font-weight: 700; font-size: 13.5px; color: var(--text);"><i class="fa-solid fa-cloud" style="color: #f59e0b; margin-right: 4px;"></i> Cloud PBX / VoIP</div>
+                                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.4;">Provision ready for Twilio, Exotel, Asterisk SIP.</div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Test Click-to-Call Sandbox -->
+                            <div style="background: var(--surface-muted, #f8fafc); border: 1.5px solid var(--border); border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+                                <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px; color: var(--text);"><i class="fa-solid fa-vial" style="color: var(--primary); margin-right: 6px;"></i> Test Click-to-Call & Push Delivery</div>
+                                <div style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">Enter a phone number to test dialing or send a push ping to verify mobile connectivity:</div>
+                                
+                                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
+                                    <input type="text" id="testCallContactName" class="form-control-custom" placeholder="Contact Name" value="Test Customer" style="width: 160px; height: 42px;">
+                                    <input type="text" id="testCallPhoneNumber" class="form-control-custom" placeholder="+91 9876543210" style="flex: 1; min-width: 180px; height: 42px; font-family: monospace;">
+                                    <button type="button" class="btn-primary" style="width: auto; padding: 0 20px; height: 42px; display: inline-flex; align-items: center; gap: 8px; border-radius: 10px;" onclick="triggerTestClickToCall()">
+                                        <i class="fa-solid fa-phone"></i> Test Call
+                                    </button>
+                                    <button type="button" class="btn-secondary" style="width: auto; padding: 0 16px; height: 42px; display: inline-flex; align-items: center; gap: 8px; border-radius: 10px; background: #fff;" onclick="testMobilePushNotification()">
+                                        <i class="fa-solid fa-paper-plane" style="color: #6366f1;"></i> Send Push Ping
+                                    </button>
+                                </div>
+                                <div id="pushTestResultBox" style="display:none; padding:12px 14px; border-radius:10px; font-size:12px; line-height:1.4;"></div>
+                            </div>
+                        </div>
+
                         <!-- 1. Google Drive Form (1-Click Sign-in + Visual Folder Browser) -->
                         <div class="storage-card" id="pane_google_drive" style="<?= $provider === 'google_drive' ? '' : 'display:none;' ?>">
                             <div class="storage-title">
@@ -646,6 +738,78 @@ $allowBulkImport = (bool)dm_get_system_setting($conn, $prefix, 'calls_allow_bulk
                     nav.classList.add('active');
                 }
             });
+        }
+
+        async function onTelephonyChannelChange(val) {
+            try {
+                const res = await fetch('/api/modules.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'update_system_setting',
+                        key: 'telephony_provider',
+                        value: val
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    Toast.show('Default calling mode updated to ' + val.replace('_', ' ').toUpperCase(), 'success');
+                } else {
+                    Toast.show('Failed to update telephony setting', 'error');
+                }
+            } catch(e) {
+                Toast.show('Error saving telephony setting', 'error');
+            }
+        }
+
+        async function testMobilePushNotification() {
+            const box = document.getElementById('pushTestResultBox');
+            box.style.display = 'block';
+            box.style.background = 'rgba(99, 102, 241, 0.08)';
+            box.style.border = '1px solid rgba(99, 102, 241, 0.2)';
+            box.style.color = 'var(--text)';
+            box.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending test push notification via Firebase FCM gateway...';
+
+            try {
+                const res = await fetch('/api/click_to_call.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'test_push' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    box.style.background = 'rgba(16, 185, 129, 0.1)';
+                    box.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                    box.style.color = '#059669';
+                    box.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Success!</strong> ${data.message || 'Push delivered to device.'} (Device: ${data.device_type || 'Mobile'})`;
+                    Toast.show('Test push notification delivered! 📱', 'success');
+                } else {
+                    box.style.background = 'rgba(239, 68, 68, 0.1)';
+                    box.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                    box.style.color = '#dc2626';
+                    box.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> <strong>Failed:</strong> ${data.message || 'Could not deliver push notification.'}`;
+                    Toast.show(data.message || 'Push delivery failed', 'error');
+                }
+            } catch(e) {
+                box.style.background = 'rgba(239, 68, 68, 0.1)';
+                box.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                box.style.color = '#dc2626';
+                box.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> <strong>Error:</strong> Network or server error sending push.`;
+            }
+        }
+
+        function triggerTestClickToCall() {
+            const phone = document.getElementById('testCallPhoneNumber').value.trim();
+            const name = document.getElementById('testCallContactName').value.trim() || 'Test Contact';
+            if (!phone) {
+                alert('Please enter a phone number to test');
+                return;
+            }
+            if (typeof window.vyTriggerClickToCall === 'function') {
+                window.vyTriggerClickToCall(phone, name, '0', 'test', 'Test Phone');
+            } else {
+                window.location.href = 'tel:' + encodeURIComponent(phone);
+            }
         }
 
         function copyRedirectUri() {

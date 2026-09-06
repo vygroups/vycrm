@@ -290,3 +290,4 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
     }
 </script>
 <script src="/assets/js/firebase-init.js"></script>
+<script src="/assets/js/click-to-call.js"></script>

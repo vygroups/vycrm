@@ -1041,6 +1041,48 @@ try {
             ]);
             break;
 
+        case 'save_firebase_service_account':
+            $saInput = trim($input['service_account_json'] ?? '');
+            if (empty($saInput)) {
+                // Clear service account
+                dm_set_system_setting($conn, $prefix, 'firebase_service_account', '');
+                $saFile = __DIR__ . '/../config/firebase_service_account.json';
+                if (file_exists($saFile)) {
+                    @unlink($saFile);
+                }
+                commerce_json_response([
+                    'success' => true,
+                    'message' => 'Firebase Service Account configuration cleared.'
+                ]);
+                break;
+            }
+
+            $saDecoded = json_decode($saInput, true);
+            if (!$saDecoded || empty($saDecoded['client_email']) || empty($saDecoded['private_key'])) {
+                throw new RuntimeException('Invalid Service Account JSON format. Must contain "client_email" and "private_key".');
+            }
+
+            // Test signing / token generation immediately to verify key validity
+            $testToken = dm_get_google_oauth2_access_token($saDecoded, 'https://www.googleapis.com/auth/firebase.messaging');
+            if (!$testToken) {
+                throw new RuntimeException('Failed to authenticate with Google OAuth2 using the provided private key. Please verify that the private_key is intact.');
+            }
+
+            // Save in DB system_settings and config file
+            dm_set_system_setting($conn, $prefix, 'firebase_service_account', json_encode($saDecoded));
+            if (!is_dir(__DIR__ . '/../config')) {
+                @mkdir(__DIR__ . '/../config', 0755, true);
+            }
+            @file_put_contents(__DIR__ . '/../config/firebase_service_account.json', json_encode($saDecoded, JSON_PRETTY_PRINT));
+
+            commerce_json_response([
+                'success' => true,
+                'message' => 'Firebase Service Account (HTTP v1) successfully verified and saved!',
+                'project_id' => $saDecoded['project_id'] ?? 'vy-crm',
+                'client_email' => $saDecoded['client_email']
+            ]);
+            break;
+
         case 'google_drive_disconnect':
             // Cleanly reset tokens & folder on all google_drive storage rows
             $stmt = $conn->prepare("SELECT id, config_data FROM {$prefix}call_storage_configs WHERE provider = 'google_drive'");
