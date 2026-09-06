@@ -2264,12 +2264,6 @@ function dm_send_fcm_notification(string $token, ?string $title, ?string $body, 
                 'data' => $strData,
                 'android' => [
                     'priority' => 'HIGH',
-                    'notification' => [
-                        'icon' => 'ic_notification',
-                        'color' => '#6366f1',
-                        'sound' => 'default',
-                        'channel_id' => 'vycrm_high_importance_channel'
-                    ]
                 ],
                 'apns' => [
                     'headers' => [
@@ -2289,6 +2283,12 @@ function dm_send_fcm_notification(string $token, ?string $title, ?string $body, 
                 $message['notification'] = [
                     'title' => $title ?? 'VY CRM',
                     'body' => $body ?? ''
+                ];
+                $message['android']['notification'] = [
+                    'icon' => 'ic_notification',
+                    'color' => '#6366f1',
+                    'sound' => 'default',
+                    'channel_id' => 'vycrm_high_importance_channel'
                 ];
             }
 

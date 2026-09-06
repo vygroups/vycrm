@@ -88,6 +88,8 @@ try {
                 $fcmData = [
                     'type' => 'CLICK_TO_CALL',
                     'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                    'title' => "📞 Call Request: {$customerName}",
+                    'body' => "Tap to dial {$cleanPhone} ({$moduleSlug})",
                     'phone_number' => $cleanPhone,
                     'customer_name' => $customerName,
                     'record_id' => $recordId,
@@ -96,10 +98,8 @@ try {
                     'timestamp' => (string)time(),
                 ];
 
-                $title = "📞 Outgoing Call Request";
-                $body = "Calling {$customerName} ({$cleanPhone})";
-
-                $fcmResult = dm_send_fcm_notification($fcmToken, $title, $body, $fcmData, null, $conn, $prefix);
+                // Send as data-only so FCM does not create a duplicate simple notification
+                $fcmResult = dm_send_fcm_notification($fcmToken, null, null, $fcmData, null, $conn, $prefix);
 
                 if (!$fcmResult['success']) {
                     commerce_json_response([
