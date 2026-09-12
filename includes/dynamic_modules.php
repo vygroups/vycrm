@@ -51,6 +51,8 @@ function dm_ensure_tables(PDO $conn, string $p): void
 {
     require_once __DIR__ . '/commerce.php';
     commerce_ensure_tables($conn, $p);
+    require_once __DIR__ . '/reminder_helper.php';
+    reminder_ensure_tables($conn, $p);
 
     // Auto-migrate modules controls
     try {
@@ -759,6 +761,15 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
 
     }
 
+    // Fetch pending reminder status for records in this module
+    $pendingReminders = [];
+    try {
+        $remStmt = $conn->prepare("SELECT record_id FROM {$p}module_reminders WHERE module_id = ? AND status = 'pending'");
+        $remStmt->execute([$moduleId]);
+        $pendingReminders = $remStmt->fetchAll(PDO::FETCH_COLUMN);
+        $pendingReminders = array_map('intval', $pendingReminders);
+    } catch (Throwable $e) {}
+
     foreach ($records as &$rec) {
         $rec['values'] = $valueMap[(int) $rec['id']] ?? [];
 
@@ -774,10 +785,11 @@ function dm_fetch_records(PDO $conn, string $p, int $moduleId, ?string $search =
 
         $rec['can_edit'] = dm_can_edit_record($conn, $p, $module, $rec['created_by'], $currentUserId, $currentUserRole, $isAdmin);
         $rec['can_delete'] = dm_can_delete_record($conn, $p, $module, $rec['created_by'], $currentUserId, $currentUserRole, $isAdmin);
+        $rec['has_reminder'] = in_array((int)$rec['id'], $pendingReminders);
     }
     unset($rec);
 
-    return ['fields' => $fields, 'records' => $records, 'total' => $total];
+    return ['fields' => $fields, 'records' => $records, 'total' => $total, 'pending_reminder_record_ids' => $pendingReminders];
 }
 
 /**

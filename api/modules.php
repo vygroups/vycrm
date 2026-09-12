@@ -123,6 +123,11 @@ try {
                     'slug' => $m['slug'],
                     'icon' => $m['icon'],
                     'description' => $m['description'],
+                    'enable_reminders' => isset($m['enable_reminders']) ? (int)$m['enable_reminders'] : 1,
+                    'reminder_channels' => $m['reminder_channels'] ?? 'whatsapp,push,email',
+                    'reminder_default_lead_time' => (int)($m['reminder_default_lead_time'] ?? 15),
+                    'reminder_quick_notes' => $m['reminder_quick_notes'] ?? '📞 Follow-up Call, 📄 Send Quotation, 💰 Payment Reminder, 🤝 Status Meeting',
+                    'reminder_timing_presets' => $m['reminder_timing_presets'] ?? '+15m, +30m, +1h, Tomorrow 9 AM, Tomorrow 3 PM, In 2 Days',
                     'total_records' => $total,
                     'today_records' => $today,
                     'filters' => $moduleFilters
@@ -226,7 +231,7 @@ try {
             if (!$id) throw new RuntimeException('Module ID required');
             $sets = [];
             $params = [];
-            foreach (['name', 'icon', 'description', 'status', 'visibility_rule', 'visibility_roles', 'edit_rule', 'edit_roles', 'delete_rule', 'delete_roles', 'enable_import', 'enable_export', 'enable_multidelete', 'enable_create', 'enable_quickcreate'] as $col) {
+            foreach (['name', 'icon', 'description', 'status', 'visibility_rule', 'visibility_roles', 'edit_rule', 'edit_roles', 'delete_rule', 'delete_roles', 'enable_import', 'enable_export', 'enable_multidelete', 'enable_create', 'enable_quickcreate', 'enable_reminders', 'reminder_channels', 'reminder_default_lead_time', 'reminder_quick_notes', 'reminder_timing_presets'] as $col) {
                 if (isset($input[$col])) {
                     $sets[] = "$col = ?";
                     $params[] = $input[$col];

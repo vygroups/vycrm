@@ -303,6 +303,11 @@ CREATE TABLE IF NOT EXISTS modules (
     edit_roles TEXT NULL,
     delete_rule VARCHAR(50) NOT NULL DEFAULT 'all',
     delete_roles TEXT NULL,
+    enable_reminders TINYINT(1) NOT NULL DEFAULT 1,
+    reminder_channels VARCHAR(255) NOT NULL DEFAULT 'whatsapp,push,email',
+    reminder_default_lead_time INT NOT NULL DEFAULT 15,
+    reminder_quick_notes TEXT DEFAULT NULL,
+    reminder_timing_presets TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_modules_status (status)
@@ -468,3 +473,28 @@ CREATE TABLE IF NOT EXISTS call_storage_configs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS module_reminders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    module_id INT NULL DEFAULT NULL,
+    record_id INT NULL DEFAULT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    remind_at DATETIME NOT NULL,
+    channels VARCHAR(100) NOT NULL DEFAULT 'push',
+    recipient_type ENUM('user', 'custom', 'contact') DEFAULT 'user',
+    recipient_user_id INT NULL,
+    recipient_phone VARCHAR(50) NULL,
+    recipient_email VARCHAR(255) NULL,
+    status ENUM('pending', 'processing', 'sent', 'failed', 'cancelled') DEFAULT 'pending',
+    channel_status JSON NULL,
+    sent_at DATETIME NULL,
+    error_log TEXT NULL,
+    created_by INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_remind_status_time (status, remind_at),
+    INDEX idx_remind_record (module_id, record_id),
+    INDEX idx_remind_user (recipient_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+

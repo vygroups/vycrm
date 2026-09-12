@@ -29,6 +29,14 @@ try {
             }
             return true;
         }));
+
+        $_sidebarRemindersEnabled = false;
+        foreach ($_sidebarDynModules as $dm) {
+            if (!isset($dm['enable_reminders']) || (int)$dm['enable_reminders'] !== 0) {
+                $_sidebarRemindersEnabled = true;
+                break;
+            }
+        }
     }
 } catch (Throwable $e) {
 }
@@ -47,6 +55,12 @@ $_currentModuleId = (int) ($_GET['module'] ?? 0);
         <a href="dashboard.php" class="nav-item <?= $currentFile === 'dashboard.php' ? 'active' : '' ?>">
             <i class="fa-solid fa-chart-pie"></i><span class="nav-text">Dashboard</span>
         </a>
+
+        <?php if (!empty($_sidebarRemindersEnabled)): ?>
+        <a href="reminders.php" class="nav-item <?= $currentFile === 'reminders.php' ? 'active' : '' ?>">
+            <i class="fa-solid fa-bell"></i><span class="nav-text">Reminders</span>
+        </a>
+        <?php endif; ?>
 
         <!-- Dynamic Modules -->
         <?php if (!empty($_sidebarDynModules)): ?>

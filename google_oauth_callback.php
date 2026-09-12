@@ -1,9 +1,10 @@
 <?php
-// google_oauth_callback.php - Google Drive OAuth Callback Handler
+// google_oauth_callback.php - Google Drive & Google Calendar OAuth Callback Handler
 require_once 'auth_check.php';
 require_once 'config/database.php';
 require_once 'includes/commerce.php';
 require_once 'includes/calls_helper.php';
+require_once 'includes/reminder_helper.php';
 
 $context = commerce_get_tenant_context();
 $conn = $context['conn'];
@@ -11,16 +12,28 @@ $prefix = $context['prefix'];
 $userId = $context['user_id'] ?? null;
 
 calls_ensure_tables($conn, $prefix);
+reminder_ensure_tables($conn, $prefix);
+
+$state = $_GET['state'] ?? ($_SESSION['google_oauth_source'] ?? '');
+$isReminders = ($state === 'reminders' || strpos($state, 'reminders') === 0);
 
 $error = $_GET['error'] ?? null;
 if ($error) {
-    header('Location: call_settings.php?error=' . urlencode('Google authorization cancelled or failed: ' . $error));
+    if ($isReminders) {
+        header('Location: reminders.php?google_error=' . urlencode('Google Calendar authorization cancelled or failed: ' . $error));
+    } else {
+        header('Location: call_settings.php?error=' . urlencode('Google authorization cancelled or failed: ' . $error));
+    }
     exit;
 }
 
 $code = $_GET['code'] ?? null;
 if (!$code) {
-    header('Location: call_settings.php?error=' . urlencode('No authorization code provided by Google.'));
+    if ($isReminders) {
+        header('Location: reminders.php?google_error=' . urlencode('No authorization code provided by Google.'));
+    } else {
+        header('Location: call_settings.php?error=' . urlencode('No authorization code provided by Google.'));
+    }
     exit;
 }
 
@@ -44,7 +57,26 @@ try {
 
     $tokenData = calls_exchange_google_code($code, $clientId, $clientSecret, $redirectUri);
 
-    // Merge into storage config
+    if ($isReminders) {
+        // Save to User Google Calendar Configuration
+        reminder_save_google_calendar_config($conn, $prefix, $userId, [
+            'account_email' => $tokenData['account_email'],
+            'account_name' => $tokenData['account_name'],
+            'account_picture' => $tokenData['account_picture'],
+            'access_token' => $tokenData['access_token'],
+            'refresh_token' => !empty($tokenData['refresh_token']) ? $tokenData['refresh_token'] : '',
+            'token_expires_at' => $tokenData['token_expires_at'],
+            'sync_enabled' => 1,
+            'calendar_id' => 'primary'
+        ]);
+
+        unset($_SESSION['pending_gd_client_id'], $_SESSION['pending_gd_client_secret'], $_SESSION['google_oauth_source']);
+
+        header('Location: reminders.php?google_connected=1');
+        exit;
+    }
+
+    // Otherwise, handle Google Drive for Calls Module
     $mergedConfigData = array_merge($cfgData, [
         'client_id' => $clientId,
         'client_secret' => $clientSecret,
@@ -92,11 +124,15 @@ try {
         'is_active' => 1
     ], $userId);
 
-    unset($_SESSION['pending_gd_client_id'], $_SESSION['pending_gd_client_secret']);
+    unset($_SESSION['pending_gd_client_id'], $_SESSION['pending_gd_client_secret'], $_SESSION['google_oauth_source']);
 
     header('Location: call_settings.php?connected=1');
     exit;
 } catch (Throwable $e) {
-    header('Location: call_settings.php?error=' . urlencode($e->getMessage()));
+    if ($isReminders) {
+        header('Location: reminders.php?google_error=' . urlencode($e->getMessage()));
+    } else {
+        header('Location: call_settings.php?error=' . urlencode($e->getMessage()));
+    }
     exit;
 }

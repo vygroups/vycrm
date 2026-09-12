@@ -1332,6 +1332,59 @@ try {
                         </label>
                     </div>
                 </div>
+
+                <div class="form-group" style="margin-bottom:20px; border-top:1px solid var(--border); padding-top:16px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <div>
+                            <label class="form-label" style="font-weight:600; color:var(--text-main); margin:0;">
+                                <i class="fa-solid fa-bell" style="color:var(--primary); margin-right:6px;"></i> Module Reminders
+                            </label>
+                            <p style="font-size:12px; color:var(--text-muted); margin:2px 0 0 0;">Allow scheduled alerts & follow-ups on records</p>
+                        </div>
+                        <label style="display:flex; align-items:center; cursor:pointer; margin:0;">
+                            <input type="checkbox" id="permEnableReminders" style="accent-color:var(--primary); width:18px; height:18px; cursor:pointer;" onchange="toggleReminderOptions()">
+                        </label>
+                    </div>
+
+                    <div id="permRemindersConfigBox" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-top:10px;">
+                        <label style="font-size:12px; font-weight:600; color:var(--text-main); display:block; margin-bottom:6px;">Default Multi-Channel Alerts:</label>
+                        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+                            <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-main); cursor:pointer; margin:0;">
+                                <input type="checkbox" id="permChannelWhatsapp" style="accent-color:#25d366; width:16px; height:16px;">
+                                <i class="fa-brands fa-whatsapp" style="color:#25d366; font-size:15px;"></i> WhatsApp Message
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-main); cursor:pointer; margin:0;">
+                                <input type="checkbox" id="permChannelPush" style="accent-color:#6366f1; width:16px; height:16px;">
+                                <i class="fa-solid fa-mobile-screen" style="color:#6366f1; font-size:15px;"></i> Mobile & Web Push (FCM)
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-main); cursor:pointer; margin:0;">
+                                <input type="checkbox" id="permChannelEmail" style="accent-color:#ea4335; width:16px; height:16px;">
+                                <i class="fa-solid fa-envelope" style="color:#ea4335; font-size:15px;"></i> SMTP HTML Email
+                            </label>
+                        </div>
+
+                        <label style="font-size:12px; font-weight:600; color:var(--text-main); display:block; margin-bottom:4px;">Default Lead Time:</label>
+                        <select id="permReminderLeadTime" class="form-control" style="font-size:13px; padding:8px 12px; margin-bottom:12px;">
+                            <option value="0">Exact Scheduled Time</option>
+                            <option value="15">15 Minutes Before</option>
+                            <option value="30">30 Minutes Before</option>
+                            <option value="60">1 Hour Before</option>
+                            <option value="1440">1 Day Before</option>
+                        </select>
+
+                        <div style="margin-bottom:12px;">
+                            <label style="font-size:12px; font-weight:600; color:var(--text-main); display:block; margin-bottom:4px;">Quick Note / Title Presets (comma-separated):</label>
+                            <input type="text" id="permReminderQuickNotes" class="form-control" placeholder="📞 Follow-up Call, 📄 Send Quotation, 💰 Payment Reminder, 🤝 Status Meeting" style="font-size:13px; padding:8px 12px;">
+                            <small style="font-size:11px; color:var(--text-muted); display:block; margin-top:2px;">Pills shown in web & mobile app for 1-click note filling</small>
+                        </div>
+
+                        <div>
+                            <label style="font-size:12px; font-weight:600; color:var(--text-main); display:block; margin-bottom:4px;">Timing Quick Presets (comma-separated):</label>
+                            <input type="text" id="permReminderTimingPresets" class="form-control" placeholder="+15m, +30m, +1h, Tomorrow 9 AM, Tomorrow 3 PM, In 2 Days" style="font-size:13px; padding:8px 12px;">
+                            <small style="font-size:11px; color:var(--text-muted); display:block; margin-top:2px;">Quick timing pill buttons when scheduling a reminder</small>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="mm-modal-footer" style="padding:20px; border-top:1px solid var(--border);">
                 <button class="mm-btn" onclick="closeModal('permissionsModal')">Cancel</button>
@@ -1363,7 +1416,12 @@ try {
             enable_export: <?= (int)($editModule['enable_export'] ?? 1) ?>,
             enable_multidelete: <?= (int)($editModule['enable_multidelete'] ?? 1) ?>,
             enable_create: <?= (int)($editModule['enable_create'] ?? 1) ?>,
-            enable_quickcreate: <?= (int)($editModule['enable_quickcreate'] ?? 1) ?>
+            enable_quickcreate: <?= (int)($editModule['enable_quickcreate'] ?? 1) ?>,
+            enable_reminders: <?= (int)($editModule['enable_reminders'] ?? 1) ?>,
+            reminder_channels: <?= json_encode($editModule['reminder_channels'] ?? 'whatsapp,push,email') ?>,
+            reminder_default_lead_time: <?= (int)($editModule['reminder_default_lead_time'] ?? 15) ?>,
+            reminder_quick_notes: <?= json_encode($editModule['reminder_quick_notes'] ?? '📞 Follow-up Call, 📄 Send Quotation, 💰 Payment Reminder, 🤝 Status Meeting') ?>,
+            reminder_timing_presets: <?= json_encode($editModule['reminder_timing_presets'] ?? '+15m, +30m, +1h, Tomorrow 9 AM, Tomorrow 3 PM, In 2 Days') ?>
         };
         <?php endif; ?>
 
@@ -2979,6 +3037,13 @@ try {
             });
         }
 
+        function toggleReminderOptions() {
+            const enabled = document.getElementById('permEnableReminders').checked;
+            const box = document.getElementById('permRemindersConfigBox');
+            if (box) box.style.opacity = enabled ? '1' : '0.4';
+            if (box) box.style.pointerEvents = enabled ? 'auto' : 'none';
+        }
+
         function openPermissionsModal() {
             document.getElementById('permVisibility').value = MODULE_PERMS.visibility;
             document.getElementById('permEditRule').value = MODULE_PERMS.edit_rule;
@@ -2990,6 +3055,18 @@ try {
             document.getElementById('permEnableCreate').checked = parseInt(MODULE_PERMS.enable_create ?? 1) !== 0;
             document.getElementById('permEnableQuickCreate').checked = parseInt(MODULE_PERMS.enable_quickcreate ?? 1) !== 0;
             
+            // Reminders config
+            const remindersEnabled = parseInt(MODULE_PERMS.enable_reminders ?? 1) !== 0;
+            document.getElementById('permEnableReminders').checked = remindersEnabled;
+            const channels = (MODULE_PERMS.reminder_channels || 'whatsapp,push,email').split(',').map(s => s.trim());
+            document.getElementById('permChannelWhatsapp').checked = channels.includes('whatsapp');
+            document.getElementById('permChannelPush').checked = channels.includes('push');
+            document.getElementById('permChannelEmail').checked = channels.includes('email');
+            document.getElementById('permReminderLeadTime').value = MODULE_PERMS.reminder_default_lead_time || 15;
+            document.getElementById('permReminderQuickNotes').value = MODULE_PERMS.reminder_quick_notes || '📞 Follow-up Call, 📄 Send Quotation, 💰 Payment Reminder, 🤝 Status Meeting';
+            document.getElementById('permReminderTimingPresets').value = MODULE_PERMS.reminder_timing_presets || '+15m, +30m, +1h, Tomorrow 9 AM, Tomorrow 3 PM, In 2 Days';
+            toggleReminderOptions();
+
             buildRolesCheckboxes('permViewRolesContainer', MODULE_PERMS.visibility_roles || []);
             buildRolesCheckboxes('permEditRolesContainer', MODULE_PERMS.edit_roles);
             buildRolesCheckboxes('permDeleteRolesContainer', MODULE_PERMS.delete_roles);
@@ -3044,6 +3121,16 @@ try {
             const enable_multidelete = document.getElementById('permEnableMultiDelete').checked ? 1 : 0;
             const enable_create = document.getElementById('permEnableCreate').checked ? 1 : 0;
             const enable_quickcreate = document.getElementById('permEnableQuickCreate').checked ? 1 : 0;
+
+            const enable_reminders = document.getElementById('permEnableReminders').checked ? 1 : 0;
+            const selectedChannels = [];
+            if (document.getElementById('permChannelWhatsapp').checked) selectedChannels.push('whatsapp');
+            if (document.getElementById('permChannelPush').checked) selectedChannels.push('push');
+            if (document.getElementById('permChannelEmail').checked) selectedChannels.push('email');
+            const reminder_channels = selectedChannels.join(',');
+            const reminder_default_lead_time = parseInt(document.getElementById('permReminderLeadTime').value) || 0;
+            const reminder_quick_notes = document.getElementById('permReminderQuickNotes').value.trim();
+            const reminder_timing_presets = document.getElementById('permReminderTimingPresets').value.trim();
             
             api('update', {
                 id: MODULE_ID,
@@ -3057,7 +3144,12 @@ try {
                 enable_export: enable_export,
                 enable_multidelete: enable_multidelete,
                 enable_create: enable_create,
-                enable_quickcreate: enable_quickcreate
+                enable_quickcreate: enable_quickcreate,
+                enable_reminders: enable_reminders,
+                reminder_channels: reminder_channels,
+                reminder_default_lead_time: reminder_default_lead_time,
+                reminder_quick_notes: reminder_quick_notes,
+                reminder_timing_presets: reminder_timing_presets
             }).then(r => {
                 if (r.success) {
                     MODULE_PERMS.visibility = visibility;
@@ -3071,7 +3163,12 @@ try {
                     MODULE_PERMS.enable_multidelete = enable_multidelete;
                     MODULE_PERMS.enable_create = enable_create;
                     MODULE_PERMS.enable_quickcreate = enable_quickcreate;
-                    vyToast('Permissions updated successfully.', 'success');
+                    MODULE_PERMS.enable_reminders = enable_reminders;
+                    MODULE_PERMS.reminder_channels = reminder_channels;
+                    MODULE_PERMS.reminder_default_lead_time = reminder_default_lead_time;
+                    MODULE_PERMS.reminder_quick_notes = reminder_quick_notes;
+                    MODULE_PERMS.reminder_timing_presets = reminder_timing_presets;
+                    vyToast('Permissions & Reminders updated successfully.', 'success');
                     closeModal('permissionsModal');
                 } else {
                     vyToast('Failed to update permissions: ' + r.error, 'error');

@@ -180,11 +180,11 @@ if (!$hasUpdatedAt) {
     <link href="/assets/css/styles.css?v=<?= $v ?>" rel="stylesheet">
     <link href="/assets/css/module_manager.css?v=<?= $v ?>" rel="stylesheet">
     <script src="/assets/js/toast.js?v=<?= $v ?>"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <?php if (!empty($quickCreateFields)): ?>
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.default.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <style>
         .ts-wrapper { width: 100%; }
         .ts-control { border-radius: 12px; border: 1px solid var(--border); padding: 8px 16px; font-size: 14px; min-height: 44px; background: var(--surface); display: flex; align-items: center; box-shadow: none !important; }
@@ -196,6 +196,118 @@ if (!$hasUpdatedAt) {
     </style>
     <?php endif; ?>
     <style>
+        /* Ultra-Modern Reminder & Interactive Chips */
+        .chip-btn {
+            background: var(--surface, #ffffff);
+            border: 1.5px solid var(--border, #e2e8f0);
+            border-radius: 9999px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-main, #334155);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+            outline: none;
+        }
+        .chip-btn:hover {
+            border-color: var(--primary, #6366f1);
+            color: var(--primary, #6366f1);
+            background: rgba(99, 102, 241, 0.08);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px -1px rgba(99, 102, 241, 0.15);
+        }
+        .chip-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Modern Channel Toggle Tiles */
+        .channel-toggle-tile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1.5px solid var(--border, #e2e8f0);
+            background: var(--surface, #ffffff);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            user-select: none;
+        }
+        .channel-toggle-tile:hover {
+            border-color: #cbd5e1;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.04);
+        }
+        .channel-icon-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .channel-check-badge {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            background: #e2e8f0;
+            color: #fff;
+            opacity: 0;
+            transform: scale(0.6);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* WhatsApp active state */
+        .wa-bg { background: rgba(37, 211, 102, 0.12); color: #16a34a; }
+        .channel-toggle-tile.active-wa {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.06);
+            box-shadow: 0 0 0 1px #22c55e, 0 3px 8px rgba(34, 197, 94, 0.12);
+        }
+        .channel-toggle-tile.active-wa .channel-check-badge {
+            background: #16a34a;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Push active state */
+        .push-bg { background: rgba(99, 102, 241, 0.12); color: #6366f1; }
+        .channel-toggle-tile.active-push {
+            border-color: #6366f1;
+            background: rgba(99, 102, 241, 0.06);
+            box-shadow: 0 0 0 1px #6366f1, 0 3px 8px rgba(99, 102, 241, 0.12);
+        }
+        .channel-toggle-tile.active-push .channel-check-badge {
+            background: #6366f1;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Email active state */
+        .email-bg { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+        .channel-toggle-tile.active-email {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.06);
+            box-shadow: 0 0 0 1px #ef4444, 0 3px 8px rgba(239, 68, 68, 0.12);
+        }
+        .channel-toggle-tile.active-email .channel-check-badge {
+            background: #ef4444;
+            opacity: 1;
+            transform: scale(1);
+        }
+
         .col-item {
             transition: background 0.2s, border 0.2s;
         }
@@ -290,6 +402,9 @@ if (!$hasUpdatedAt) {
                     <i class="fa-solid fa-cloud-arrow-up" style="color:var(--primary);"></i> Storage Settings
                 </a>
                 <?php endif; ?>
+                <button type="button" class="mm-btn mm-btn-outline btn-refresh-list-action" onclick="refreshRecordListOnly(this)" style="display:inline-flex; align-items:center; gap:8px; padding:12px 18px; font-weight:600; height: 42px; border-radius: 12px; box-sizing: border-box;" title="Refresh list data without full page reload">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
                 <?php if ($canQuickCreate && !empty($quickCreateFields)): ?>
                 <button class="mm-btn mm-btn-outline" onclick="openQuickCreateModal()" style="display:inline-flex; align-items:center; gap:8px; padding:12px 20px; font-weight:600; height: 42px; border-radius: 12px; box-sizing: border-box;">
                     <i class="fa-solid fa-bolt" style="color:var(--primary);"></i> Quick Create
@@ -458,6 +573,9 @@ if (!$hasUpdatedAt) {
                     <div style="display:flex;gap:10px;align-items:center;">
                         <span class="text-muted text-sm"><?= $total ?> record<?= $total !== 1 ? 's' : '' ?></span>
                         
+                        <button type="button" class="mm-btn mm-btn-sm mm-btn-outline btn-refresh-list-action" onclick="refreshRecordListOnly(this)" style="display:inline-flex;align-items:center;gap:6px;" title="Refresh list data">
+                            <i class="fa-solid fa-rotate"></i> Refresh
+                        </button>
                         <button id="btnBulkEdit" class="mm-btn mm-btn-sm mm-btn-primary" style="display: none; align-items: center; gap: 6px; height: 32px; padding: 4px 12px; border-radius: 8px; font-weight: 600;" onclick="openBulkEditModal()">
                             <i class="fa-solid fa-pen-to-square"></i><span>Bulk Edit (<span class="selectedCount">0</span>)</span>
                         </button>
@@ -730,6 +848,13 @@ if (!$hasUpdatedAt) {
                                             <a href="module_record.php?module=<?= $moduleId ?>&record=<?= $rec['id'] ?>&view=1" class="mm-icon-btn" title="View"><i class="fa-solid fa-eye"></i></a>
                                             <?php if ($rec['can_edit'] ?? false): ?>
                                             <a href="module_record.php?module=<?= $moduleId ?>&record=<?= $rec['id'] ?>" class="mm-icon-btn" title="Edit"><i class="fa-solid fa-pencil"></i></a>
+                                            <?php endif; ?>
+                                            <?php if (!isset($module['enable_reminders']) || (int)$module['enable_reminders'] !== 0): 
+                                                $hasRem = !empty($rec['has_reminder']);
+                                                $remStyle = $hasRem ? 'color: var(--primary); background: rgba(37, 99, 235, 0.1); border-color: rgba(37, 99, 235, 0.25);' : '';
+                                                $remTitle = $hasRem ? 'Reminder Scheduled (Click to Edit)' : 'Schedule Reminder';
+                                            ?>
+                                            <button type="button" class="mm-icon-btn <?= $hasRem ? 'has-reminder' : '' ?>" style="<?= $remStyle ?>" data-id="<?= $rec['id'] ?>" data-title="<?= htmlspecialchars($rec['title'] ?? ('Record #' . $rec['id']), ENT_QUOTES, 'UTF-8') ?>" onclick="openQuickReminderModal(this.dataset.id, this.dataset.title)" title="<?= $remTitle ?>"><i class="fa-solid fa-bell"></i></button>
                                             <?php endif; ?>
                                             <a href="record_history.php?module=<?= $moduleId ?>&record=<?= $rec['id'] ?>" class="mm-icon-btn" title="History"><i class="fa-solid fa-clock-rotate-left"></i></a>
                                             <?php if ($rec['can_delete'] ?? false): ?>
@@ -2510,12 +2635,20 @@ function renderPaginationButtons(total, limit, currentPage) {
         
         let editBtn = rec.can_edit ? `<a href="module_record.php?module=${MODULE_ID}&record=${rec.id}" class="mm-icon-btn" title="Edit"><i class="fa-solid fa-pencil"></i></a>` : '';
         let deleteBtn = rec.can_delete ? `<button class="mm-icon-btn mm-icon-danger" onclick="deleteRecord(${rec.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>` : '';
+        let safeTitle = (rec.title || ('Record #' + rec.id)).toString().replace(/"/g, '&quot;');
+        let hasRem = Boolean(rec.has_reminder);
+        let remStyle = hasRem ? 'style="color: var(--primary); background: rgba(37, 99, 235, 0.1); border-color: rgba(37, 99, 235, 0.25);"' : '';
+        let remTitle = hasRem ? 'Reminder Scheduled (Click to Edit)' : 'Schedule Reminder';
+        let remindBtn = (<?= json_encode(!isset($module['enable_reminders']) || (int)$module['enable_reminders'] !== 0) ?>) 
+            ? `<button type="button" class="mm-icon-btn ${hasRem ? 'has-reminder' : ''}" ${remStyle} data-id="${rec.id}" data-title="${safeTitle}" onclick="openQuickReminderModal(this.dataset.id, this.dataset.title)" title="${remTitle}"><i class="fa-solid fa-bell"></i></button>` 
+            : '';
  
         html += `
             <td class="sticky-actions-td">
                 <div style="display:flex;gap:4px;">
                     <a href="module_record.php?module=${MODULE_ID}&record=${rec.id}&view=1" class="mm-icon-btn" title="View"><i class="fa-solid fa-eye"></i></a>
                     ${editBtn}
+                    ${remindBtn}
                     <a href="record_history.php?module=${MODULE_ID}&record=${rec.id}" class="mm-icon-btn" title="History"><i class="fa-solid fa-clock-rotate-left"></i></a>
                     ${deleteBtn}
                 </div>
@@ -3555,6 +3688,427 @@ async function submitBulkEdit() {
         btnSubmit.innerHTML = '<i class="fa-solid fa-check"></i> Apply Bulk Edit';
     }
 }
+</script>
+
+<!-- QUICK REMINDER MODAL -->
+<?php
+$modQuickNotes = array_filter(array_map('trim', explode(',', $module['reminder_quick_notes'] ?? '📞 Follow-up Call, 📄 Send Quotation, 💰 Payment Reminder, 🤝 Status Meeting')));
+if (empty($modQuickNotes)) {
+    $modQuickNotes = ['📞 Follow-up Call', '📄 Send Quotation', '💰 Payment Reminder', '🤝 Status Meeting'];
+}
+
+$modTimingPresets = array_filter(array_map('trim', explode(',', $module['reminder_timing_presets'] ?? '+15m, +30m, +1h, Tomorrow 9 AM, Tomorrow 3 PM, In 2 Days')));
+if (empty($modTimingPresets)) {
+    $modTimingPresets = ['+15m', '+30m', '+1h', 'Tomorrow 9 AM', 'Tomorrow 3 PM', 'In 2 Days'];
+}
+?>
+<div class="mm-modal-overlay" id="quickReminderModal" style="z-index: 10001; display: none;">
+    <div class="mm-modal" style="width: 520px; max-width: 95vw; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--border);">
+        <div class="mm-modal-header" style="padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(129, 140, 248, 0.1)); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 6px rgba(99,102,241,0.15);">
+                    <i class="fa-solid fa-bell"></i>
+                </div>
+                <div>
+                    <h3 id="qrModalHeading" style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-main); letter-spacing: -0.01em;">Schedule Reminder</h3>
+                    <p id="qrRecordTitle" style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-muted); font-weight: 500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px;"></p>
+                </div>
+            </div>
+            <button class="mm-icon-btn" onclick="closeModal('quickReminderModal')" style="border-radius:50%; width:32px; height:32px;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="mm-modal-body" style="padding: 20px 22px;">
+            <input type="hidden" id="qrRecordId">
+            <input type="hidden" id="qrExistingId">
+            
+            <div id="qrExistingBadge" style="display: none; align-items: center; justify-content: space-between; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; font-size: 12px; color: var(--primary);">
+                <span><i class="fa-solid fa-circle-info"></i> Active reminder scheduled for this record</span>
+            </div>
+
+            <!-- Reminder Note / Title -->
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="font-size: 12.5px; font-weight: 700; color: var(--text-main); display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span>Reminder Note / Title <span style="color:#ef4444;">*</span></span>
+                    <span style="font-size: 11px; font-weight: 500; color: var(--text-muted);">Quick presets</span>
+                </label>
+                <input type="text" id="qrTitle" class="form-control" placeholder="e.g. Follow up on quotation, Call client..." style="font-size: 13.5px; border-radius: 10px; padding: 10px 14px; border: 1.5px solid var(--border); background: var(--surface);">
+                
+                <!-- Dynamic Quick Note Pills -->
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+                    <?php foreach ($modQuickNotes as $qNote): ?>
+                        <button type="button" class="chip-btn" onclick="document.getElementById('qrTitle').value=<?= htmlspecialchars(json_encode($qNote), ENT_QUOTES, 'UTF-8') ?>">
+                            <?= htmlspecialchars($qNote) ?>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <!-- Remind At Date/Time & Presets -->
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label style="font-size: 12.5px; font-weight: 700; color: var(--text-main); display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span>When should we remind you? <span style="color:#ef4444;">*</span></span>
+                    <span style="font-size: 11px; font-weight: 500; color: var(--text-muted);">Timing presets</span>
+                </label>
+                <div style="position: relative;">
+                    <input type="text" id="qrRemindAt" class="form-control" placeholder="Select date & time..." style="font-size: 13.5px; border-radius: 10px; padding: 10px 14px 10px 38px; border: 1.5px solid var(--border); background: var(--surface);">
+                    <i class="fa-solid fa-calendar-day" style="position: absolute; left: 14px; top: 13px; color: var(--primary); font-size: 14px;"></i>
+                </div>
+                
+                <!-- Dynamic Timing Presets -->
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+                    <?php foreach ($modTimingPresets as $tPreset): ?>
+                        <button type="button" class="chip-btn" onclick="applyQuickReminderTimingPreset(<?= htmlspecialchars(json_encode($tPreset), ENT_QUOTES, 'UTF-8') ?>)">
+                            <i class="fa-regular fa-clock" style="font-size: 11px; opacity: 0.75;"></i> <?= htmlspecialchars($tPreset) ?>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <!-- Multi-Channel Interactive Cards -->
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label style="font-size: 12.5px; font-weight: 700; color: var(--text-main); display: block; margin-bottom: 8px;">Notification Channels:</label>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+                    <!-- WhatsApp -->
+                    <label class="channel-toggle-tile" id="qrTileWa" onclick="toggleQrChannelTile('qrChanWa', 'qrTileWa', 'active-wa')">
+                        <input type="checkbox" id="qrChanWa" value="whatsapp" style="display:none;" onchange="updateQrTileState('qrChanWa', 'qrTileWa', 'active-wa')">
+                        <div class="channel-icon-circle wa-bg">
+                            <i class="fa-brands fa-whatsapp"></i>
+                        </div>
+                        <div style="flex:1;">
+                            <div style="font-size: 12px; font-weight: 700; color: var(--text-main);">WhatsApp</div>
+                            <div style="font-size: 10.5px; color: var(--text-muted);">Direct message</div>
+                        </div>
+                        <div class="channel-check-badge"><i class="fa-solid fa-check"></i></div>
+                    </label>
+
+                    <!-- Push -->
+                    <label class="channel-toggle-tile active-push" id="qrTilePush" onclick="toggleQrChannelTile('qrChanPush', 'qrTilePush', 'active-push')">
+                        <input type="checkbox" id="qrChanPush" value="push" checked style="display:none;" onchange="updateQrTileState('qrChanPush', 'qrTilePush', 'active-push')">
+                        <div class="channel-icon-circle push-bg">
+                            <i class="fa-solid fa-mobile-screen"></i>
+                        </div>
+                        <div style="flex:1;">
+                            <div style="font-size: 12px; font-weight: 700; color: var(--text-main);">Push</div>
+                            <div style="font-size: 10.5px; color: var(--text-muted);">Mobile & Web</div>
+                        </div>
+                        <div class="channel-check-badge"><i class="fa-solid fa-check"></i></div>
+                    </label>
+
+                    <!-- Email -->
+                    <label class="channel-toggle-tile" id="qrTileEmail" onclick="toggleQrChannelTile('qrChanEmail', 'qrTileEmail', 'active-email')">
+                        <input type="checkbox" id="qrChanEmail" value="email" style="display:none;" onchange="updateQrTileState('qrChanEmail', 'qrTileEmail', 'active-email')">
+                        <div class="channel-icon-circle email-bg">
+                            <i class="fa-solid fa-envelope"></i>
+                        </div>
+                        <div style="flex:1;">
+                            <div style="font-size: 12px; font-weight: 700; color: var(--text-main);">Email</div>
+                            <div style="font-size: 10.5px; color: var(--text-muted);">SMTP HTML</div>
+                        </div>
+                        <div class="channel-check-badge"><i class="fa-solid fa-check"></i></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="mm-modal-footer" style="padding: 16px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; align-items: center; gap: 10px; background: var(--surface);">
+            <button type="button" class="mm-btn" id="btnDeleteQuickReminder" onclick="deleteQuickReminder()" style="border-radius: 10px; padding: 9px 16px; font-weight: 600; display: none; margin-right: auto; color: #ef4444; border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.05);">
+                <i class="fa-solid fa-trash"></i> Delete
+            </button>
+            <button class="mm-btn" onclick="closeModal('quickReminderModal')" style="border-radius: 10px; padding: 9px 18px; font-weight: 600;">Cancel</button>
+            <button class="mm-btn mm-btn-primary" id="btnSubmitQuickReminder" onclick="submitQuickReminder()" style="border-radius: 10px; padding: 9px 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-clock"></i> Set Reminder
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let qrFp = null;
+
+function initQuickReminderPicker() {
+    if (document.getElementById('qrRemindAt')) {
+        qrFp = flatpickr("#qrRemindAt", {
+            enableTime: true,
+            dateFormat: "Y-m-d H:i",
+            time_24hr: true,
+            minDate: "today",
+            defaultDate: new Date(Date.now() + 15 * 60000)
+        });
+    }
+}
+
+function toggleQrChannelTile(inputId, tileId, activeClass) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.checked = !input.checked;
+    updateQrTileState(inputId, tileId, activeClass);
+}
+
+function updateQrTileState(inputId, tileId, activeClass) {
+    const input = document.getElementById(inputId);
+    const tile = document.getElementById(tileId);
+    if (!input || !tile) return;
+    if (input.checked) {
+        tile.classList.add(activeClass);
+    } else {
+        tile.classList.remove(activeClass);
+    }
+}
+
+function applyQuickReminderTimingPreset(presetStr) {
+    if (!presetStr) return;
+    if (!qrFp) initQuickReminderPicker();
+    const s = presetStr.trim().toLowerCase();
+    const d = new Date();
+
+    // Minutes: +15m, +30m, 15m, 30 mins
+    const minMatch = s.match(/^\+?(\d+)\s*(m|min|mins|minute|minutes)?$/);
+    if (minMatch && !s.includes('h') && !s.includes('day')) {
+        const mins = parseInt(minMatch[1]);
+        d.setMinutes(d.getMinutes() + mins);
+        if (qrFp) qrFp.setDate(d);
+        return;
+    }
+
+    // Hours: +1h, +2 hrs, 1 hour
+    const hrMatch = s.match(/^\+?(\d+)\s*(h|hr|hrs|hour|hours)$/);
+    if (hrMatch) {
+        const hrs = parseInt(hrMatch[1]);
+        d.setHours(d.getHours() + hrs);
+        if (qrFp) qrFp.setDate(d);
+        return;
+    }
+
+    // Tomorrow presets
+    if (s.includes('tomorrow') || s.includes('tmrw')) {
+        d.setDate(d.getDate() + 1);
+        if (s.includes('9') && s.includes('am')) d.setHours(9, 0, 0, 0);
+        else if (s.includes('3') && s.includes('pm')) d.setHours(15, 0, 0, 0);
+        else if (s.includes('10') && s.includes('am')) d.setHours(10, 0, 0, 0);
+        else if (s.includes('11') && s.includes('am')) d.setHours(11, 0, 0, 0);
+        else if (s.includes('2') && s.includes('pm')) d.setHours(14, 0, 0, 0);
+        else if (s.includes('4') && s.includes('pm')) d.setHours(16, 0, 0, 0);
+        else if (s.includes('5') && s.includes('pm')) d.setHours(17, 0, 0, 0);
+        else d.setHours(9, 0, 0, 0);
+        if (qrFp) qrFp.setDate(d);
+        return;
+    }
+
+    // Days presets: In 2 Days, 2 days
+    const dayMatch = s.match(/in\s*(\d+)\s*days?/);
+    if (dayMatch) {
+        const days = parseInt(dayMatch[1]);
+        d.setDate(d.getDate() + days);
+        d.setHours(10, 0, 0, 0);
+        if (qrFp) qrFp.setDate(d);
+        return;
+    }
+
+    // Fallback: add 15 minutes
+    d.setMinutes(d.getMinutes() + 15);
+    if (qrFp) qrFp.setDate(d);
+}
+
+function openQuickReminderModal(recordId, recordTitle) {
+    document.getElementById('qrRecordId').value = recordId;
+    document.getElementById('qrRecordTitle').textContent = recordTitle || `Record #${recordId}`;
+    document.getElementById('qrExistingId').value = '';
+    document.getElementById('qrTitle').value = '';
+    
+    const heading = document.getElementById('qrModalHeading');
+    const badge = document.getElementById('qrExistingBadge');
+    const btnSubmit = document.getElementById('btnSubmitQuickReminder');
+    const btnDelete = document.getElementById('btnDeleteQuickReminder');
+
+    if (heading) heading.textContent = 'Schedule Reminder';
+    if (badge) badge.style.display = 'none';
+    if (btnDelete) btnDelete.style.display = 'none';
+    if (btnSubmit) btnSubmit.innerHTML = '<i class="fa-solid fa-clock"></i> Set Reminder';
+
+    if (!qrFp) initQuickReminderPicker();
+    if (qrFp) qrFp.setDate(new Date(Date.now() + 15 * 60000));
+    
+    // Set default channels based on module configuration
+    const modChannels = <?= json_encode($module['reminder_channels'] ?? 'whatsapp,push,email') ?>;
+    const defaultChannels = (modChannels || 'whatsapp,push,email').split(',').map(s => s.trim());
+    
+    setQrChannelStates(defaultChannels);
+
+    // Check if there is already an active reminder for this record
+    fetch(`/api/reminders_api.php?action=get_record_reminder&module_id=${MODULE_ID}&record_id=${recordId}`)
+        .then(r => r.json())
+        .then(res => {
+            if (res.success && res.has_reminder && res.reminder) {
+                const r = res.reminder;
+                document.getElementById('qrExistingId').value = r.id;
+                document.getElementById('qrTitle').value = r.title || '';
+                if (qrFp && r.remind_at) {
+                    qrFp.setDate(new Date(r.remind_at.replace(/-/g, '/')));
+                }
+                if (r.channels_list && r.channels_list.length > 0) {
+                    setQrChannelStates(r.channels_list);
+                } else if (r.channels) {
+                    setQrChannelStates(r.channels.split(',').map(s => s.trim()));
+                }
+                if (heading) heading.textContent = 'Edit Scheduled Reminder';
+                if (badge) badge.style.display = 'flex';
+                if (btnDelete) btnDelete.style.display = 'inline-flex';
+                if (btnSubmit) btnSubmit.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Reminder';
+            }
+        })
+        .catch(err => console.error('Error checking existing reminder:', err));
+
+    const modal = document.getElementById('quickReminderModal');
+    if (modal) {
+        modal.classList.add('show');
+        modal.style.display = 'flex';
+    }
+}
+
+function setQrChannelStates(channelsList) {
+    const wa = document.getElementById('qrChanWa');
+    const push = document.getElementById('qrChanPush');
+    const email = document.getElementById('qrChanEmail');
+    if (wa) {
+        wa.checked = channelsList.includes('whatsapp');
+        updateQrTileState('qrChanWa', 'qrTileWa', 'active-wa');
+    }
+    if (push) {
+        push.checked = channelsList.includes('push');
+        updateQrTileState('qrChanPush', 'qrTilePush', 'active-push');
+    }
+    if (email) {
+        email.checked = channelsList.includes('email');
+        updateQrTileState('qrChanEmail', 'qrTileEmail', 'active-email');
+    }
+}
+
+function deleteQuickReminder() {
+    const existingId = document.getElementById('qrExistingId').value;
+    const recordId = document.getElementById('qrRecordId').value;
+    if (!existingId) return;
+    if (!confirm('Are you sure you want to cancel and delete this reminder?')) return;
+
+    fetch('/api/reminders_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: existingId })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            vyToast('Reminder deleted.', 'success');
+            const btn = document.querySelector(`button[data-id="${recordId}"][onclick*="openQuickReminderModal"]`);
+            if (btn) {
+                btn.classList.remove('has-reminder');
+                btn.style.color = '';
+                btn.style.background = '';
+                btn.style.borderColor = '';
+                btn.title = 'Schedule Reminder';
+            }
+            closeModal('quickReminderModal');
+        } else {
+            vyToast(res.error || 'Failed to delete reminder.', 'error');
+        }
+    })
+    .catch(err => vyToast('Error: ' + err.message, 'error'));
+}
+
+function submitQuickReminder() {
+    const recordId = document.getElementById('qrRecordId').value;
+    const existingId = document.getElementById('qrExistingId').value;
+    const title = document.getElementById('qrTitle').value.trim();
+    const remindAt = document.getElementById('qrRemindAt').value.trim();
+    if (!title) return vyToast('Please enter a reminder title / note.', 'error');
+    if (!remindAt) return vyToast('Please choose date & time.', 'error');
+
+    const channels = [];
+    if (document.getElementById('qrChanWa').checked) channels.push('whatsapp');
+    if (document.getElementById('qrChanPush').checked) channels.push('push');
+    if (document.getElementById('qrChanEmail').checked) channels.push('email');
+
+    if (channels.length === 0) return vyToast('Please select at least one channel (WhatsApp, Push, or Email).', 'error');
+
+    const btnSubmit = document.getElementById('btnSubmitQuickReminder');
+    const isUpdate = Boolean(existingId);
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${isUpdate ? 'Updating...' : 'Scheduling...'}`;
+    }
+
+    const payload = isUpdate ? {
+        action: 'update',
+        id: existingId,
+        title: title,
+        remind_at: remindAt,
+        channels: channels,
+        recipient_type: 'user'
+    } : {
+        action: 'create',
+        module_id: MODULE_ID,
+        record_id: recordId,
+        title: title,
+        remind_at: remindAt,
+        channels: channels,
+        recipient_type: 'user'
+    };
+
+    fetch('/api/reminders_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            vyToast(isUpdate ? 'Reminder updated successfully!' : 'Reminder scheduled successfully!', 'success');
+            const btn = document.querySelector(`button[data-id="${recordId}"][onclick*="openQuickReminderModal"]`);
+            if (btn) {
+                btn.classList.add('has-reminder');
+                btn.style.color = 'var(--primary)';
+                btn.style.background = 'rgba(37, 99, 235, 0.1)';
+                btn.style.borderColor = 'rgba(37, 99, 235, 0.25)';
+                btn.title = 'Reminder Scheduled (Click to Edit)';
+            }
+            closeModal('quickReminderModal');
+        } else {
+            vyToast(res.error || 'Failed to save reminder', 'error');
+        }
+    })
+    .catch(err => vyToast('Error: ' + err.message, 'error'))
+    .finally(() => {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = isUpdate 
+                ? '<i class="fa-solid fa-floppy-disk"></i> Update Reminder'
+                : '<i class="fa-solid fa-clock"></i> Set Reminder';
+        }
+    });
+}
+
+async function refreshRecordListOnly(btn = null) {
+    const allBtns = document.querySelectorAll('.btn-refresh-list-action');
+    allBtns.forEach(b => {
+        b.disabled = true;
+        const icon = b.querySelector('i');
+        if (icon) icon.classList.add('fa-spin');
+    });
+
+    try {
+        await fetchAndRenderRecords(activeFilterRules, activeFilterId, currentPage);
+        vyToast('List refreshed successfully!', 'success');
+    } catch (e) {
+        vyToast('Failed to refresh list: ' + e.message, 'error');
+    } finally {
+        allBtns.forEach(b => {
+            b.disabled = false;
+            const icon = b.querySelector('i');
+            if (icon) icon.classList.remove('fa-spin');
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initQuickReminderPicker();
+});
 </script>
 </body>
 </html>

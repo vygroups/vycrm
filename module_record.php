@@ -204,6 +204,144 @@ foreach ($module['blocks'] as $block) {
         #vyToastContainer { position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:10px; }
         .vy-toast { border-radius:10px; padding:14px 20px; min-width:280px; max-width:360px; font-size:14px; font-weight:600; box-shadow:0 8px 25px rgba(0,0,0,.12); display:flex; align-items:center; gap:10px; opacity:0; transform:translateX(30px); transition:all .35s cubic-bezier(.25,.8,.25,1); }
         .vy-toast.show { opacity:1; transform:translateX(0); }
+
+        /* Ultra-Modern Reminder & Interactive Chips */
+        .chip-btn {
+            background: var(--surface, #ffffff);
+            border: 1.5px solid var(--border, #e2e8f0);
+            border-radius: 9999px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-main, #334155);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+            outline: none;
+        }
+        .chip-btn:hover {
+            border-color: var(--primary, #6366f1);
+            color: var(--primary, #6366f1);
+            background: rgba(99, 102, 241, 0.08);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px -1px rgba(99, 102, 241, 0.15);
+        }
+        .chip-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Modern Channel Toggle Tiles */
+        .channel-toggle-tile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1.5px solid var(--border, #e2e8f0);
+            background: var(--surface, #ffffff);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            user-select: none;
+        }
+        .channel-toggle-tile:hover {
+            border-color: #cbd5e1;
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.04);
+        }
+        .channel-icon-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .channel-check-badge {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            background: #e2e8f0;
+            color: #fff;
+            opacity: 0;
+            transform: scale(0.6);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* WhatsApp active state */
+        .wa-bg { background: rgba(37, 211, 102, 0.12); color: #16a34a; }
+        .channel-toggle-tile.active-wa {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.06);
+            box-shadow: 0 0 0 1px #22c55e, 0 3px 8px rgba(34, 197, 94, 0.12);
+        }
+        .channel-toggle-tile.active-wa .channel-check-badge {
+            background: #16a34a;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Push active state */
+        .push-bg { background: rgba(99, 102, 241, 0.12); color: #6366f1; }
+        .channel-toggle-tile.active-push {
+            border-color: #6366f1;
+            background: rgba(99, 102, 241, 0.06);
+            box-shadow: 0 0 0 1px #6366f1, 0 3px 8px rgba(99, 102, 241, 0.12);
+        }
+        .channel-toggle-tile.active-push .channel-check-badge {
+            background: #6366f1;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Email active state */
+        .email-bg { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+        .channel-toggle-tile.active-email {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.06);
+            box-shadow: 0 0 0 1px #ef4444, 0 3px 8px rgba(239, 68, 68, 0.12);
+        }
+        .channel-toggle-tile.active-email .channel-check-badge {
+            background: #ef4444;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .remind-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        .remind-pill-pending { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+        .remind-pill-sent { background: rgba(16, 185, 129, 0.12); color: #059669; }
+        .remind-pill-failed { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+        .remind-chan-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 6px;
+            text-transform: uppercase;
+        }
+        .remind-chan-wa { background: #dcfce7; color: #15803d; }
+        .remind-chan-push { background: #e0e7ff; color: #4338ca; }
+        .remind-chan-email { background: #fee2e2; color: #b91c1c; }
     </style>
 </head>
 <body>
@@ -214,6 +352,12 @@ foreach ($module['blocks'] as $block) {
             <div class="breadcrumb"><?= htmlspecialchars($module['name']) ?> / <span class="current"><?= $isViewOnly ? 'View Record' : ($isEdit ? 'Edit Record' : 'New Record') ?></span></div>
             <div class="topbar-right">
                 <?php if ($recordId): ?>
+                    <?php if (!isset($module['enable_reminders']) || (int)$module['enable_reminders'] !== 0): ?>
+                    <button type="button" class="mm-btn" onclick="openRemindersDrawer()" style="display:inline-flex;align-items:center;gap:8px;position:relative;" title="Manage Reminders">
+                        <i class="fa-solid fa-bell"></i> Reminders
+                        <span id="remindersCountBadge" style="display:none;background:var(--primary);color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:10px;line-height:1;"></span>
+                    </button>
+                    <?php endif; ?>
                 <a href="record_history.php?module=<?= $moduleId ?>&record=<?= $recordId ?>" class="mm-btn" title="View Audit Trail"><i class="fa-solid fa-clock-rotate-left"></i> History</a>
                 <?php endif; ?>
                 <a href="module_view.php?module=<?= $moduleId ?>" class="mm-btn"><i class="fa-solid fa-arrow-left"></i> Back</a>
@@ -2077,9 +2221,617 @@ function escapeHtml(str) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
+</script>
+
+<!-- REMINDERS SLIDE DRAWER / MODAL -->
+<?php
+$recQuickNotes = array_filter(array_map('trim', explode(',', $module['reminder_quick_notes'] ?? '📞 Follow-up Call, 📄 Send Quotation, 💰 Payment Reminder, 🤝 Status Meeting')));
+if (empty($recQuickNotes)) {
+    $recQuickNotes = ['📞 Follow-up Call', '📄 Send Quotation', '💰 Payment Reminder', '🤝 Status Meeting'];
+}
+
+$recTimingPresets = array_filter(array_map('trim', explode(',', $module['reminder_timing_presets'] ?? '+15m, +30m, +1h, Tomorrow 9 AM, Tomorrow 3 PM, In 2 Days')));
+if (empty($recTimingPresets)) {
+    $recTimingPresets = ['+15m', '+30m', '+1h', 'Tomorrow 9 AM', 'Tomorrow 3 PM', 'In 2 Days'];
+}
+?>
+<div class="mm-modal-overlay" id="remindersDrawerModal" style="z-index: 10001;">
+    <div class="mm-modal" style="width: 580px; max-width: 95vw; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column; max-height: 88vh; border: 1px solid var(--border);">
+        <div class="mm-modal-header" style="padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(129, 140, 248, 0.1)); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 6px rgba(99,102,241,0.15);">
+                    <i class="fa-solid fa-bell"></i>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-main); letter-spacing: -0.01em;">Scheduled Reminders</h3>
+                    <p style="margin: 2px 0 0 0; font-size: 12px; color: var(--text-muted); font-weight: 500;">Multi-Channel Alerts (WhatsApp, Push, Email)</p>
+                </div>
+            </div>
+            <button class="mm-icon-btn" onclick="closeModal('remindersDrawerModal')" style="border-radius:50%; width:32px; height:32px;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="mm-modal-body" style="padding: 20px 24px; overflow-y: auto; flex: 1;">
+            <!-- CREATE REMINDER FORM -->
+            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 22px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
+                <h4 style="margin: 0 0 14px 0; font-size: 14.5px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-plus-circle" style="color: var(--primary);"></i> Set New Reminder
+                </h4>
+
+                <!-- Title & Quick Suggestions -->
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 12.5px; font-weight: 700; color: var(--text-main); display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span>Reminder Note / Title <span style="color:#ef4444;">*</span></span>
+                        <span style="font-size: 11px; font-weight: 500; color: var(--text-muted);">Quick note presets</span>
+                    </label>
+                    <input type="text" id="remindTitle" class="form-control" placeholder="e.g. Follow up on quotation, Call client back..." style="font-size: 13.5px; border-radius: 10px; padding: 10px 14px; border: 1.5px solid var(--border); background: var(--surface);">
+                    
+                    <!-- Dynamic Quick Note Pills -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+                        <?php foreach ($recQuickNotes as $qNote): ?>
+                            <button type="button" class="chip-btn" onclick="document.getElementById('remindTitle').value=<?= htmlspecialchars(json_encode($qNote), ENT_QUOTES, 'UTF-8') ?>">
+                                <?= htmlspecialchars($qNote) ?>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <!-- Date & Time Picker + Optional End Time -->
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div>
+                            <label style="font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 6px; display: block;">
+                                Start Time <span style="color:#ef4444;">*</span>
+                            </label>
+                            <div style="position: relative;">
+                                <input type="text" id="remindAtInput" class="form-control" placeholder="Select date & time..." style="font-size: 13.5px; border-radius: 10px; padding: 10px 14px 10px 36px; border: 1.5px solid var(--border); background: var(--surface);">
+                                <i class="fa-solid fa-calendar-day" style="position: absolute; left: 12px; top: 13px; color: var(--primary); font-size: 14px;"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 6px; display: flex; justify-content: space-between;">
+                                <span>End Time</span>
+                                <span style="font-size: 10.5px; color: #10b981; font-weight: 500;">Optional</span>
+                            </label>
+                            <div style="position: relative;">
+                                <input type="text" id="remindEndAtInput" class="form-control" placeholder="End time (+30m default)..." style="font-size: 13.5px; border-radius: 10px; padding: 10px 14px 10px 36px; border: 1.5px solid var(--border); background: var(--surface);">
+                                <i class="fa-solid fa-flag-checkered" style="position: absolute; left: 12px; top: 13px; color: #10b981; font-size: 14px;"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Dynamic Timing Presets -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+                        <?php foreach ($recTimingPresets as $tPreset): ?>
+                            <button type="button" class="chip-btn" onclick="applyRecordTimingPreset(<?= htmlspecialchars(json_encode($tPreset), ENT_QUOTES, 'UTF-8') ?>)">
+                                <i class="fa-regular fa-clock" style="font-size: 11px; opacity: 0.75;"></i> <?= htmlspecialchars($tPreset) ?>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <!-- Channels Multi-Select Tiles -->
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label style="font-size: 12.5px; font-weight: 700; color: var(--text-main); display: block; margin-bottom: 8px;">Notification Channels:</label>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+                        <!-- WhatsApp -->
+                        <label class="channel-toggle-tile" id="remindTileWa" onclick="toggleRecordChannelTile('remindChanWhatsapp', 'remindTileWa', 'active-wa')">
+                            <input type="checkbox" id="remindChanWhatsapp" value="whatsapp" style="display:none;" onchange="updateRecordTileState('remindChanWhatsapp', 'remindTileWa', 'active-wa')">
+                            <div class="channel-icon-circle wa-bg">
+                                <i class="fa-brands fa-whatsapp"></i>
+                            </div>
+                            <div style="flex:1;">
+                                <div style="font-size: 12px; font-weight: 700; color: var(--text-main);">WhatsApp</div>
+                                <div style="font-size: 10.5px; color: var(--text-muted);">Direct message</div>
+                            </div>
+                            <div class="channel-check-badge"><i class="fa-solid fa-check"></i></div>
+                        </label>
+
+                        <!-- Push -->
+                        <label class="channel-toggle-tile active-push" id="remindTilePush" onclick="toggleRecordChannelTile('remindChanPush', 'remindTilePush', 'active-push')">
+                            <input type="checkbox" id="remindChanPush" value="push" checked style="display:none;" onchange="updateRecordTileState('remindChanPush', 'remindTilePush', 'active-push')">
+                            <div class="channel-icon-circle push-bg">
+                                <i class="fa-solid fa-mobile-screen"></i>
+                            </div>
+                            <div style="flex:1;">
+                                <div style="font-size: 12px; font-weight: 700; color: var(--text-main);">Push</div>
+                                <div style="font-size: 10.5px; color: var(--text-muted);">Mobile & Web</div>
+                            </div>
+                            <div class="channel-check-badge"><i class="fa-solid fa-check"></i></div>
+                        </label>
+
+                        <!-- Email -->
+                        <label class="channel-toggle-tile" id="remindTileEmail" onclick="toggleRecordChannelTile('remindChanEmail', 'remindTileEmail', 'active-email')">
+                            <input type="checkbox" id="remindChanEmail" value="email" style="display:none;" onchange="updateRecordTileState('remindChanEmail', 'remindTileEmail', 'active-email')">
+                            <div class="channel-icon-circle email-bg">
+                                <i class="fa-solid fa-envelope"></i>
+                            </div>
+                            <div style="flex:1;">
+                                <div style="font-size: 12px; font-weight: 700; color: var(--text-main);">Email</div>
+                                <div style="font-size: 10.5px; color: var(--text-muted);">SMTP HTML</div>
+                            </div>
+                            <div class="channel-check-badge"><i class="fa-solid fa-check"></i></div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Recipient Target -->
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="font-size: 12.5px; font-weight: 700; color: var(--text-main); display: block; margin-bottom: 6px;">Recipient Target:</label>
+                    <select id="remindRecipientType" class="form-control" onchange="toggleRemindRecipientFields()" style="font-size: 13.5px; border-radius: 10px; padding: 9px 12px; border: 1.5px solid var(--border);">
+                        <option value="user">Assignee / Myself (Logged-in User)</option>
+                        <option value="specific_user">Specific Team Member</option>
+                        <option value="contact">Record Contact / Customer Phone & Email</option>
+                    </select>
+
+                    <div id="remindSpecificUserBox" style="display: none; margin-top: 8px;">
+                        <select id="remindRecipientUserId" class="form-control" style="font-size: 13px; border-radius: 10px;">
+                            <?php foreach ($users as $u): ?>
+                                <option value="<?= $u['id'] ?>"><?= htmlspecialchars(trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: $u['username']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div id="remindContactFieldsBox" style="display: none; margin-top: 8px; display: flex; gap: 8px;">
+                        <input type="text" id="remindRecipientPhone" class="form-control" placeholder="Phone Number for WhatsApp" style="font-size: 13px; flex: 1; border-radius: 10px;">
+                        <input type="email" id="remindRecipientEmail" class="form-control" placeholder="Email Address for SMTP" style="font-size: 13px; flex: 1; border-radius: 10px;">
+                    </div>
+                </div>
+
+                <input type="hidden" id="recEditReminderId" value="">
+
+                <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                    <button type="button" class="mm-btn" id="btnCancelEditReminder" onclick="cancelDrawerEditReminder()" style="display: none; border-radius: 10px; font-weight: 600; padding: 9px 16px;">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn-primary" id="btnSubmitNewReminder" onclick="submitNewReminder()" style="width: auto; padding: 10px 22px; font-size: 13.5px; border-radius: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-clock"></i> Schedule Reminder
+                    </button>
+                </div>
+            </div>
+
+            <!-- EXISTING REMINDERS LIST -->
+            <div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <h4 style="margin: 0; font-size: 14.5px; font-weight: 700; color: var(--text-main);">
+                        Reminders History & Upcoming (<span id="remindersCountText">0</span>)
+                    </h4>
+                    <button type="button" class="mm-icon-btn" onclick="fetchReminders()" title="Refresh" style="border-radius:50%; width:32px; height:32px;"><i class="fa-solid fa-arrows-rotate"></i></button>
+                </div>
+                <div id="remindersListContainer">
+                    <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">
+                        <i class="fa-solid fa-spinner fa-spin" style="font-size: 18px; margin-bottom: 8px; display: block;"></i> Loading reminders...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let remindFp = null;
+let remindEndFp = null;
+let recordDurationMinutes = 30;
+
+function syncRecordReminderEndTime(startDates) {
+    if (!startDates || !startDates[0] || !remindEndFp) return;
+    const startTs = startDates[0].getTime();
+    const duration = (recordDurationMinutes && recordDurationMinutes > 0) ? recordDurationMinutes : 30;
+    const newEnd = new Date(startTs + duration * 60000);
+    remindEndFp.setDate(newEnd, false);
+    remindEndFp.set('minDate', startDates[0]);
+}
+
+function initReminders() {
+    remindEndFp = flatpickr("#remindEndAtInput", {
+        enableTime: true,
+        dateFormat: "Y-m-d H:i",
+        time_24hr: true,
+        minDate: "today",
+        defaultDate: new Date(Date.now() + 45 * 60000),
+        onChange: function(selectedDates) {
+            if (selectedDates && selectedDates[0] && remindFp && remindFp.selectedDates[0]) {
+                const startTs = remindFp.selectedDates[0].getTime();
+                const endTs = selectedDates[0].getTime();
+                if (endTs > startTs) {
+                    recordDurationMinutes = Math.max(5, Math.round((endTs - startTs) / 60000));
+                }
+            }
+        }
+    });
+
+    remindFp = flatpickr("#remindAtInput", {
+        enableTime: true,
+        dateFormat: "Y-m-d H:i",
+        time_24hr: true,
+        minDate: "today",
+        defaultDate: new Date(Date.now() + 15 * 60000),
+        onChange: function(selectedDates) {
+            syncRecordReminderEndTime(selectedDates);
+        },
+        onValueUpdate: function(selectedDates) {
+            syncRecordReminderEndTime(selectedDates);
+        }
+    });
+
+    const remindInput = document.getElementById('remindAtInput');
+    if (remindInput) {
+        remindInput.addEventListener('input', () => {
+            if (remindFp && remindFp.selectedDates) {
+                syncRecordReminderEndTime(remindFp.selectedDates);
+            }
+        });
+    }
+
+    // Pre-select channels based on module settings
+    const modChannels = <?= json_encode($module['reminder_channels'] ?? 'whatsapp,push,email') ?>;
+    if (modChannels) {
+        const arr = modChannels.split(',').map(s => s.trim());
+        const waCb = document.getElementById('remindChanWhatsapp');
+        const pushCb = document.getElementById('remindChanPush');
+        const emailCb = document.getElementById('remindChanEmail');
+        if (waCb) {
+            waCb.checked = arr.includes('whatsapp');
+            updateRecordTileState('remindChanWhatsapp', 'remindTileWa', 'active-wa');
+        }
+        if (pushCb) {
+            pushCb.checked = arr.includes('push');
+            updateRecordTileState('remindChanPush', 'remindTilePush', 'active-push');
+        }
+        if (emailCb) {
+            emailCb.checked = arr.includes('email');
+            updateRecordTileState('remindChanEmail', 'remindTileEmail', 'active-email');
+        }
+    }
+
+    if (RECORD_ID) {
+        fetchReminders();
+    }
+}
+
+function toggleRecordChannelTile(inputId, tileId, activeClass) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.checked = !input.checked;
+    updateRecordTileState(inputId, tileId, activeClass);
+}
+
+function updateRecordTileState(inputId, tileId, activeClass) {
+    const input = document.getElementById(inputId);
+    const tile = document.getElementById(tileId);
+    if (!input || !tile) return;
+    if (input.checked) {
+        tile.classList.add(activeClass);
+    } else {
+        tile.classList.remove(activeClass);
+    }
+}
+
+function applyRecordTimingPreset(presetStr) {
+    if (!presetStr) return;
+    if (!remindFp) initReminders();
+    const s = presetStr.trim().toLowerCase();
+    const d = new Date();
+
+    // Minutes: +15m, +30m, 15m, 30 mins
+    const minMatch = s.match(/^\+?(\d+)\s*(m|min|mins|minute|minutes)?$/);
+    if (minMatch && !s.includes('h') && !s.includes('day')) {
+        const mins = parseInt(minMatch[1]);
+        d.setMinutes(d.getMinutes() + mins);
+        if (remindFp) remindFp.setDate(d, true);
+        return;
+    }
+
+    // Hours: +1h, +2 hrs, 1 hour
+    const hrMatch = s.match(/^\+?(\d+)\s*(h|hr|hrs|hour|hours)$/);
+    if (hrMatch) {
+        const hrs = parseInt(hrMatch[1]);
+        d.setHours(d.getHours() + hrs);
+        if (remindFp) remindFp.setDate(d, true);
+        return;
+    }
+
+    // Tomorrow presets
+    if (s.includes('tomorrow') || s.includes('tmrw')) {
+        d.setDate(d.getDate() + 1);
+        if (s.includes('9') && s.includes('am')) d.setHours(9, 0, 0, 0);
+        else if (s.includes('3') && s.includes('pm')) d.setHours(15, 0, 0, 0);
+        else if (s.includes('10') && s.includes('am')) d.setHours(10, 0, 0, 0);
+        else if (s.includes('11') && s.includes('am')) d.setHours(11, 0, 0, 0);
+        else if (s.includes('2') && s.includes('pm')) d.setHours(14, 0, 0, 0);
+        else if (s.includes('4') && s.includes('pm')) d.setHours(16, 0, 0, 0);
+        else if (s.includes('5') && s.includes('pm')) d.setHours(17, 0, 0, 0);
+        else d.setHours(9, 0, 0, 0);
+        if (remindFp) remindFp.setDate(d, true);
+        return;
+    }
+
+    // Days presets: In 2 Days, 2 days
+    const dayMatch = s.match(/in\s*(\d+)\s*days?/);
+    if (dayMatch) {
+        const days = parseInt(dayMatch[1]);
+        d.setDate(d.getDate() + days);
+        d.setHours(10, 0, 0, 0);
+        if (remindFp) remindFp.setDate(d, true);
+        return;
+    }
+
+    // Fallback: add 15 minutes
+    d.setMinutes(d.getMinutes() + 15);
+    if (remindFp) remindFp.setDate(d, true);
+}
+
+function openRemindersDrawer() {
+    document.getElementById('remindersDrawerModal').classList.add('show');
+    document.getElementById('remindersDrawerModal').style.display = 'flex';
+    fetchReminders();
+}
+
+function toggleRemindRecipientFields() {
+    const val = document.getElementById('remindRecipientType').value;
+    const userBox = document.getElementById('remindSpecificUserBox');
+    const contactBox = document.getElementById('remindContactFieldsBox');
+    if (userBox) userBox.style.display = (val === 'specific_user') ? 'block' : 'none';
+    if (contactBox) contactBox.style.display = (val === 'contact') ? 'flex' : 'none';
+}
+
+function setRemindTitleChip(text) {
+    document.getElementById('remindTitle').value = text;
+}
+
+function setRemindPreset(mins) {
+    const d = new Date(Date.now() + mins * 60000);
+    if (remindFp) remindFp.setDate(d);
+}
+
+function setRemindPresetTomorrow(hour) {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(hour, 0, 0, 0);
+    if (remindFp) remindFp.setDate(d);
+}
+
+function setRemindPresetDays(days, hour) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    d.setHours(hour, 0, 0, 0);
+    if (remindFp) remindFp.setDate(d);
+}
+
+function editDrawerReminder(r) {
+    document.getElementById('recEditReminderId').value = r.id;
+    document.getElementById('remindTitle').value = r.title || '';
+    if (remindFp && r.remind_at) {
+        remindFp.setDate(new Date(r.remind_at.replace(/-/g, '/')));
+    }
+    if (remindEndFp) {
+        if (r.end_at) {
+            remindEndFp.setDate(new Date(r.end_at.replace(/-/g, '/')));
+        } else if (r.remind_at) {
+            const startTs = new Date(r.remind_at.replace(/-/g, '/')).getTime();
+            remindEndFp.setDate(new Date(startTs + 30 * 60000));
+        }
+    }
+    const channels = r.channels_list || (r.channels ? r.channels.split(',') : ['push']);
+    const wa = document.getElementById('remindChanWhatsapp');
+    const push = document.getElementById('remindChanPush');
+    const email = document.getElementById('remindChanEmail');
+    if (wa) { wa.checked = channels.includes('whatsapp'); updateDrawerTileState('remindChanWhatsapp', 'recTileWa', 'active-wa'); }
+    if (push) { push.checked = channels.includes('push'); updateDrawerTileState('remindChanPush', 'recTilePush', 'active-push'); }
+    if (email) { email.checked = channels.includes('email'); updateDrawerTileState('remindChanEmail', 'recTileEmail', 'active-email'); }
+
+    document.getElementById('btnSubmitNewReminder').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Reminder';
+    document.getElementById('btnCancelEditReminder').style.display = 'inline-flex';
+
+    const drawerBody = document.querySelector('#remindersDrawerModal .mm-modal-body');
+    if (drawerBody) drawerBody.scrollTop = 0;
+}
+
+function cancelDrawerEditReminder() {
+    document.getElementById('recEditReminderId').value = '';
+    document.getElementById('remindTitle').value = '';
+    document.getElementById('btnSubmitNewReminder').innerHTML = '<i class="fa-solid fa-clock"></i> Schedule Reminder';
+    document.getElementById('btnCancelEditReminder').style.display = 'none';
+    if (remindFp) remindFp.setDate(new Date(Date.now() + 15 * 60000));
+    if (remindEndFp) remindEndFp.setDate(new Date(Date.now() + 45 * 60000));
+}
+
+function fetchReminders() {
+    const container = document.getElementById('remindersListContainer');
+    if (!container) return;
+
+    fetch(`/api/reminders_api.php?action=list&module_id=${MODULE_ID}&record_id=${RECORD_ID}`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) {
+                container.innerHTML = `<div style="color:#ef4444; font-size:13px; text-align:center;">${escapeHtml(res.error || 'Failed to load reminders.')}</div>`;
+                return;
+            }
+
+            const reminders = res.reminders || [];
+            const countText = document.getElementById('remindersCountText');
+            const countBadge = document.getElementById('remindersCountBadge');
+            
+            if (countText) countText.textContent = reminders.length;
+            if (countBadge) {
+                const pendingCount = reminders.filter(r => r.status === 'pending').length;
+                countBadge.textContent = pendingCount;
+                countBadge.style.display = pendingCount > 0 ? 'inline-block' : 'none';
+            }
+
+            if (reminders.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 28px 20px; border: 1.5px dashed var(--border); border-radius: 12px; color: var(--text-muted);">
+                        <i class="fa-regular fa-bell-slash" style="font-size: 24px; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
+                        No reminders scheduled for this record yet.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '<div style="display:flex; flex-direction:column; gap:10px;">';
+            reminders.forEach(r => {
+                let statusBadge = `<span class="remind-pill remind-pill-pending"><i class="fa-solid fa-clock"></i> Pending</span>`;
+                if (r.status === 'sent') statusBadge = `<span class="remind-pill remind-pill-sent"><i class="fa-solid fa-check-circle"></i> Sent</span>`;
+                if (r.status === 'failed') statusBadge = `<span class="remind-pill remind-pill-failed"><i class="fa-solid fa-triangle-exclamation"></i> Failed</span>`;
+
+                let channelBadges = '';
+                (r.channels_list || []).forEach(ch => {
+                    if (ch === 'whatsapp') channelBadges += `<span class="remind-chan-badge remind-chan-wa"><i class="fa-brands fa-whatsapp"></i> WA</span>`;
+                    if (ch === 'push') channelBadges += `<span class="remind-chan-badge remind-chan-push"><i class="fa-solid fa-mobile-screen"></i> Push</span>`;
+                    if (ch === 'email') channelBadges += `<span class="remind-chan-badge remind-chan-email"><i class="fa-solid fa-envelope"></i> Email</span>`;
+                });
+
+                const rJson = JSON.stringify(r).replace(/"/g, '&quot;');
+
+                html += `
+                    <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:8px;">
+                        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
+                            <div>
+                                <div style="font-weight:700; font-size:14px; color:var(--text-main); margin-bottom:2px;">
+                                    ${escapeHtml(r.title)}
+                                </div>
+                                <div style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                    <span><i class="fa-solid fa-calendar-day" style="color:var(--primary);"></i> ${escapeHtml(r.remind_at)}</span>
+                                    <span>•</span>
+                                    <span><i class="fa-solid fa-user"></i> ${escapeHtml(r.recipient_display_name)}</span>
+                                </div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                ${statusBadge}
+                                <button type="button" class="mm-icon-btn" style="width:28px; height:28px;" onclick="editDrawerReminder(${rJson})" title="Edit Reminder">
+                                    <i class="fa-solid fa-pencil" style="font-size:12px;"></i>
+                                </button>
+                                <button type="button" class="mm-icon-btn" style="width:28px; height:28px;" onclick="triggerReminderNow(${r.id})" title="Send / Test Notification Now">
+                                    <i class="fa-solid fa-paper-plane" style="font-size:12px;"></i>
+                                </button>
+                                <button type="button" class="mm-icon-btn" style="color:#ef4444; width:28px; height:28px;" onclick="deleteReminder(${r.id})" title="Delete Reminder">
+                                    <i class="fa-solid fa-trash" style="font-size:12px;"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px solid rgba(0,0,0,0.05); padding-top:6px;">
+                            <div style="display:flex; gap:4px;">
+                                ${channelBadges}
+                            </div>
+                            ${r.sent_at ? `<span style="font-size:11px; color:#10b981;">Sent at: ${escapeHtml(r.sent_at)}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        })
+        .catch(err => {
+            container.innerHTML = `<div style="color:#ef4444; font-size:13px; text-align:center;">Network error fetching reminders.</div>`;
+        });
+}
+
+function submitNewReminder() {
+    const editId = document.getElementById('recEditReminderId').value;
+    const title = document.getElementById('remindTitle').value.trim();
+    const remindAt = document.getElementById('remindAtInput').value.trim();
+    const endAt = document.getElementById('remindEndAtInput') ? document.getElementById('remindEndAtInput').value.trim() : '';
+    if (!title) return alert('Please enter a reminder title / note.');
+    if (!remindAt) return alert('Please pick a date and time for the reminder.');
+
+    const channels = [];
+    if (document.getElementById('remindChanWhatsapp').checked) channels.push('whatsapp');
+    if (document.getElementById('remindChanPush').checked) channels.push('push');
+    if (document.getElementById('remindChanEmail').checked) channels.push('email');
+
+    if (channels.length === 0) return alert('Please select at least one notification channel (WhatsApp, Push, or Email).');
+
+    const recipientType = document.getElementById('remindRecipientType').value;
+    const recipientUserId = (recipientType === 'specific_user') ? document.getElementById('remindRecipientUserId').value : null;
+    const recipientPhone = (recipientType === 'contact') ? document.getElementById('remindRecipientPhone').value.trim() : '';
+    const recipientEmail = (recipientType === 'contact') ? document.getElementById('remindRecipientEmail').value.trim() : '';
+
+    const isUpdate = Boolean(editId);
+    const payload = isUpdate ? {
+        action: 'update',
+        id: editId,
+        title: title,
+        remind_at: remindAt,
+        end_at: endAt || null,
+        channels: channels,
+        recipient_type: recipientType,
+        recipient_user_id: recipientUserId,
+        recipient_phone: recipientPhone,
+        recipient_email: recipientEmail
+    } : {
+        action: 'create',
+        module_id: MODULE_ID,
+        record_id: RECORD_ID,
+        title: title,
+        remind_at: remindAt,
+        end_at: endAt || null,
+        channels: channels,
+        recipient_type: recipientType,
+        recipient_user_id: recipientUserId,
+        recipient_phone: recipientPhone,
+        recipient_email: recipientEmail
+    };
+
+    fetch('/api/reminders_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            vyToast(isUpdate ? 'Reminder updated successfully!' : 'Reminder scheduled successfully!', 'success');
+            cancelDrawerEditReminder();
+            fetchReminders();
+        } else {
+            vyToast(res.error || 'Failed to save reminder', 'error');
+        }
+    })
+    .catch(err => vyToast('Error: ' + err.message, 'error'));
+}
+
+function triggerReminderNow(id) {
+    if (!confirm('Send this reminder notification now across all chosen channels?')) return;
+    fetch('/api/reminders_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'trigger_now', id: id })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            vyToast('Reminder dispatched successfully!', 'success');
+            fetchReminders();
+        } else {
+            vyToast('Dispatch failed: ' + (res.errors ? res.errors.join(', ') : res.error), 'error');
+            fetchReminders();
+        }
+    })
+    .catch(err => vyToast('Error: ' + err.message, 'error'));
+}
+
+function deleteReminder(id) {
+    if (!confirm('Are you sure you want to delete this reminder?')) return;
+    fetch('/api/reminders_api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: id })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            vyToast('Reminder deleted.', 'success');
+            fetchReminders();
+        } else {
+            vyToast(res.error || 'Failed to delete reminder', 'error');
+        }
+    })
+    .catch(err => vyToast('Error: ' + err.message, 'error'));
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     window.scrollTo(0, 0);
+    initReminders();
 });
 </script>
 </body>
